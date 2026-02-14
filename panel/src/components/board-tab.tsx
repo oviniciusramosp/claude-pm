@@ -445,11 +445,14 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
 
       {/* Board columns */}
       {showBoard && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3" style={{ height: 'calc(100vh - 220px)' }}>
           {columns.map((col) => (
-            <div key={col.key} className="flex flex-col gap-3">
-              {/* Column header */}
-              <div className="flex items-center justify-between">
+            <div
+              key={col.key}
+              className="flex flex-col rounded-xl border border-secondary bg-primary shadow-xs overflow-hidden"
+            >
+              {/* Column header - fixed */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-secondary shrink-0">
                 <span
                   className={cx(
                     'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold',
@@ -461,22 +464,24 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                 <span className="text-xs font-medium text-quaternary">{col.tasks.length}</span>
               </div>
 
-              {/* Cards */}
-              <div className="flex flex-col gap-2">
-                {loading && tasks.length === 0 ? (
-                  <>
-                    <SkeletonCard />
-                    <SkeletonCard />
-                  </>
-                ) : col.tasks.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-secondary p-4 text-center text-sm text-quaternary">
-                    No tasks
-                  </div>
-                ) : (
-                  col.tasks.map((task) => (
-                    <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} />
-                  ))
-                )}
+              {/* Cards - scrollable */}
+              <div className="flex-1 overflow-y-auto p-4">
+                <div className="flex flex-col gap-2">
+                  {loading && tasks.length === 0 ? (
+                    <>
+                      <SkeletonCard />
+                      <SkeletonCard />
+                    </>
+                  ) : col.tasks.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-secondary p-4 text-center text-sm text-quaternary">
+                      No tasks
+                    </div>
+                  ) : (
+                    col.tasks.map((task) => (
+                      <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} />
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           ))}
