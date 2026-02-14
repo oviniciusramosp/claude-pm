@@ -73,6 +73,22 @@ export interface LogLevelMeta {
   icon: React.FC<{ className?: string }>;
 }
 
+export interface TaskContractData {
+  status: 'done' | 'blocked';
+  summary: string;
+  notes: string;
+  files: string[];
+  tests: string;
+}
+
+export interface OrchestratorState {
+  active: boolean;
+  currentTaskId: string | null;
+  currentTaskName: string | null;
+  queuedReasons: string[];
+  halted: boolean;
+}
+
 export interface BoardTask {
   id: string;
   name: string;
@@ -85,4 +101,6 @@ export interface BoardTask {
   url: string;
   createdTime: string;
   lastEditedTime: string;
+  acTotal: number;
+  acDone: number;
 }

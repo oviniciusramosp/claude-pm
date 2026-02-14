@@ -1,6 +1,6 @@
 {
   "name": "product-manager-automation",
-  "version": "1.23.0",
+  "version": "1.25.0",
   "description": "Product Manager automation with local file-based board + Claude Code",
   "type": "module",
   "engines": {
@@ -23,6 +23,7 @@
     "@untitledui/icons": "^0.0.21",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
+    "marked": "^17.0.2",
     "react": "^19.2.4",
     "react-aria-components": "^1.15.1",
     "react-dom": "^19.2.4",

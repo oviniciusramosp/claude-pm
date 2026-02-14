@@ -3,7 +3,7 @@
 import { InfoCircle } from '@untitledui/icons';
 import { LOG_LEVEL_META, LOG_SOURCE_META, FEED_TIMESTAMP_FORMATTER } from '../constants';
 import { normalizeText } from './config-helpers';
-import type { LogEntry, LogLevelMeta, LogSourceMeta } from '../types';
+import type { LogEntry, LogLevelMeta, LogSourceMeta, TaskContractData } from '../types';
 
 export function normalizeLogLevel(level: unknown): string {
   const normalized = String(level || '').toLowerCase();
@@ -177,6 +177,47 @@ export function formatReconciliationReason(reasonRaw: string): string {
   return labels.join(', ');
 }
 
+export function parseClaudeTaskContract(message: unknown): TaskContractData | null {
+  const text = normalizeText(message).trim();
+  if (!text || !text.startsWith('{') || !text.endsWith('}')) {
+    return null;
+  }
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return null;
+  }
+
+  const status = String(parsed.status || '').toLowerCase();
+  if (!['done', 'blocked'].includes(status)) {
+    return null;
+  }
+
+  const hasSomeField =
+    typeof parsed.summary === 'string' ||
+    typeof parsed.notes === 'string' ||
+    typeof parsed.tests === 'string' ||
+    Array.isArray(parsed.files);
+
+  if (!hasSomeField) {
+    return null;
+  }
+
+  return {
+    status: status as 'done' | 'blocked',
+    summary: typeof parsed.summary === 'string' ? parsed.summary.trim() : '',
+    notes: typeof parsed.notes === 'string' ? parsed.notes.trim() : '',
+    files: Array.isArray(parsed.files) ? parsed.files.map(String) : [],
+    tests: typeof parsed.tests === 'string' ? parsed.tests.trim() : ''
+  };
+}
+
 export function formatClaudeTaskContract(message: string): string | null {
   const text = message.trim();
   if (!text.startsWith('{') || !text.endsWith('}')) {
@@ -273,6 +314,11 @@ export function formatLiveFeedMessage(entry: LogEntry): string {
     const processed = Number(reconciliationEndMatch[1]);
     const reason = formatReconciliationReason(reconciliationEndMatch[2]);
     return `Reconciliation finished. ${processed} task${processed === 1 ? '' : 's'} processed (${reason}).`;
+  }
+
+  const workingMatch = trimmed.match(/^(Claude is working on|Opus is reviewing|Opus is reviewing epic): "(.+)" \| model: (.+)$/i);
+  if (workingMatch) {
+    return `${workingMatch[1]}: "${workingMatch[2]}"\nModel: ${workingMatch[3]}`;
   }
 
   return rawMessage;

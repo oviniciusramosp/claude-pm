@@ -19,14 +19,8 @@ export function normalizeText(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-export function normalizeDatabaseId(value: string): string {
-  return normalizeText(value).replace(/-/g, '');
-}
-
 export function buildInitialConfig(): Record<string, string | boolean> {
   return {
-    NOTION_API_TOKEN: '',
-    NOTION_DATABASE_ID: '',
     CLAUDE_CODE_OAUTH_TOKEN: '',
     CLAUDE_WORKDIR: '.',
     CLAUDE_FULL_ACCESS: true,
@@ -78,38 +72,6 @@ export function isSetupConfigurationComplete(values: Record<string, unknown> = {
 export function validateFieldValue(key: string, rawValue: unknown): ValidationResult {
   const value = normalizeText(rawValue);
 
-  if (key === 'NOTION_API_TOKEN') {
-    if (!value) {
-      return { level: 'error', message: 'Required. This token is needed to call the Notion API.' };
-    }
-
-    if (value.length < 20) {
-      return { level: 'warning', message: 'Token looks too short. Please verify it.' };
-    }
-
-    if (!value.startsWith('ntn_') && !value.startsWith('secret_')) {
-      return { level: 'warning', message: 'Notion tokens usually start with ntn_ or secret_.' };
-    }
-
-    return { level: 'success', message: 'Token format looks valid.' };
-  }
-
-  if (key === 'NOTION_DATABASE_ID') {
-    if (!value) {
-      return { level: 'error', message: 'Required. This identifies your Notion database.' };
-    }
-
-    const compact = normalizeDatabaseId(value);
-    if (!/^[a-f0-9]{32}$/i.test(compact)) {
-      return {
-        level: 'error',
-        message: 'Use a 32-character database ID (hex), with or without hyphens.'
-      };
-    }
-
-    return { level: 'success', message: 'Database ID format looks valid.' };
-  }
-
   if (key === 'CLAUDE_CODE_OAUTH_TOKEN') {
     if (!value) {
       return {
@@ -142,15 +104,6 @@ export function validateFieldValue(key: string, rawValue: unknown): ValidationRe
   }
 
   return { level: 'neutral', message: '' };
-}
-
-export function buildNotionDatabaseUrl(databaseId: string): string {
-  const compact = normalizeDatabaseId(databaseId);
-  if (!/^[a-f0-9]{32}$/i.test(compact)) {
-    return '';
-  }
-
-  return `https://www.notion.so/${compact}`;
 }
 
 export function resolveApiBaseUrl(): string {

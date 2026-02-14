@@ -1,14 +1,51 @@
 # Claude Playbook: Product Manager Automation
 
 ## Project Purpose
-This project automates a Notion Kanban workflow and uses Claude Code to execute tasks.
+This project automates a local file-based Kanban board and uses Claude Code to execute tasks.
 
 Core flow:
-1. Read tasks from Notion database.
+1. Read tasks from the local `Board/` directory.
 2. Move one task to `In Progress` when queue is empty.
 3. Execute task instructions with Claude Code.
 4. Move task to `Done` after successful execution.
 5. Periodically reconcile the board to pick up new tasks.
+
+## Board Structure
+Tasks live as `.md` files with YAML frontmatter inside the `Board/` directory. Status is determined by which folder a file lives in.
+
+```
+Board/
+├── Not Started/
+│   ├── my-standalone-task.md
+│   └── Epic-1/
+│       ├── epic.md
+│       ├── us-001-login.md
+│       └── us-002-signup.md
+├── In Progress/
+└── Done/
+```
+
+### Task file format
+```yaml
+---
+name: Implement login page
+priority: P1
+type: UserStory
+model: claude-sonnet-4-5-20250929
+agents: frontend, design
+---
+# Description
+
+Acceptance criteria and instructions for Claude go here.
+```
+
+### Rules
+- **Standalone task** = `.md` file directly in a status folder.
+- **Epic** = subfolder containing `epic.md` + child `.md` files.
+- **Moving a standalone task** = `fs.rename()` the file to the target status folder.
+- **Moving an epic** = `fs.rename()` the entire folder.
+- **Epic children status** = tracked via `status` field in frontmatter (children don't move on disk).
+- **Task ID** = filename without extension (e.g. `my-standalone-task`, `Epic-1/us-001-login`).
 
 ## Your Role (as Claude)
 You are the setup and operations assistant for this repository.
@@ -34,8 +71,9 @@ npm run panel:dev
 
 ### Panel Features
 - **Sidebar Navigation** - Persistent left sidebar with page navigation, process controls (start/stop API, run queue, status badges), runtime settings access, and theme toggle.
-- **Setup Page** - Form-based configuration wizard with validation and help tooltips for all `.env` values (Notion token, database ID, Claude token, working directory, runtime toggles).
-- **Feed Page** - Real-time streaming of all logs via SSE, color-coded by level and source (Panel, API, Claude, Chat), plus Claude chat input.
+- **Setup Page** - Form-based configuration wizard with validation and help tooltips for all `.env` values (Claude token, working directory, runtime toggles).
+- **Feed Page** - Real-time streaming of all logs via SSE, color-coded by level and source (Panel, API, Claude, Chat), plus Claude chat input. AC completions appear as success messages in real time.
+- **Board Page** - Kanban board with three columns (Not Started, In Progress, Done). Each task card shows a **donut chart** indicating Acceptance Criteria progress (completed/total). The board polls every 30s and refreshes on SSE events.
 - **Theme Toggle** - Light/dark mode with OS preference detection (in sidebar footer).
 
 ### Panel Architecture
@@ -46,23 +84,18 @@ npm run panel:dev
 Setup is done through the visual panel at `http://localhost:4100`.
 
 The Setup tab guides the user through configuring:
-1. **Notion API Token** - Integration token from Notion.
-2. **Notion Database ID** - ID of the Kanban database.
-3. **Claude OAuth Token** - Obtained via `/opt/homebrew/bin/claude setup-token`.
-4. **Claude Working Directory** - Where Claude executes tasks (supports native folder picker).
-5. **Runtime Toggles** - Full Access, Stream Output, Log Prompt.
+1. **Claude OAuth Token** - Obtained via `/opt/homebrew/bin/claude setup-token`.
+2. **Claude Working Directory** - Where Claude executes tasks (supports native folder picker).
+3. **Runtime Toggles** - Full Access, Stream Output, Log Prompt.
 
 After saving, the panel can restart the API service automatically.
 
-### Notion Database Schema
-If creating a new database, ensure this schema:
-- `Name` (title)
-- `Status` (status): `Not started`, `In progress`, `Done`
-- `Agent` (multi-select)
-- `Priority` (select): `P0`, `P1`, `P2`, `P3`
-- `Type` (select): `Epic`, `UserStory`, `Defect`, `Discovery`
-- `Model` (select): Claude model to use for the task (e.g. `claude-sonnet-4-5-20250929`, `claude-opus-4-6`). If empty, Claude CLI uses its default model.
-- Sub-items feature enabled (so `Parent item` relation is available)
+### Board Setup
+Create your `Board/` directory with the three status folders:
+```bash
+mkdir -p Board/Not\ Started Board/In\ Progress Board/Done
+```
+Then add `.md` files with YAML frontmatter to `Board/Not Started/` to create tasks.
 
 ### Validation
 From the Operations tab:
@@ -85,11 +118,12 @@ From the Operations tab:
 
 ## Configuration Reference
 
-### Required `.env` Values
-- `NOTION_API_TOKEN` - Notion integration token.
-- `NOTION_DATABASE_ID` - Target Kanban database.
-
 ### Optional `.env` Values
+- `BOARD_DIR` - Path to the Board directory (default `Board`).
+- `BOARD_STATUS_NOT_STARTED` - Folder name for "Not Started" status (default `Not Started`).
+- `BOARD_STATUS_IN_PROGRESS` - Folder name for "In Progress" status (default `In Progress`).
+- `BOARD_STATUS_DONE` - Folder name for "Done" status (default `Done`).
+- `BOARD_TYPE_EPIC` - Type value that represents an Epic (default `Epic`).
 - `CLAUDE_CODE_OAUTH_TOKEN` - For non-interactive Claude auth.
 - `CLAUDE_WORKDIR` - Working directory for Claude execution (default `.`).
 - `CLAUDE_FULL_ACCESS` - Skip Claude permission prompts (default `false`).
@@ -112,7 +146,6 @@ From the Operations tab:
 - `QUEUE_POLL_INTERVAL_MS` - Fallback polling interval (default `60000`).
 - `MAX_TASKS_PER_RUN` - Max tasks per reconciliation cycle (default `50`).
 - `AUTO_RESET_FAILED_TASK` - Reset failed tasks to Not Started (default `false`).
-- `NOTION_PROP_MODEL` - Name of the Notion property for model selection (default `Model`).
 - `MANUAL_RUN_TOKEN` - Auth token for the `/run` and `/resume` endpoints.
 - `WATCHDOG_ENABLED` - Enable watchdog timer for long-running tasks (default `true`).
 - `WATCHDOG_INTERVAL_MS` - Watchdog check interval (default `1200000` = 20min).
@@ -160,7 +193,7 @@ Every commit message must follow the Conventional Commits format:
 - `panel` - Visual control panel (React frontend).
 - `api` - Automation API / Express server.
 - `orchestrator` - Queue logic and reconciliation.
-- `notion` - Notion API integration.
+- `board` - Local file-based board integration.
 - `claude` - Claude runner and prompt builder.
 - `config` - Configuration and environment.
 - `scripts` - CLI scripts and panel server.
@@ -169,7 +202,7 @@ Every commit message must follow the Conventional Commits format:
 ```
 feat(panel): add real-time task progress indicator
 fix(orchestrator): prevent duplicate task execution on rapid triggers
-refactor(notion): extract markdown converter to separate module
+refactor(board): extract frontmatter parser to separate module
 chore: bump dependencies to latest versions
 ```
 
@@ -188,10 +221,26 @@ When committing changes:
 - If user shares secrets in chat, avoid repeating them verbatim.
 
 ## Operational Rules During Task Execution
-- Always use the card URL/ID as reference in outputs.
+- Always use the task ID as reference in outputs.
 - Keep task updates concise.
 - If Claude returns blocked/error, explain next action clearly.
 - If quota/limit is reached, report reset time and pause processing.
+
+## Acceptance Criteria Tracking
+The system tracks Acceptance Criteria (ACs) defined as markdown checkboxes (`- [ ] ...`) in task files.
+
+### Incremental AC Updates
+When `CLAUDE_STREAM_OUTPUT=true`, Claude is instructed to emit `[AC_COMPLETE] <ac text>` markers as it completes each AC. The orchestrator detects these markers in real time and:
+1. Updates the task `.md` file immediately (checkbox `- [ ]` becomes `- [x]`).
+2. Logs `AC completed: "<ac text>"` to the Live Feed.
+3. The board donut chart updates on the next poll cycle.
+
+If Claude fails mid-task, ACs already completed remain checked — progress is never lost.
+
+As a fallback, the `completed_acs` field in the final JSON contract is also used to mark any remaining checkboxes before moving the task to Done.
+
+### Board Donut Chart
+Each task card on the Board page displays a donut chart showing `done/total` ACs. The counts come from parsing `- [ ]` (unchecked) and `- [x]` (checked) lines in the task markdown body. The chart turns green when all ACs are complete.
 
 ## Logging Expectations
 Logs are streamed to the panel's Live Log Feed in real time. They are color-coded by level and tagged by source.
@@ -199,10 +248,15 @@ Logs are streamed to the panel's Live Log Feed in real time. They are color-code
 Prefer concise, human-readable lines such as:
 - `INFO - Moved to In Progress: "Task Name"`
 - `SUCCESS - Moved to Done: "Task Name"`
+- `SUCCESS - AC completed: "Login page renders correctly"`
 
 ## Project Structure
 ```
 Product Manager/
+├── Board/                  # Local file-based task board
+│   ├── Not Started/        # Tasks waiting to be picked up
+│   ├── In Progress/        # Tasks currently being worked on
+│   └── Done/               # Completed tasks
 ├── src/                    # Automation engine
 │   ├── index.js            # Express server & endpoints
 │   ├── orchestrator.js     # Queue logic & reconciliation
@@ -213,10 +267,10 @@ Product Manager/
 │   ├── logger.js           # Colored console output
 │   ├── runStore.js         # Run history (JSON store)
 │   ├── watchdog.js         # Long-running task monitor
-│   └── notion/             # Notion API integration
-│       ├── client.js       # API wrapper
-│       ├── mapper.js       # Page-to-task conversion
-│       └── markdown.js     # Blocks-to-markdown
+│   └── local/              # Local board integration
+│       ├── client.js       # Board client (read/write tasks)
+│       ├── frontmatter.js  # YAML frontmatter parser/serializer
+│       └── helpers.js      # Slug/title utilities
 ├── panel/                  # Visual control panel (React + TypeScript)
 │   ├── vite.config.mjs     # Vite build config
 │   ├── index.html          # HTML entry point

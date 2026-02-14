@@ -112,6 +112,7 @@ export class Orchestrator {
     this.pendingReasons = [];
     this.pendingMode = 'normal';
     this.currentTaskId = null;
+    this.currentTaskName = null;
     this.lastKnownStatusByTaskId = new Map();
     this.claudeCompletedTaskIds = new Map();
     this.watchdog = new Watchdog({ config, logger });
@@ -185,6 +186,7 @@ export class Orchestrator {
     return {
       active: this.running,
       currentTaskId: this.currentTaskId,
+      currentTaskName: this.currentTaskName,
       queuedReasons: this.pendingReasons,
       halted: this.halted
     };
@@ -289,14 +291,23 @@ export class Orchestrator {
       }
 
       this.currentTaskId = task.id;
+      this.currentTaskName = task.name;
       this.logger.info(`Claude is working on: "${task.name}" | model: ${task.model || 'default'}`);
 
       const { signal } = this.watchdog.start(task);
       const executionStartTime = Date.now();
       const headBefore = getGitHead(this.config.claude.workdir);
 
+      const onAcComplete = (acText) => {
+        this.boardClient.updateCheckboxes(task.id, [acText]).then(() => {
+          this.logger.info(`AC completed: "${acText}"`);
+        }).catch((err) => {
+          this.logger.warn(`Failed to update AC checkbox: ${err.message}`);
+        });
+      };
+
       try {
-        let execution = await runClaudeTask(task, prompt, this.config, { signal });
+        let execution = await runClaudeTask(task, prompt, this.config, { signal, onAcComplete });
 
         this.watchdog.stop();
         let executionElapsed = Date.now() - executionStartTime;
@@ -337,7 +348,7 @@ export class Orchestrator {
           const { signal: retrySignal } = this.watchdog.start(task);
           const retryStartTime = Date.now();
 
-          execution = await runClaudeTask(task, retryPrompt, this.config, { signal: retrySignal });
+          execution = await runClaudeTask(task, retryPrompt, this.config, { signal: retrySignal, onAcComplete });
 
           this.watchdog.stop();
           executionElapsed = Date.now() - retryStartTime;
@@ -456,6 +467,7 @@ export class Orchestrator {
         break;
       } finally {
         this.currentTaskId = null;
+        this.currentTaskName = null;
       }
     }
 
@@ -542,14 +554,23 @@ export class Orchestrator {
       }
 
       this.currentTaskId = task.id;
+      this.currentTaskName = task.name;
       this.logger.info(`Claude is working on: "${task.name}" | model: ${task.model || 'default'}`);
 
       const { signal } = this.watchdog.start(task);
       const executionStartTime = Date.now();
       const headBefore = getGitHead(this.config.claude.workdir);
 
+      const onAcComplete = (acText) => {
+        this.boardClient.updateCheckboxes(task.id, [acText]).then(() => {
+          this.logger.info(`AC completed: "${acText}"`);
+        }).catch((err) => {
+          this.logger.warn(`Failed to update AC checkbox: ${err.message}`);
+        });
+      };
+
       try {
-        let execution = await runClaudeTask(task, prompt, this.config, { signal });
+        let execution = await runClaudeTask(task, prompt, this.config, { signal, onAcComplete });
 
         this.watchdog.stop();
         let executionElapsed = Date.now() - executionStartTime;
@@ -590,7 +611,7 @@ export class Orchestrator {
           const { signal: retrySignal } = this.watchdog.start(task);
           const retryStartTime = Date.now();
 
-          execution = await runClaudeTask(task, retryPrompt, this.config, { signal: retrySignal });
+          execution = await runClaudeTask(task, retryPrompt, this.config, { signal: retrySignal, onAcComplete });
 
           this.watchdog.stop();
           executionElapsed = Date.now() - retryStartTime;
@@ -709,6 +730,7 @@ export class Orchestrator {
         break;
       } finally {
         this.currentTaskId = null;
+        this.currentTaskName = null;
       }
     }
 
@@ -780,6 +802,7 @@ export class Orchestrator {
 
       if (this.config.claude.epicReviewEnabled) {
         this.currentTaskId = task.id;
+        this.currentTaskName = task.name;
 
         try {
           this.logger.info(`Starting Epic review for: "${task.name}" (${epicResult.children.length} children)`);
@@ -832,6 +855,7 @@ export class Orchestrator {
           return;
         } finally {
           this.currentTaskId = null;
+          this.currentTaskName = null;
         }
       }
 

@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import readline from 'node:readline';
@@ -6,6 +7,7 @@ import process from 'node:process';
 import dotenv from 'dotenv';
 import express from 'express';
 import { LocalBoardClient } from '../src/local/client.js';
+import { isEpicTask, sortCandidates } from '../src/selectTask.js';
 
 dotenv.config();
 
@@ -51,6 +53,46 @@ const LOG_SOURCE = {
 const logHistory = [];
 const logClients = new Set();
 const MAX_LOG_LINES = 800;
+const LOGS_FILE = path.join(cwd, '.data', 'logs.jsonl');
+const MAX_LOG_FILE_LINES = 2000;
+let logWritesSinceLastTrim = 0;
+
+function loadLogsFromDisk() {
+  try {
+    fsSync.mkdirSync(path.dirname(LOGS_FILE), { recursive: true });
+    if (!fsSync.existsSync(LOGS_FILE)) return;
+    const raw = fsSync.readFileSync(LOGS_FILE, 'utf-8');
+    const lines = raw.split('\n').filter(Boolean);
+    const recent = lines.slice(-MAX_LOG_LINES);
+    for (const line of recent) {
+      try {
+        logHistory.push(JSON.parse(line));
+      } catch { /* skip malformed line */ }
+    }
+  } catch { /* first run — no file yet */ }
+}
+
+function appendLogToDisk(entry) {
+  try {
+    fsSync.appendFileSync(LOGS_FILE, JSON.stringify(entry) + '\n');
+    logWritesSinceLastTrim++;
+    if (logWritesSinceLastTrim >= 100) {
+      logWritesSinceLastTrim = 0;
+      trimLogFile();
+    }
+  } catch { /* non-critical — log continues in-memory */ }
+}
+
+function trimLogFile() {
+  try {
+    const raw = fsSync.readFileSync(LOGS_FILE, 'utf-8');
+    const lines = raw.split('\n').filter(Boolean);
+    if (lines.length > MAX_LOG_FILE_LINES) {
+      const trimmed = lines.slice(-MAX_LOG_FILE_LINES);
+      fsSync.writeFileSync(LOGS_FILE, trimmed.join('\n') + '\n');
+    }
+  } catch { /* non-critical */ }
+}
 const ANSI_ESCAPE_REGEX = /\x1B\[[0-?]*[ -/]*[@-~]/g;
 const LOGGER_PREFIX_REGEX = /^(?:\S+\s+)?(INFO|SUCCESS|WARN|WARNING|ERROR)\s*-\s*(.+)$/i;
 const LOGGER_TIMESTAMP_SUFFIX_REGEX = /\s*\(\d{1,2}\/\d{1,2}\/\d{4},\s*\d{2}:\d{2}:\d{2}\)\s*$/;
@@ -59,6 +101,8 @@ const PROMPT_BLOCK_LINE_REGEX = /^\s*│\s?(.*)$/;
 const PROMPT_BLOCK_END_REGEX = /^\s*└[-─]+\s*$/;
 const WATCH_RESTART_REGEX = /^Restarting ['"].+['"]$/i;
 const NPM_SCRIPT_LINE_REGEX = /^>\s.+$/;
+const PROGRESS_MARKER_REGEX = /^\[PM_PROGRESS]\s+(.+)$/;
+const AC_COMPLETE_MARKER_REGEX = /^\[PM_AC_COMPLETE]\s+(.+)$/;
 const API_STATUS_NOISE_PATTERNS = [
   /^Server started on port \d+$/i,
   /^Startup reconciliation disabled \(QUEUE_RUN_ON_STARTUP=false\)$/i
@@ -86,6 +130,8 @@ function pushLog(level, source, message, extra) {
   if (logHistory.length > MAX_LOG_LINES) {
     logHistory.shift();
   }
+
+  appendLogToDisk(entry);
 
   const payload = `data: ${JSON.stringify(entry)}\n\n`;
   for (const client of logClients) {
@@ -146,6 +192,26 @@ function parseProcessLogLine(rawLine, fallbackLevel = 'info') {
     return null;
   }
 
+  const acCompleteMatch = clean.match(AC_COMPLETE_MARKER_REGEX);
+  if (acCompleteMatch) {
+    return {
+      level: 'success',
+      message: `AC completed: "${acCompleteMatch[1].trim()}"`,
+      fromLogger: false,
+      isAcComplete: true
+    };
+  }
+
+  const progressMatch = clean.match(PROGRESS_MARKER_REGEX);
+  if (progressMatch) {
+    return {
+      level: 'info',
+      message: progressMatch[1].trim(),
+      fromLogger: false,
+      isToolUse: true
+    };
+  }
+
   const loggerMatch = clean.match(LOGGER_PREFIX_REGEX);
   if (loggerMatch) {
     const parsedLevel = normalizeUiLogLevel(loggerMatch[1], normalizeUiLogLevel(fallbackLevel));
@@ -203,6 +269,10 @@ function isClaudeTaskContractOutput(message) {
 function resolveProcessLogSource(source, parsed) {
   if (source !== 'api') {
     return source;
+  }
+
+  if (parsed?.isToolUse) {
+    return LOG_SOURCE.claude;
   }
 
   if (parsed?.fromLogger) {
@@ -365,6 +435,13 @@ function startManagedProcess(target, command, source, envOverrides = {}) {
 
   pushLog('success', source, `${processDisplayName(source)} started.`);
 
+  function buildLogExtra(parsed) {
+    if (parsed.isPrompt) return { isPrompt: true, promptTitle: parsed.promptTitle };
+    if (parsed.isAcComplete) return { isAcComplete: true };
+    if (parsed.isToolUse) return { isToolUse: true };
+    return undefined;
+  }
+
   const stdoutForwarder = createProcessLogForwarder({
     fallbackLevel: 'info',
     onLog: (parsed) => {
@@ -372,8 +449,7 @@ function startManagedProcess(target, command, source, envOverrides = {}) {
         return;
       }
 
-      const extra = parsed.isPrompt ? { isPrompt: true, promptTitle: parsed.promptTitle } : undefined;
-      pushLog(parsed.level, resolveProcessLogSource(source, parsed), parsed.message, extra);
+      pushLog(parsed.level, resolveProcessLogSource(source, parsed), parsed.message, buildLogExtra(parsed));
     }
   });
 
@@ -384,8 +460,7 @@ function startManagedProcess(target, command, source, envOverrides = {}) {
         return;
       }
 
-      const extra = parsed.isPrompt ? { isPrompt: true, promptTitle: parsed.promptTitle } : undefined;
-      pushLog(parsed.level, resolveProcessLogSource(source, parsed), parsed.message, extra);
+      pushLog(parsed.level, resolveProcessLogSource(source, parsed), parsed.message, buildLogExtra(parsed));
     }
   });
 
@@ -1291,6 +1366,183 @@ app.get('/api/board', async (_req, res) => {
   }
 });
 
+app.get('/api/board/task-markdown', async (req, res) => {
+  const taskId = String(req.query.taskId || '').trim();
+  if (!taskId) {
+    res.status(400).json({ ok: false, message: 'taskId query parameter is required.' });
+    return;
+  }
+
+  const env = await readEnvPairs();
+  const boardDir = path.resolve(cwd, env.BOARD_DIR || 'Board');
+
+  const boardConfig = {
+    board: {
+      dir: boardDir,
+      statuses: {
+        notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+        inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+        done: env.BOARD_STATUS_DONE || 'Done'
+      },
+      typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
+    }
+  };
+
+  try {
+    const client = new LocalBoardClient(boardConfig);
+    await client.initialize();
+    await client.listTasks();
+    const markdown = await client.getTaskMarkdown(taskId);
+    res.json({ ok: true, markdown });
+  } catch (error) {
+    const msg = error.message || String(error);
+    res.status(500).json({ ok: false, message: msg });
+  }
+});
+
+app.post('/api/board/fix-order', async (_req, res) => {
+  const env = await readEnvPairs();
+  const boardDir = path.resolve(cwd, env.BOARD_DIR || 'Board');
+  const queueOrder = env.QUEUE_ORDER || 'alphabetical';
+
+  const boardConfig = {
+    board: {
+      dir: boardDir,
+      statuses: {
+        notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+        inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+        done: env.BOARD_STATUS_DONE || 'Done'
+      },
+      typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
+    }
+  };
+
+  try {
+    const client = new LocalBoardClient(boardConfig);
+    await client.initialize();
+    const tasks = await client.listTasks();
+
+    const notStartedStatus = boardConfig.board.statuses.notStarted;
+    const inProgressStatus = boardConfig.board.statuses.inProgress;
+    const doneStatus = boardConfig.board.statuses.done;
+
+    const epics = tasks.filter((t) => isEpicTask(t, tasks, boardConfig));
+    const sorted = sortCandidates(epics, queueOrder);
+
+    const fixed = [];
+    const fixedChildren = [];
+    let foundFirstIncomplete = false;
+
+    for (const epic of sorted) {
+      const status = (epic.status || '').trim().toLowerCase();
+      const isDone = status === doneStatus.toLowerCase();
+      const isInProgress = status === inProgressStatus.toLowerCase();
+
+      if (isDone) continue;
+
+      if (!foundFirstIncomplete) {
+        foundFirstIncomplete = true;
+
+        // For the active epic, also fix out-of-order children.
+        if (isInProgress) {
+          const children = tasks.filter(
+            (t) => t.parentId === epic.id && !isEpicTask(t, tasks, boardConfig)
+          );
+          const sortedChildren = sortCandidates(children, queueOrder);
+
+          // Find the first non-Done child in sorted order.
+          const firstPendingIdx = sortedChildren.findIndex((c) => {
+            const cs = (c.status || '').trim().toLowerCase();
+            return cs !== doneStatus.toLowerCase();
+          });
+
+          if (firstPendingIdx !== -1) {
+            const firstPending = sortedChildren[firstPendingIdx];
+            const firstPendingStatus = (firstPending.status || '').trim().toLowerCase();
+
+            // If the first pending child is Not Started but a later child is In Progress,
+            // the order is wrong. Reset all non-Done children and re-stamp correctly.
+            if (firstPendingStatus === notStartedStatus.toLowerCase()) {
+              const hasLaterInProgress = sortedChildren.slice(firstPendingIdx + 1).some((c) => {
+                const cs = (c.status || '').trim().toLowerCase();
+                return cs === inProgressStatus.toLowerCase();
+              });
+
+              if (hasLaterInProgress) {
+                // Reset all non-Done children: first pending -> In Progress, rest -> Not Started.
+                for (let i = firstPendingIdx; i < sortedChildren.length; i++) {
+                  const child = sortedChildren[i];
+                  const cs = (child.status || '').trim().toLowerCase();
+                  if (cs === doneStatus.toLowerCase()) continue;
+
+                  const targetStatus = i === firstPendingIdx ? inProgressStatus : notStartedStatus;
+                  if (cs !== targetStatus.toLowerCase()) {
+                    await client.updateTaskStatus(child.id, targetStatus);
+                    if (cs === inProgressStatus.toLowerCase()) {
+                      fixedChildren.push(child.name);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        continue;
+      }
+
+      // Any subsequent non-Done epic that is In Progress needs to go back.
+      if (isInProgress) {
+        await client.updateTaskStatus(epic.id, notStartedStatus);
+
+        // Also reset In Progress children back to Not Started.
+        const children = tasks.filter((t) => t.parentId === epic.id);
+        for (const child of children) {
+          const childStatus = (child.status || '').trim().toLowerCase();
+          if (childStatus === inProgressStatus.toLowerCase()) {
+            await client.updateTaskStatus(child.id, notStartedStatus);
+          }
+        }
+
+        fixed.push(epic.name);
+      }
+    }
+
+    const totalFixes = fixed.length + fixedChildren.length;
+
+    if (totalFixes > 0) {
+      const messages = [];
+      if (fixed.length > 0) {
+        messages.push(`moved ${fixed.length} epic(s) back to Not Started: ${fixed.join(', ')}`);
+      }
+      if (fixedChildren.length > 0) {
+        messages.push(`re-ordered ${fixedChildren.length} child task(s): ${fixedChildren.join(', ')}`);
+      }
+      pushLog('success', LOG_SOURCE.panel, `Board order fixed: ${messages.join('; ')}.`);
+
+      // Restart the API process to interrupt any in-flight work on the wrong task.
+      if (state.api.child) {
+        pushLog('info', LOG_SOURCE.panel, 'Restarting API to interrupt out-of-order task execution...');
+        const command = process.env.PANEL_API_START_COMMAND || 'npm run dev';
+        try {
+          await restartManagedProcess(state.api, 'api', command, getApiProcessEnvOverrides());
+          pushLog('success', LOG_SOURCE.panel, 'API restarted. Orchestrator will pick up the correct task.');
+        } catch (restartErr) {
+          pushLog('error', LOG_SOURCE.panel, `API restart failed: ${restartErr.message}`);
+        }
+      }
+    } else {
+      pushLog('info', LOG_SOURCE.panel, 'Board order is already correct. No changes needed.');
+    }
+
+    res.json({ ok: true, fixed, fixedChildren });
+  } catch (error) {
+    const msg = error.message || String(error);
+    pushLog('error', LOG_SOURCE.panel, `Board fix-order failed: ${msg}`);
+    res.status(500).json({ ok: false, message: msg });
+  }
+});
+
 app.post('/api/claude/chat', async (req, res) => {
   const message = String(req.body?.message || '').trim();
   if (!message) {
@@ -1382,6 +1634,7 @@ async function ensurePanelBuild() {
 }
 
 async function startServer() {
+  loadLogsFromDisk();
   await ensurePanelBuild();
 
   const server = app.listen(panelPort, () => {

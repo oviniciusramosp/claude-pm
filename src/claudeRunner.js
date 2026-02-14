@@ -64,6 +64,45 @@ function extractToolUseProgress(event) {
   return toolBlocks.map(formatToolProgress);
 }
 
+const AC_COMPLETE_MARKER = '[AC_COMPLETE] ';
+
+function extractAcCompletions(event) {
+  if (!event || event.role !== 'assistant') {
+    return [];
+  }
+
+  const content = Array.isArray(event.content) ? event.content : [];
+  const completed = [];
+
+  for (const block of content) {
+    if (block.type !== 'text' || !block.text) {
+      continue;
+    }
+
+    const lines = block.text.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith(AC_COMPLETE_MARKER)) {
+        const acText = trimmed.slice(AC_COMPLETE_MARKER.length).trim();
+        if (acText) {
+          completed.push(acText);
+        }
+      }
+    }
+  }
+
+  return completed;
+}
+
+function extractAcFromPlainLine(line) {
+  const trimmed = (line || '').trim();
+  if (trimmed.startsWith(AC_COMPLETE_MARKER)) {
+    const acText = trimmed.slice(AC_COMPLETE_MARKER.length).trim();
+    return acText || null;
+  }
+  return null;
+}
+
 function parseStreamJsonResult(stdout) {
   const lines = (stdout || '').trim().split('\n').filter(Boolean);
 
@@ -161,7 +200,7 @@ function summarizeCommandOutput(stderr, stdout) {
   return `${line.slice(0, 320)}...`;
 }
 
-export function runClaudeTask(task, prompt, config, { signal, overrideModel } = {}) {
+export function runClaudeTask(task, prompt, config, { signal, overrideModel, onAcComplete } = {}) {
   return new Promise((resolve, reject) => {
     const commandEnv = { ...process.env };
     if (config.claude.oauthToken) {
@@ -225,8 +264,25 @@ export function runClaudeTask(task, prompt, config, { signal, overrideModel } = 
                   process.stdout.write(`[PM_PROGRESS] ${msg}\n`);
                 }
               }
+
+              if (onAcComplete) {
+                const acs = extractAcCompletions(event);
+                for (const ac of acs) {
+                  process.stdout.write(`[PM_AC_COMPLETE] ${ac}\n`);
+                  onAcComplete(ac);
+                }
+              }
             }
             continue;
+          }
+
+          if (onAcComplete) {
+            const ac = extractAcFromPlainLine(line);
+            if (ac) {
+              process.stdout.write(`[PM_AC_COMPLETE] ${ac}\n`);
+              onAcComplete(ac);
+              continue;
+            }
           }
 
           if (isLikelyTaskContract(line)) {

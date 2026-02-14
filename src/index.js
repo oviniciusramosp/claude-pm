@@ -1,19 +1,20 @@
 import express from 'express';
 import { config } from './config.js';
 import { logger } from './logger.js';
-import { NotionBoardClient } from './notion/client.js';
+import { LocalBoardClient } from './local/client.js';
 import { Orchestrator } from './orchestrator.js';
 import { RunStore } from './runStore.js';
 const app = express();
 
 app.use(express.json({ limit: '2mb' }));
 
-const notionClient = new NotionBoardClient(config);
+const boardClient = new LocalBoardClient(config);
+await boardClient.initialize();
 const runStore = new RunStore(config.state.runStorePath);
 const orchestrator = new Orchestrator({
   config,
   logger,
-  notionClient,
+  boardClient,
   runStore
 });
 

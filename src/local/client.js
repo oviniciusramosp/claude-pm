@@ -233,6 +233,10 @@ export class LocalBoardClient {
 
     const status = frontmatter.status || folderStatus || '';
 
+    const { body } = parseFrontmatter(content);
+    const unchecked = (body.match(/^\s*-\s*\[ \]\s+/gm) || []).length;
+    const checked = (body.match(/^\s*-\s*\[x\]\s+/gim) || []).length;
+
     return {
       id: taskId,
       name: frontmatter.name || titleFromSlug(isEpicFile ? parentFolder : fileName),
@@ -245,6 +249,8 @@ export class LocalBoardClient {
       url: path.relative(process.cwd(), filePath),
       createdTime: frontmatter.created || stat.birthtime.toISOString(),
       lastEditedTime: stat.mtime.toISOString(),
+      acTotal: unchecked + checked,
+      acDone: checked,
       _filePath: filePath
     };
   }

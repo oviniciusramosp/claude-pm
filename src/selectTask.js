@@ -30,10 +30,12 @@ export function sortCandidates(tasks, order) {
       }
     }
 
-    const nameA = normalize(a.name);
-    const nameB = normalize(b.name);
+    // Sort by task ID (derived from filename) which preserves deliberate
+    // numbering like E01, E02, s1-1, s1-2, etc.
+    const idA = normalize(a.id);
+    const idB = normalize(b.id);
 
-    return nameA.localeCompare(nameB);
+    return idA.localeCompare(idB);
   });
 
   return copied;
@@ -53,7 +55,8 @@ export function pickNextTask(tasks, config) {
   const inProgressStatus = normalize(config.board.statuses.inProgress);
   const notStartedStatus = normalize(config.board.statuses.notStarted);
 
-  const workItems = tasks.filter((task) => !isEpicTask(task, tasks, config));
+  // Only standalone tasks (no parentId). Epic children are handled by reconcileEpic.
+  const workItems = tasks.filter((task) => !isEpicTask(task, tasks, config) && !task.parentId);
   const inProgress = sortCandidates(
     workItems.filter((task) => normalize(task.status) === inProgressStatus),
     config.queue.order
@@ -84,9 +87,11 @@ export function pickNextTask(tasks, config) {
 export function pickNextEpic(tasks, config) {
   const inProgressStatus = normalize(config.board.statuses.inProgress);
   const notStartedStatus = normalize(config.board.statuses.notStarted);
+  const doneStatus = normalize(config.board.statuses.done);
 
   const epics = tasks.filter((task) => isEpicTask(task, tasks, config));
 
+  // If any epic is already In Progress, resume it (only one at a time).
   const inProgress = sortCandidates(
     epics.filter((task) => normalize(task.status) === inProgressStatus),
     config.queue.order
@@ -96,13 +101,25 @@ export function pickNextEpic(tasks, config) {
     return { source: 'in_progress', task: inProgress[0] };
   }
 
-  const notStarted = sortCandidates(
-    epics.filter((task) => normalize(task.status) === notStartedStatus),
-    config.queue.order
-  );
+  // Sort all epics to determine sequential order.
+  const allSorted = sortCandidates(epics, config.queue.order);
 
-  if (notStarted.length > 0) {
-    return { source: 'not_started', task: notStarted[0] };
+  // Find the first epic that is NOT done. If it's Not Started, start it.
+  // If it's in some other state, don't start a later epic.
+  for (const epic of allSorted) {
+    const status = normalize(epic.status);
+
+    if (status === doneStatus) {
+      continue;
+    }
+
+    if (status === notStartedStatus) {
+      return { source: 'not_started', task: epic };
+    }
+
+    // Epic is in a non-done, non-not-started state (shouldn't happen normally).
+    // Block progression — don't skip to later epics.
+    return null;
   }
 
   return null;
@@ -135,6 +152,14 @@ export function pickNextEpicChild(tasks, config, epicId) {
   }
 
   return null;
+}
+
+export function hasIncompleteEpic(tasks, config) {
+  const doneStatus = normalize(config.board.statuses.done);
+
+  return tasks.some(
+    (task) => isEpicTask(task, tasks, config) && normalize(task.status) !== doneStatus
+  );
 }
 
 export function allEpicChildrenAreDone(epic, tasks, config) {

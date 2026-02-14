@@ -1,10 +1,9 @@
 // panel/src/components/board-tab.tsx
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Columns03, Database01, RefreshCw01, Users01 } from '@untitledui/icons';
+import { Columns03, Folder, RefreshCw01, Tool01, Users01 } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
-import { Input } from '@/components/base/input/input';
 import { cx } from '@/utils/cx';
 import { Icon } from './icon';
 import {
@@ -13,16 +12,14 @@ import {
   BOARD_TYPE_COLORS,
   BOARD_POLL_INTERVAL_MS
 } from '../constants';
+import { TaskDetailModal } from './task-detail-modal';
 import type { BoardTask } from '../types';
 
 interface BoardTabProps {
   apiBaseUrl: string;
   showToast: (message: string, color?: 'success' | 'warning' | 'danger' | 'neutral') => void;
   refreshTrigger: number;
-  savedConfig: Record<string, any>;
-  onSaveDatabaseId: (id: string) => void;
   onShowErrorDetail: (title: string, message: string) => void;
-  busy: Record<string, any>;
 }
 
 interface BoardError {
@@ -55,9 +52,7 @@ function formatErrorForModal(err: BoardError): string {
   const d = err.details;
   if (d) {
     if (d.errorId) lines.push(`Error ID:      ${d.errorId}`);
-    if (d.databaseId) lines.push(`Database ID:   ${d.databaseId}`);
-    if (d.notionStatus) lines.push(`Notion Status: ${d.notionStatus}`);
-    if (d.notionCode) lines.push(`Notion Code:   ${d.notionCode}`);
+    if (d.boardDir) lines.push(`Board Dir:     ${d.boardDir}`);
     if (d.contentType) lines.push(`Content-Type:  ${d.contentType}`);
     if (d.timestamp) lines.push(`Timestamp:     ${d.timestamp}`);
     if (d.hint) {
@@ -79,48 +74,137 @@ function formatErrorForModal(err: BoardError): string {
   return lines.join('\n');
 }
 
-function BoardCard({ task, epic }: { task: BoardTask; epic: boolean }) {
-  const priorityColor = BOARD_PRIORITY_COLORS[task.priority] as any;
-  const typeColor = BOARD_TYPE_COLORS[task.type] as any;
+function extractTaskCode(task: BoardTask): string | null {
+  if (task.parentId) {
+    const fileName = task.id.split('/').pop() || '';
+    const match = fileName.match(/^s(\d+)-(\d+)/i);
+    if (match) return `S${match[1]}.${match[2]}`;
+  }
+  const id = task.id.split('/')[0];
+  const match = id.match(/^(E\d+)/i);
+  if (match) return match[1].toUpperCase();
+  return null;
+}
+
+function formatModelName(model: string): string | null {
+  if (!model) return null;
+  const match = model.match(/claude-(\w+)-(\d+)-(\d+)/);
+  if (match) {
+    return `${match[1].charAt(0).toUpperCase()}${match[1].slice(1)} ${match[2]}.${match[3]}`;
+  }
+  return model;
+}
+
+function AcDonut({ done, total }: { done: number; total: number }) {
+  const size = 28;
+  const stroke = 3;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const progress = total > 0 ? done / total : 0;
+  const dashOffset = circumference * (1 - progress);
+  const allDone = done === total;
 
   return (
-    <a
-      href={task.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="block"
+    <div className="relative flex items-center gap-1.5" title={`${done}/${total} ACs completed`}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={stroke}
+          className="text-quaternary/40"
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={stroke}
+          strokeDasharray={circumference}
+          strokeDashoffset={dashOffset}
+          strokeLinecap="round"
+          className={allDone ? 'text-utility-success-500' : 'text-utility-brand-500'}
+        />
+      </svg>
+      <span className={cx('text-[11px] font-medium tabular-nums', allDone ? 'text-utility-success-700' : 'text-tertiary')}>
+        {done}/{total}
+      </span>
+    </div>
+  );
+}
+
+function BoardCard({ task, epic, allTasks, onClick }: { task: BoardTask; epic: boolean; allTasks: BoardTask[]; onClick: () => void }) {
+  const priorityColor = BOARD_PRIORITY_COLORS[task.priority] as any;
+  const typeColor = BOARD_TYPE_COLORS[task.type] as any;
+  const taskCode = extractTaskCode(task);
+  const modelLabel = formatModelName(task.model);
+  const parentEpic = task.parentId ? allTasks.find((t) => t.id === task.parentId) : null;
+  const parentEpicCode = parentEpic ? extractTaskCode(parentEpic) : null;
+  const parentEpicInProgress = parentEpic && parentEpic.status.toLowerCase() === 'in progress';
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
+      className={cx(
+        'cursor-pointer rounded-xl border bg-primary p-3 shadow-xs transition hover:shadow-md hover:border-brand-solid',
+        epic ? 'border-l-4 border-l-utility-purple-500'
+          : parentEpicInProgress ? 'border-brand-primary/30'
+          : 'border-secondary'
+      )}
     >
-      <div
-        className={cx(
-          'rounded-xl border bg-primary p-3 shadow-xs transition hover:shadow-md hover:border-brand-solid',
-          epic ? 'border-l-4 border-l-utility-purple-500' : 'border-secondary'
-        )}
-      >
-        <p className="text-sm font-medium text-primary truncate">{task.name}</p>
-
-        {(task.priority || task.type) && (
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            {task.priority && (
-              <Badge size="sm" color={priorityColor || 'gray'}>
-                {task.priority}
-              </Badge>
-            )}
-            {task.type && (
-              <Badge size="sm" color={typeColor || 'gray'}>
-                {task.type}
-              </Badge>
-            )}
-          </div>
-        )}
-
-        {task.agents.length > 0 && (
-          <div className="mt-2 flex items-center gap-1 text-xs text-tertiary">
-            <Icon icon={Users01} className="size-3" />
-            <span className="truncate">{task.agents.join(', ')}</span>
-          </div>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm font-medium text-primary truncate">
+          {taskCode && <span className="text-tertiary font-mono mr-1.5">{taskCode}</span>}
+          {task.name}
+        </p>
+        {task.acTotal > 0 && (
+          <AcDonut done={task.acDone} total={task.acTotal} />
         )}
       </div>
-    </a>
+
+      {(task.priority || task.type || modelLabel) && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {task.priority && (
+            <Badge size="sm" color={priorityColor || 'gray'}>
+              {task.priority}
+            </Badge>
+          )}
+          {task.type && (
+            <Badge size="sm" color={typeColor || 'gray'}>
+              {task.type}
+            </Badge>
+          )}
+          {modelLabel && (
+            <Badge size="sm" color="gray">
+              {modelLabel}
+            </Badge>
+          )}
+        </div>
+      )}
+
+      {parentEpic && (
+        <div className="mt-2 flex items-center gap-1 text-xs text-tertiary truncate">
+          <Icon icon={Folder} className="size-3 shrink-0" />
+          <span className="truncate">
+            {parentEpicCode && <span className="font-mono mr-1">{parentEpicCode}</span>}
+            {parentEpic.name}
+          </span>
+        </div>
+      )}
+
+      {task.agents.length > 0 && (
+        <div className="mt-2 flex items-center gap-1 text-xs text-tertiary">
+          <Icon icon={Users01} className="size-3" />
+          <span className="truncate">{task.agents.join(', ')}</span>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -136,67 +220,15 @@ function SkeletonCard() {
   );
 }
 
-function MissingDatabaseIdCard({
-  showToast,
-  onSaveDatabaseId,
-  busy
-}: {
-  showToast: BoardTabProps['showToast'];
-  onSaveDatabaseId: BoardTabProps['onSaveDatabaseId'];
-  busy: BoardTabProps['busy'];
-}) {
-  const [draftId, setDraftId] = useState('');
-
-  const handleSave = useCallback(() => {
-    const id = draftId.trim();
-    if (!id) {
-      showToast('Please enter a Database ID.', 'warning');
-      return;
-    }
-    onSaveDatabaseId(id);
-  }, [draftId, onSaveDatabaseId, showToast]);
-
-  return (
-    <div className="mx-auto max-w-md rounded-xl border border-dashed border-warning-primary bg-utility-warning-50 p-6">
-      <div className="flex items-center gap-2">
-        <Icon icon={Database01} className="size-5 text-warning-primary" />
-        <h3 className="text-sm font-semibold text-warning-primary">Database ID Required</h3>
-      </div>
-      <p className="mt-2 text-sm text-tertiary">
-        Enter your Notion Database ID to connect. You can find it in the database URL after the workspace name.
-      </p>
-      <div className="mt-4 flex gap-2">
-        <div className="flex-1">
-          <Input
-            size="sm"
-            placeholder="e.g. a1b2c3d4e5f6..."
-            icon={Database01}
-            value={draftId}
-            onChange={(value) => setDraftId(value)}
-          />
-        </div>
-        <Button
-          size="sm"
-          color="primary"
-          isLoading={Boolean(busy.saveBoardDbId)}
-          onPress={handleSave}
-        >
-          Connect
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, savedConfig, onSaveDatabaseId, onShowErrorDetail, busy }: BoardTabProps) {
+export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDetail }: BoardTabProps) {
   const [tasks, setTasks] = useState<BoardTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [boardError, setBoardError] = useState<BoardError | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [fixing, setFixing] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null as BoardTask | null);
   const mountedRef = useRef(true);
-
-  const hasDatabaseId = Boolean(savedConfig.NOTION_DATABASE_ID?.trim());
 
   const fetchBoard = useCallback(
     async (silent = false) => {
@@ -287,6 +319,39 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, savedConfig, o
     [apiBaseUrl, showToast]
   );
 
+  const fixBoardOrder = useCallback(async () => {
+    setFixing(true);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/board/fix-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        showToast(payload?.message || 'Fix order failed', 'danger');
+        return;
+      }
+      const totalFixes = (payload.fixed?.length || 0) + (payload.fixedChildren?.length || 0);
+      if (totalFixes > 0) {
+        const parts: string[] = [];
+        if (payload.fixed?.length > 0) {
+          parts.push(`${payload.fixed.length} epic(s)`);
+        }
+        if (payload.fixedChildren?.length > 0) {
+          parts.push(`${payload.fixedChildren.length} child task(s)`);
+        }
+        showToast(`Fixed ${parts.join(' and ')}. API restarted.`, 'success');
+      } else {
+        showToast('Board order is already correct', 'neutral');
+      }
+      await fetchBoard(true);
+    } catch (err: any) {
+      showToast(err.message || 'Fix order failed', 'danger');
+    } finally {
+      if (mountedRef.current) setFixing(false);
+    }
+  }, [apiBaseUrl, showToast, fetchBoard]);
+
   // Initial load + polling
   useEffect(() => {
     mountedRef.current = true;
@@ -312,11 +377,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, savedConfig, o
     }));
   }, [tasks]);
 
-  const errorCode = boardError?.code || null;
   const totalCount = tasks.length;
-  const showMissingDbId = errorCode === 'MISSING_DATABASE_ID' || (!hasDatabaseId && !loading && tasks.length === 0 && !errorCode);
-  const showErrorBanner = boardError && !loading && tasks.length === 0 && !showMissingDbId;
-  const showBoard = tasks.length > 0 || (loading && !showMissingDbId && !showErrorBanner) || (!boardError && !loading);
+  const showErrorBanner = boardError && !loading && tasks.length === 0;
+  const showBoard = tasks.length > 0 || (loading && !showErrorBanner) || (!boardError && !loading);
 
   const handleViewDetails = useCallback(() => {
     if (!boardError) return;
@@ -346,6 +409,16 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, savedConfig, o
           <button
             type="button"
             className="rounded-lg p-1.5 text-tertiary transition hover:bg-primary_hover hover:text-secondary disabled:opacity-50"
+            onClick={fixBoardOrder}
+            disabled={fixing}
+            aria-label="Fix board order"
+            title="Fix epic ordering"
+          >
+            <Tool01 className={cx('size-4', fixing && 'animate-spin')} />
+          </button>
+          <button
+            type="button"
+            className="rounded-lg p-1.5 text-tertiary transition hover:bg-primary_hover hover:text-secondary disabled:opacity-50"
             onClick={() => fetchBoard()}
             disabled={refreshing}
             aria-label="Refresh board"
@@ -354,15 +427,6 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, savedConfig, o
           </button>
         </div>
       </div>
-
-      {/* Missing Database ID */}
-      {showMissingDbId && (
-        <MissingDatabaseIdCard
-          showToast={showToast}
-          onSaveDatabaseId={onSaveDatabaseId}
-          busy={busy}
-        />
-      )}
 
       {/* Error state */}
       {showErrorBanner && (
@@ -410,7 +474,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, savedConfig, o
                   </div>
                 ) : (
                   col.tasks.map((task) => (
-                    <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} />
+                    <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} />
                   ))
                 )}
               </div>
@@ -418,6 +482,12 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, savedConfig, o
           ))}
         </div>
       )}
+      <TaskDetailModal
+        open={selectedTask !== null}
+        onClose={() => setSelectedTask(null)}
+        task={selectedTask}
+        apiBaseUrl={apiBaseUrl}
+      />
     </section>
   );
 }

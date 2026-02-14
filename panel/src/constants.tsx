@@ -6,12 +6,10 @@ import {
   Beaker01,
   CheckCircle,
   Columns03,
-  Database01,
   File03,
   Folder,
   GitCommit,
   InfoCircle,
-  Key01,
   LockUnlocked01,
   MessageChatCircle,
   PlayCircle,
@@ -24,42 +22,6 @@ import {
 import type { TextFieldConfig, ToggleConfig, SetupSection, LogLevelMeta, LogSourceMeta } from './types';
 
 export const TEXT_FIELD_CONFIG: TextFieldConfig[] = [
-  {
-    key: 'NOTION_API_TOKEN',
-    label: 'Notion API Token',
-    icon: Key01,
-    placeholder: 'ntn_... or secret_...',
-    description: 'Used to read and update tasks in your Notion database.',
-    help: {
-      title: 'How to get Notion API Token',
-      summary: 'Create a Notion integration and copy its internal token.',
-      steps: [
-        <>Go to <a href="https://www.notion.so/profile/integrations" target="_blank" rel="noopener noreferrer" className="underline text-brand-primary hover:text-brand-primary_hover">My Integrations</a> on Notion.</>,
-        'Create a new internal integration (or open an existing one).',
-        <>The integration needs <strong>Read content</strong>, <strong>Update content</strong>, and <strong>Insert content</strong> capabilities.</>,
-        'Copy the integration token and paste it here.',
-        <>Open your target database in Notion, click <strong>...</strong> &gt; <strong>Connect to</strong>, and select your integration. This grants it access to read and write pages in that database.</>
-      ]
-    },
-    password: true
-  },
-  {
-    key: 'NOTION_DATABASE_ID',
-    label: 'Notion Database ID',
-    icon: Database01,
-    placeholder: '32-char database id or UUID with hyphens',
-    description: 'Identifies which Notion database is used as your Kanban board.',
-    help: {
-      title: 'How to find Notion Database ID',
-      summary: 'Use the URL of your Notion database page.',
-      steps: [
-        'Open the database in Notion.',
-        'Copy the URL from your browser.',
-        'Find the long ID segment in the URL (with or without hyphens).',
-        'Paste that value here.'
-      ]
-    }
-  },
   {
     key: 'CLAUDE_CODE_OAUTH_TOKEN',
     label: 'Claude OAuth Token',
@@ -154,13 +116,6 @@ export const TEXT_FIELD_BY_KEY = Object.fromEntries(TEXT_FIELD_CONFIG.map((field
 export const TOGGLE_BY_KEY = Object.fromEntries(TOGGLE_CONFIG.map((field) => [field.key, field]));
 
 export const SETUP_SECTIONS: SetupSection[] = [
-  {
-    key: 'notion',
-    title: 'Notion',
-    description: 'Credentials and database settings.',
-    textKeys: ['NOTION_API_TOKEN', 'NOTION_DATABASE_ID'],
-    toggleKeys: []
-  },
   {
     key: 'claude',
     title: 'Claude Runner',
@@ -284,10 +239,8 @@ export const BOARD_TYPE_COLORS: Record<string, string> = {
 export const BOARD_POLL_INTERVAL_MS = 30_000;
 
 export const FEED_TIMESTAMP_FORMATTER = new Intl.DateTimeFormat('pt-BR', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
   hour: '2-digit',
   minute: '2-digit',
+  second: '2-digit',
   hour12: false
 });

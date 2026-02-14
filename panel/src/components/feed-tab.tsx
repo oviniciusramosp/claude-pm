@@ -17,7 +17,7 @@ import {
 } from '../utils/log-helpers';
 import { Icon } from './icon';
 import { SourceAvatar } from './source-avatar';
-import type { LogEntry, TaskContractData } from '../types';
+import type { LogEntry, OrchestratorState, TaskContractData } from '../types';
 
 function ExpandablePrompt({
   title,
@@ -155,7 +155,8 @@ export function FeedTab({
   setChatDraft,
   sendClaudeChatMessage,
   copyLiveFeedMessage,
-  busy
+  busy,
+  orchestratorState
 }: {
   logs: LogEntry[];
   logFeedRef: RefObject<HTMLDivElement | null>;
@@ -164,7 +165,9 @@ export function FeedTab({
   sendClaudeChatMessage: () => void;
   copyLiveFeedMessage: (message: string) => void;
   busy: Record<string, any>;
+  orchestratorState: OrchestratorState | null;
 }) {
+  const claudeWorking = orchestratorState?.active && orchestratorState.currentTaskId;
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-4 rounded-2xl border border-secondary bg-primary p-4 shadow-sm">
       <div className="space-y-1">
@@ -269,6 +272,18 @@ export function FeedTab({
         {logs.length === 0 ? (
           <div className="rounded-2xl bg-primary p-3 text-sm text-tertiary shadow-xs">
             No logs yet. Start App or click <strong>Run Queue Now</strong> to see messages here.
+          </div>
+        ) : null}
+
+        {claudeWorking ? (
+          <div className="sticky bottom-0 flex items-center gap-3 rounded-2xl border border-brand/30 bg-utility-brand-50 px-4 py-3 shadow-sm dark:bg-utility-brand-50/10">
+            <svg className="size-4 shrink-0 animate-spin text-brand-primary" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <span className="text-sm font-medium text-brand-primary">
+              Claude is working on: &quot;{orchestratorState?.currentTaskName || orchestratorState?.currentTaskId}&quot;
+            </span>
           </div>
         ) : null}
       </div>

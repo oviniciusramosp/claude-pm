@@ -88,26 +88,26 @@ function buildPrompt(context) {
     ...existingFileInfo,
     '',
     'Contexto do projeto:',
-    '- Projeto: Product Manager Automation (Notion + Claude Code).',
-    '- Objetivo: executar cards do Notion automaticamente, implementar no repositorio, e reportar resultados.',
-    `- Notion database id: ${context.notionDatabaseId}`,
-    `- Notion status: ${context.notStarted} -> ${context.inProgress} -> ${context.done}`,
+    '- Projeto: Product Manager Automation (local Board + Claude Code).',
+    '- Objetivo: executar tasks do Board automaticamente, implementar no repositorio, e reportar resultados.',
+    `- Board directory: ${context.boardDir}`,
+    `- Board statuses: ${context.notStarted} -> ${context.inProgress} -> ${context.done}`,
     '- Tipos de tarefa: Epic, UserStory, Defect, Discovery.',
-    '- Sub-tasks usam Parent item para vinculo ao Epic.',
+    '- Sub-tasks ficam dentro da pasta do Epic e usam frontmatter status.',
     '',
     'Conteudo obrigatorio do CLAUDE.md:',
     '1) Um resumo rapido do fluxo operacional esperado do agente.',
     '2) Checklist de execucao por task:',
-    '   - ler card atual e criterios',
+    '   - ler task atual e criterios',
     '   - implementar',
     '   - rodar validacoes locais relevantes',
     '   - criar commit ao concluir (mensagem objetiva)',
-    '   - ao concluir, mover o card para Done via Notion API quando o fluxo exigir atualizacao manual',
+    '   - ao concluir, mover o task para Done quando o fluxo exigir atualizacao manual',
     '   - retornar um JSON final no formato usado pela automacao.',
-    '3) Secao de Notion:',
-    '   - usar variavel de ambiente NOTION_API_TOKEN quando precisar chamar API',
-    '   - nunca hardcodar token no repositorio',
-    '   - sempre incluir URL/ID do card como referencia no output.',
+    '3) Secao de Board:',
+    '   - tasks sao arquivos .md com frontmatter YAML dentro de Board/',
+    '   - nunca hardcodar tokens no repositorio',
+    '   - sempre incluir o ID do task como referencia no output.',
     '4) Secao de seguranca: nao vazar segredos em logs, commits, codigo ou docs.',
     '5) Secao de padrao de resposta com JSON:',
     '   {"status":"done|blocked","summary":"...","notes":"...","files":["..."],"tests":"..."}',
@@ -139,10 +139,10 @@ async function main() {
     String(process.env.CLAUDE_FULL_ACCESS || '').toLowerCase()
   );
   const command = resolveClaudeCommand(baseCommand, fullAccess);
-  const notionDatabaseId = process.env.NOTION_DATABASE_ID || '(not configured)';
-  const notStarted = process.env.NOTION_STATUS_NOT_STARTED || 'Not Started';
-  const inProgress = process.env.NOTION_STATUS_IN_PROGRESS || 'In Progress';
-  const done = process.env.NOTION_STATUS_DONE || 'Done';
+  const boardDir = process.env.BOARD_DIR || 'Board';
+  const notStarted = process.env.BOARD_STATUS_NOT_STARTED || 'Not Started';
+  const inProgress = process.env.BOARD_STATUS_IN_PROGRESS || 'In Progress';
+  const done = process.env.BOARD_STATUS_DONE || 'Done';
 
   let existingContent = '';
   let existedBefore = false;
@@ -154,7 +154,7 @@ async function main() {
   }
 
   const prompt = buildPrompt({
-    notionDatabaseId,
+    boardDir,
     notStarted,
     inProgress,
     done,

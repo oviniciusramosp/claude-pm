@@ -30,6 +30,9 @@ export function buildTaskPrompt(task, markdown, options = {}) {
     '',
     'Regras de execucao:',
     '- Conclua os Acceptance Criteria da tarefa.',
+    '- IMPORTANTE: Ao concluir CADA Acceptance Criteria individualmente, emita imediatamente uma linha no formato exato: [AC_COMPLETE] <texto exato da AC sem o "- [ ] " inicial>',
+    '- Exemplo: ao concluir "- [ ] Login page renders correctly", emita: [AC_COMPLETE] Login page renders correctly',
+    '- Emita o marcador ASSIM QUE a AC for concluida, antes de passar para a proxima.',
     '- Ao finalizar com sucesso, crie um commit com mensagem clara e objetiva.',
     '- Nao inclua segredos em codigo, commits ou logs.',
     ''

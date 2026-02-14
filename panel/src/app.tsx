@@ -77,6 +77,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
   const saveDisabled = hasBlockingErrors || !allFieldsValidated || changedKeys.length === 0 || Boolean(busy.save);
 
   const apiRunning = status?.api?.status === 'running';
+  const orchestratorState = status?.automationApi?.health?.payload?.orchestrator || null;
 
   const disabledTabs = useMemo(() => new Set<string>(), []);
 
@@ -594,6 +595,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
               sendClaudeChatMessage={sendClaudeChatMessage}
               copyLiveFeedMessage={copyLiveFeedMessage}
               busy={busy}
+              orchestratorState={orchestratorState}
             />
           )}
         </div>

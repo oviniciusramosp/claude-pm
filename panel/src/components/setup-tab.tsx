@@ -6,7 +6,6 @@ import {
   Eye,
   EyeOff,
   Folder,
-  LinkExternal01,
   Save01,
   Settings01,
   XCircle
@@ -31,7 +30,6 @@ export function SetupTab({
   validationMap,
   revealedFields,
   toggleFieldVisibility,
-  notionDatabaseUrl,
   busy,
   pickClaudeWorkdir,
   saveDisabled,
@@ -45,7 +43,6 @@ export function SetupTab({
   validationMap: Record<string, ValidationResult>;
   revealedFields: Record<string, boolean>;
   toggleFieldVisibility: (fieldKey: string) => void;
-  notionDatabaseUrl: string;
   busy: Record<string, any>;
   pickClaudeWorkdir: () => void;
   saveDisabled: boolean;
@@ -91,7 +88,7 @@ export function SetupTab({
                   const isFieldVisible = Boolean(revealedFields[field.key]);
                   const hasInlineValidationIcon =
                     validation.level === 'success' || validation.level === 'error' || validation.level === 'warning';
-                  const hasInlineActions = isSecretField || field.key === 'NOTION_DATABASE_ID' || field.folderPicker;
+                  const hasInlineActions = isSecretField || field.folderPicker;
 
                   return (
                     <div key={field.key} className="rounded-xl border border-secondary bg-secondary p-5">
@@ -173,23 +170,6 @@ export function SetupTab({
                                   aria-label={isFieldVisible ? 'Hide Secret' : 'Reveal Secret'}
                                   iconLeading={isFieldVisible ? EyeOff : Eye}
                                   onPress={() => toggleFieldVisibility(field.key)}
-                                />
-                              ) : null}
-
-                              {field.key === 'NOTION_DATABASE_ID' ? (
-                                <Button
-                                  size="md"
-                                  color="secondary"
-                                  className="h-11 w-11 shrink-0"
-                                  aria-label="Open in Notion"
-                                  iconLeading={LinkExternal01}
-                                  isDisabled={!notionDatabaseUrl}
-                                  onPress={() => {
-                                    if (!notionDatabaseUrl) {
-                                      return;
-                                    }
-                                    window.open(notionDatabaseUrl, '_blank', 'noopener,noreferrer');
-                                  }}
                                 />
                               ) : null}
 

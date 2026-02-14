@@ -4,14 +4,6 @@ import dotenv from 'dotenv';
 dotenv.config();
 const FIXED_CLAUDE_COMMAND = '/opt/homebrew/bin/claude --print';
 
-function required(name) {
-  const value = process.env[name];
-  if (!value || value.trim().length === 0) {
-    throw new Error(`Variavel obrigatoria ausente: ${name}`);
-  }
-  return value;
-}
-
 function number(name, fallback) {
   const value = process.env[name];
   if (!value || value.trim().length === 0) {
@@ -39,26 +31,15 @@ export const config = {
   server: {
     port: number('PORT', 3000)
   },
-  notion: {
-    token: required('NOTION_API_TOKEN'),
-    databaseId: required('NOTION_DATABASE_ID'),
-    version: process.env.NOTION_VERSION || '2022-06-28',
-    properties: {
-      name: process.env.NOTION_PROP_NAME || 'Name',
-      status: process.env.NOTION_PROP_STATUS || 'Status',
-      agent: process.env.NOTION_PROP_AGENT || 'Agent',
-      priority: process.env.NOTION_PROP_PRIORITY || 'Priority',
-      type: process.env.NOTION_PROP_TYPE || 'Type',
-      parentItem: process.env.NOTION_PROP_PARENT_ITEM || process.env.NOTION_PROP_EPIC || 'Parent item',
-      model: process.env.NOTION_PROP_MODEL || 'Model'
-    },
+  board: {
+    dir: path.resolve(process.cwd(), process.env.BOARD_DIR || 'Board'),
     statuses: {
-      notStarted: process.env.NOTION_STATUS_NOT_STARTED || 'Not Started',
-      inProgress: process.env.NOTION_STATUS_IN_PROGRESS || 'In Progress',
-      done: process.env.NOTION_STATUS_DONE || 'Done'
+      notStarted: process.env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+      inProgress: process.env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+      done: process.env.BOARD_STATUS_DONE || 'Done'
     },
     typeValues: {
-      epic: process.env.NOTION_TYPE_EPIC || 'Epic'
+      epic: process.env.BOARD_TYPE_EPIC || 'Epic'
     }
   },
   queue: {

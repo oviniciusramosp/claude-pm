@@ -76,7 +76,7 @@ export function SidebarNav({
         <Icon icon={Asterisk02} className="size-6 shrink-0 text-brand-primary" />
         <div className="min-w-0">
           <h1 className="m-0 truncate text-md font-semibold text-primary">PM Automation</h1>
-          <p className="m-0 text-xs text-tertiary">Notion + Claude Panel</p>
+          <p className="m-0 text-xs text-tertiary">Board + Claude Panel</p>
         </div>
       </div>
 
@@ -91,7 +91,7 @@ export function SidebarNav({
               type="button"
               disabled={isDisabled}
               aria-current={isActive ? 'page' : undefined}
-              title={isDisabled ? 'Notion API Token required' : undefined}
+              title={isDisabled ? 'Configuration required' : undefined}
               className={cx(
                 'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition',
                 isDisabled
