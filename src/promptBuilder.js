@@ -10,21 +10,16 @@ export function buildTaskPrompt(task, markdown, extraPrompt = '') {
   const agents = task.agents.length > 0 ? task.agents.join(', ') : '(nenhum agente informado)';
 
   const basePrompt = [
-    'Voce e o Claude Code atuando como executor de tarefas de produto e engenharia.',
-    'Execute a tarefa abaixo no repositorio atual.',
+    'Execute a tarefa descrita abaixo:',
     '',
     'Contexto da tarefa:',
     `- Nome: ${normalizeText(task.name)}`,
     `- ID no Notion: ${normalizeText(task.id)}`,
     `- Tipo: ${normalizeText(task.type)}`,
     `- Prioridade: ${normalizeText(task.priority)}`,
-    `- Agentes sugeridos: ${agents}`,
-    `- URL no Notion: ${normalizeText(task.url)}`,
+    `- Rode os seguintes agentes para essa tarefa: ${agents}`,
     '',
-    'Descricao do card (Markdown do Notion):',
-    '---',
     normalizeText(markdown || '(sem descricao)'),
-    '---',
     '',
     'Regras de execucao:',
     '- Conclua os Acceptance Criteria da tarefa.',
