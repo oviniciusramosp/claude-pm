@@ -1,7 +1,7 @@
 // panel/src/components/feed-tab.tsx
 
-import React, { type RefObject, useState } from 'react';
-import { ChevronDown, ChevronRight, Copy01, Send01, TerminalBrowser } from '@untitledui/icons';
+import React, { type RefObject, useLayoutEffect, useState } from 'react';
+import { ChevronDown, ChevronRight, Copy01, CpuChip01, Send01, TerminalBrowser } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { cx } from '@/utils/cx';
 import {
@@ -10,10 +10,13 @@ import {
   logSourceMeta,
   resolveLogSourceKey,
   logToneClasses,
+  detectSpecialBubble,
   formatLiveFeedMessage,
   formatFeedTimestamp,
   parseClaudeTaskContract,
-  formatClaudeTaskContract
+  formatClaudeTaskContract,
+  extractModelFromMessage,
+  formatModelLabel
 } from '../utils/log-helpers';
 import { Icon } from './icon';
 import { SourceAvatar } from './source-avatar';
@@ -86,6 +89,8 @@ function ExpandableTaskResult({
   }
   const badge = badgeParts.length > 0 ? ` \u2014 ${badgeParts.join(', ')}` : '';
 
+  const hasDetails = Boolean(contract.summary || contract.notes || contract.files.length > 0 || contract.tests);
+
   const copyText = formatClaudeTaskContract(JSON.stringify({
     status: contract.status,
     summary: contract.summary,
@@ -93,6 +98,14 @@ function ExpandableTaskResult({
     files: contract.files,
     tests: contract.tests
   })) || '';
+
+  if (!hasDetails) {
+    return (
+      <p className="m-0 whitespace-pre-wrap break-words text-sm leading-5 text-current">
+        {statusLabel}{badge}
+      </p>
+    );
+  }
 
   return (
     <div className="space-y-1.5">
@@ -168,6 +181,15 @@ export function FeedTab({
   orchestratorState: OrchestratorState | null;
 }) {
   const claudeWorking = orchestratorState?.active && orchestratorState.currentTaskId;
+
+  useLayoutEffect(() => {
+    const el = logFeedRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+  }, [logs, logFeedRef]);
+
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-4 rounded-2xl border border-secondary bg-primary p-4 shadow-sm">
       <div className="space-y-1">
@@ -189,8 +211,12 @@ export function FeedTab({
           const sourceMeta = logSourceMeta(line);
           const taskContract = parseClaudeTaskContract(line.message);
           const displayMessage = formatLiveFeedMessage(line);
+          const modelRaw = extractModelFromMessage(line.message);
+          const modelLabel = modelRaw ? formatModelLabel(modelRaw) : null;
           const isOutgoing = sourceMeta.side === 'outgoing';
           const alignment = isOutgoing ? 'justify-end' : 'justify-start';
+
+          const specialBubble = detectSpecialBubble(line.message || '');
 
           const currentSourceKey = resolveLogSourceKey(line.source, line.message);
           const prevLine = index > 0 ? logs[index - 1] : null;
@@ -218,8 +244,12 @@ export function FeedTab({
                   className={cx(
                     'group/msg max-w-[min(86%,760px)] rounded-2xl px-3.5 py-2.5 shadow-xs',
                     isOutgoing ? 'rounded-br-md' : 'rounded-bl-md',
-                    logToneClasses(level, sourceMeta.side, sourceMeta.directClaude),
-                    sourceMeta.directClaude ? 'ring-1 ring-brand/45' : ''
+                    logToneClasses(level, sourceMeta.side, sourceMeta.directClaude, specialBubble),
+                    specialBubble === 'in-progress'
+                      ? 'ring-1 ring-blue-400/50'
+                      : specialBubble === 'epic-done'
+                        ? 'ring-1 ring-purple-400/50'
+                        : sourceMeta.directClaude ? 'ring-1 ring-brand/45' : ''
                   )}
                 >
                   {line.isPrompt ? (
@@ -237,11 +267,18 @@ export function FeedTab({
                     <p className="m-0 whitespace-pre-wrap break-words text-sm leading-5 text-current">{displayMessage}</p>
                   )}
 
-                  <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-tertiary">
+                  {modelLabel ? (
+                    <div className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-black/5 px-1.5 py-0.5 text-[11px] text-current/70 dark:bg-white/10">
+                      <Icon icon={CpuChip01} className="size-3 shrink-0" />
+                      <span>{modelLabel}</span>
+                    </div>
+                  ) : null}
+
+                  <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-current/50">
                     <div className="inline-flex items-center gap-1">
                       <Icon icon={levelMeta.icon} className="size-3" />
                       <span>{levelMeta.label}</span>
-                      <span className="mx-0.5 text-quaternary">&bull;</span>
+                      <span className="mx-0.5 opacity-60">&bull;</span>
                       <span style={{ fontVariantNumeric: 'tabular-nums' }}>{timestamp}</span>
                     </div>
                     {!line.isPrompt ? (

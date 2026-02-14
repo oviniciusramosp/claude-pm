@@ -18,8 +18,9 @@ export function SourceAvatar({ sourceMeta }: { sourceMeta: LogSourceMeta }) {
     <span
       className={cx(
         'inline-flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-secondary bg-primary text-[10px] font-semibold uppercase text-secondary shadow-xs',
-        sourceMeta.directClaude ? 'border-brand/40 bg-brand-secondary text-brand-primary' : ''
+        sourceMeta.directClaude && !sourceMeta.avatarColor ? 'border-brand/40 bg-brand-secondary text-brand-primary' : ''
       )}
+      style={sourceMeta.avatarColor ? { color: sourceMeta.avatarColor, borderColor: `${sourceMeta.avatarColor}66` } : undefined}
     >
       {useImage ? (
         <img
@@ -31,7 +32,7 @@ export function SourceAvatar({ sourceMeta }: { sourceMeta: LogSourceMeta }) {
           onError={() => setHasImageError(true)}
         />
       ) : sourceMeta.icon ? (
-        <Icon icon={sourceMeta.icon} className="size-3.5" />
+        <Icon icon={sourceMeta.icon} className="size-4" />
       ) : (
         sourceMeta.avatarInitials || '?'
       )}

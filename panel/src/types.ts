@@ -64,6 +64,7 @@ export interface LogSourceMeta {
   icon: React.FC<{ className?: string }>;
   side: 'incoming' | 'outgoing';
   avatarUrl?: string;
+  avatarColor?: string;
   avatarInitials: string;
   directClaude: boolean;
 }

@@ -99,7 +99,26 @@ export function logSourceMeta(entry: LogEntry | string): LogSourceMeta {
   };
 }
 
-export function logToneClasses(level: string, side = 'incoming', directClaude = false): string {
+export type SpecialBubbleType = 'in-progress' | 'epic-done' | null;
+
+export function detectSpecialBubble(message: string): SpecialBubbleType {
+  const text = (message || '').trim();
+  if (/^Moved to In Progress:/i.test(text)) {
+    return 'in-progress';
+  }
+  if (/^Epic moved to Done/i.test(text)) {
+    return 'epic-done';
+  }
+  return null;
+}
+
+export function logToneClasses(level: string, side = 'incoming', directClaude = false, specialBubble: SpecialBubbleType = null): string {
+  if (specialBubble === 'in-progress') {
+    return 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300';
+  }
+  if (specialBubble === 'epic-done') {
+    return 'bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300';
+  }
   if (level === 'success') {
     return 'bg-utility-success-50 text-success-primary';
   }
@@ -318,10 +337,26 @@ export function formatLiveFeedMessage(entry: LogEntry): string {
 
   const workingMatch = trimmed.match(/^(Claude is working on|Opus is reviewing|Opus is reviewing epic): "(.+)" \| model: (.+)$/i);
   if (workingMatch) {
-    return `${workingMatch[1]}: "${workingMatch[2]}"\nModel: ${workingMatch[3]}`;
+    return `${workingMatch[1]}: "${workingMatch[2]}"`;
   }
 
   return rawMessage;
+}
+
+export function extractModelFromMessage(message: unknown): string | null {
+  const text = normalizeText(message).trim();
+  if (!text) return null;
+  const match = text.match(/\| model: (.+)$/i);
+  if (!match) return null;
+  return match[1].trim();
+}
+
+export function formatModelLabel(model: string): string {
+  const m = model.match(/claude-(\w+)-(\d+)-(\d+)/);
+  if (m) {
+    return `${m[1].charAt(0).toUpperCase()}${m[1].slice(1)} ${m[2]}.${m[3]}`;
+  }
+  return model;
 }
 
 export function formatFeedTimestamp(value: unknown): string {

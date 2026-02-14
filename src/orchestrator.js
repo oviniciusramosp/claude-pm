@@ -16,6 +16,24 @@ function normalize(value) {
 
 const OPUS_REVIEW_MODEL = 'claude-opus-4-6';
 
+function extractTaskCode(task) {
+  if (!task || !task.id) return null;
+  if (task.parentId) {
+    const fileName = task.id.split('/').pop() || '';
+    const match = fileName.match(/^s(\d+)-(\d+)/i);
+    if (match) return `S${match[1]}.${match[2]}`;
+  }
+  const id = task.id.split('/')[0];
+  const match = id.match(/^(E\d+)/i);
+  if (match) return match[1].toUpperCase();
+  return null;
+}
+
+function taskLabel(task) {
+  const code = extractTaskCode(task);
+  return code ? `${code} - ${task.name}` : task.name;
+}
+
 function isOpusModel(modelName) {
   return normalize(modelName).includes('opus');
 }
@@ -255,13 +273,13 @@ export class Orchestrator {
       const source = candidate.source;
 
       if (this.claudeCompletedTaskIds.has(task.id)) {
-        this.logger.warn(`Task "${task.name}" was already completed by Claude but is still on the board. Retrying status update.`);
+        this.logger.warn(`Task "${taskLabel(task)}" was already completed by Claude but is still on the board. Retrying status update.`);
         try {
           await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.done);
           this.claudeCompletedTaskIds.delete(task.id);
-          this.logger.success(`Board status update recovered for: "${task.name}"`);
+          this.logger.success(`Board status update recovered for: "${taskLabel(task)}"`);
         } catch (retryError) {
-          this.logger.error(`Board status update retry failed for "${task.name}": ${retryError.message}`);
+          this.logger.error(`Board status update retry failed for "${taskLabel(task)}": ${retryError.message}`);
           const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
           if (shouldHalt) {
             this.halted = true;
@@ -274,10 +292,10 @@ export class Orchestrator {
       if (source === 'not_started') {
         await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.inProgress);
         await this.runStore.markStarted(task);
-        this.logger.info(`Moved to In Progress: "${task.name}"`);
+        this.logger.info(`Moved to In Progress: "${taskLabel(task)}"`);
       } else {
         await this.runStore.markStarted(task);
-        this.logger.info(`Resuming In Progress task: "${task.name}"`);
+        this.logger.info(`Resuming In Progress Task: "${taskLabel(task)}"`);
       }
 
       const markdown = await this.boardClient.getTaskMarkdown(task.id);
@@ -285,15 +303,16 @@ export class Orchestrator {
         extraPrompt: this.config.claude.extraPrompt,
         forceTestCreation: this.config.claude.forceTestCreation,
         forceTestRun: this.config.claude.forceTestRun,
-        forceCommit: this.config.claude.forceCommit
+        forceCommit: this.config.claude.forceCommit,
+        claudeMdInjected: this.config.claude.injectClaudeMd
       });
       if (this.config.claude.logPrompt) {
-        this.logger.block(`Prompt sent to Claude Code for "${task.name}"`, prompt);
+        this.logger.block(`Prompt sent to Claude Code for "${taskLabel(task)}"`, prompt);
       }
 
       this.currentTaskId = task.id;
-      this.currentTaskName = task.name;
-      this.logger.info(`Claude is working on: "${task.name}" | model: ${task.model || 'default'}`);
+      this.currentTaskName = taskLabel(task);
+      this.logger.info(`Claude is working on: "${taskLabel(task)}" | model: ${task.model || 'default'}`);
 
       const { signal } = this.watchdog.start(task);
       const executionStartTime = Date.now();
@@ -314,10 +333,10 @@ export class Orchestrator {
         let executionElapsed = Date.now() - executionStartTime;
 
         if (normalize(execution.status) !== 'done') {
-          this.logger.info(`Claude finished: "${task.name}" (${formatDuration(executionElapsed)})`);
+          this.logger.info(`Claude finished: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`);
           this.logger.info(buildContractJson(execution));
           await this.runStore.markFailed(task, `Claude retornou status=${execution.status || 'desconhecido'}`);
-          this.logger.warn(`Task blocked by Claude: "${task.name}" (status: ${execution.status || 'unknown'})`);
+          this.logger.warn(`Task blocked by Claude: "${taskLabel(task)}" (status: ${execution.status || 'unknown'})`);
 
           const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
           if (shouldHalt) {
@@ -327,22 +346,22 @@ export class Orchestrator {
 
           if (this.config.state.autoResetFailedTask) {
             await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.notStarted);
-            this.logger.warn(`Returned to Not Started after block: "${task.name}"`);
+            this.logger.warn(`Returned to Not Started after block: "${taskLabel(task)}"`);
           }
 
           break;
         }
 
-        this.logger.info(`Claude finished: "${task.name}" (${formatDuration(executionElapsed)})`);
+        this.logger.info(`Claude finished: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`);
 
         const validation = validateExecution(this.config.claude.workdir, headBefore, execution);
         if (!validation.valid) {
-          this.logger.warn(`Hallucination detected for "${task.name}": ${validation.reason}`);
-          this.logger.warn(`Retrying task "${task.name}" with corrective prompt...`);
+          this.logger.warn(`Hallucination detected for "${taskLabel(task)}": ${validation.reason}`);
+          this.logger.warn(`Retrying task "${taskLabel(task)}" with corrective prompt...`);
 
           const retryPrompt = buildRetryPrompt(task, prompt);
           if (this.config.claude.logPrompt) {
-            this.logger.block(`Retry prompt for "${task.name}"`, retryPrompt);
+            this.logger.block(`Retry prompt for "${taskLabel(task)}"`, retryPrompt);
           }
 
           const retryHeadBefore = getGitHead(this.config.claude.workdir);
@@ -353,12 +372,12 @@ export class Orchestrator {
 
           this.watchdog.stop();
           executionElapsed = Date.now() - retryStartTime;
-          this.logger.info(`Claude retry finished: "${task.name}" (${formatDuration(executionElapsed)})`);
+          this.logger.info(`Claude retry finished: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`);
 
           if (normalize(execution.status) !== 'done') {
             this.logger.info(buildContractJson(execution));
             await this.runStore.markFailed(task, `Retry also returned status=${execution.status || 'unknown'}`);
-            this.logger.warn(`Task blocked on retry: "${task.name}" (status: ${execution.status || 'unknown'})`);
+            this.logger.warn(`Task blocked on retry: "${taskLabel(task)}" (status: ${execution.status || 'unknown'})`);
 
             const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
             if (shouldHalt) {
@@ -371,7 +390,7 @@ export class Orchestrator {
           if (!retryValidation.valid) {
             this.logger.info(buildContractJson(execution));
             await this.runStore.markFailed(task, 'Hallucination persisted after retry. No artifacts produced.');
-            this.logger.error(`Hallucination persisted after retry for "${task.name}". Giving up.`);
+            this.logger.error(`Hallucination persisted after retry for "${taskLabel(task)}". Giving up.`);
 
             const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
             if (shouldHalt) {
@@ -397,11 +416,11 @@ export class Orchestrator {
               const header = `## Opus Review Feedback (${new Date().toISOString()})\nStatus: ${finalExecution.status || 'blocked'}\n`;
               await this.boardClient.appendMarkdown(task.id, header + reviewNotes);
               await this.runStore.markFailed(task, `Opus review returned status=${finalExecution.status || 'blocked'}`);
-              this.logger.warn(`Opus review blocked task: "${task.name}" (status: ${finalExecution.status || 'blocked'})`);
+              this.logger.warn(`Opus review blocked task: "${taskLabel(task)}" (status: ${finalExecution.status || 'blocked'})`);
               break;
             }
 
-            this.logger.success(`Opus review approved: "${task.name}"`);
+            this.logger.success(`Opus review approved: "${taskLabel(task)}"`);
           } catch (reviewError) {
             const errorNote = `## Opus Review Error (${new Date().toISOString()})\nReview failed: ${reviewError.message}\n`;
             await this.boardClient.appendMarkdown(task.id, errorNote);
@@ -416,7 +435,7 @@ export class Orchestrator {
               break;
             }
 
-            this.logger.error(`Opus review failed for "${task.name}": ${reviewError.message}`);
+            this.logger.error(`Opus review failed for "${taskLabel(task)}": ${reviewError.message}`);
 
             const shouldHaltReview = this.watchdog.recordFailure(task.id, task.name);
             if (shouldHaltReview) {
@@ -428,6 +447,24 @@ export class Orchestrator {
         }
 
         await this.boardClient.updateCheckboxes(task.id, finalExecution.completedAcs);
+
+        // Verify all ACs are checked before moving to Done
+        const postCheckMarkdown = await this.boardClient.getTaskMarkdown(task.id);
+        const remainingUnchecked = (postCheckMarkdown.match(/^\s*-\s*\[ \]\s+/gm) || []).length;
+
+        if (remainingUnchecked > 0) {
+          this.logger.warn(
+            `Task "${taskLabel(task)}" has ${remainingUnchecked} unchecked Acceptance Criteria. Keeping in In Progress.`
+          );
+          await this.runStore.markFailed(task, `${remainingUnchecked} Acceptance Criteria still unchecked after execution.`);
+
+          const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
+          if (shouldHalt) {
+            this.halted = true;
+          }
+          break;
+        }
+
         await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.done);
         this.claudeCompletedTaskIds.delete(task.id);
         const completionNotes = buildTaskCompletionNotes(task, finalExecution);
@@ -435,11 +472,11 @@ export class Orchestrator {
         await this.runStore.markDone(task, finalExecution);
         processed += 1;
 
-        this.logger.success(`Moved to Done: "${task.name}"`);
+        this.logger.success(`Moved to Done: "${taskLabel(task)}"`);
       } catch (error) {
         this.watchdog.stop();
         const executionElapsed = Date.now() - executionStartTime;
-        this.logger.info(`Claude finished: "${task.name}" (${formatDuration(executionElapsed)})`);
+        this.logger.info(`Claude finished: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`);
 
         await this.runStore.markFailed(task, error.message);
         const resetHint = extractResetHint(error.message);
@@ -452,7 +489,7 @@ export class Orchestrator {
           break;
         }
 
-        this.logger.error(`Failed to execute task "${task.name}": ${error.message}`);
+        this.logger.error(`Failed to execute task "${taskLabel(task)}": ${error.message}`);
 
         const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
         if (shouldHalt) {
@@ -462,7 +499,7 @@ export class Orchestrator {
 
         if (this.config.state.autoResetFailedTask) {
           await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.notStarted);
-          this.logger.warn(`Returned to Not Started after failure: "${task.name}"`);
+          this.logger.warn(`Returned to Not Started after failure: "${taskLabel(task)}"`);
         }
 
         break;
@@ -495,11 +532,11 @@ export class Orchestrator {
 
     if (epicCandidate.source === 'not_started') {
       await this.boardClient.updateTaskStatus(epic.id, this.config.board.statuses.inProgress);
-      this.logger.info(`Epic moved to In Progress: "${epic.name}"`);
+      this.logger.info(`Epic moved to In Progress: "${taskLabel(epic)}"`);
 
       await this.stampEpicChildrenStatuses(epic, tasks);
     } else {
-      this.logger.info(`Resuming In Progress epic: "${epic.name}"`);
+      this.logger.info(`Resuming In Progress Epic: "${taskLabel(epic)}"`);
     }
 
     let processed = 0;
@@ -510,7 +547,7 @@ export class Orchestrator {
 
       const childCandidate = pickNextEpicChild(currentTasks, this.config, epic.id);
       if (!childCandidate) {
-        this.logger.info(`All children of epic "${epic.name}" are done or none remain.`);
+        this.logger.info(`All children of epic "${taskLabel(epic)}" are done or none remain.`);
         break;
       }
 
@@ -518,13 +555,13 @@ export class Orchestrator {
       const source = childCandidate.source;
 
       if (this.claudeCompletedTaskIds.has(task.id)) {
-        this.logger.warn(`Task "${task.name}" was already completed by Claude but is still on the board. Retrying status update.`);
+        this.logger.warn(`Task "${taskLabel(task)}" was already completed by Claude but is still on the board. Retrying status update.`);
         try {
           await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.done);
           this.claudeCompletedTaskIds.delete(task.id);
-          this.logger.success(`Board status update recovered for: "${task.name}"`);
+          this.logger.success(`Board status update recovered for: "${taskLabel(task)}"`);
         } catch (retryError) {
-          this.logger.error(`Board status update retry failed for "${task.name}": ${retryError.message}`);
+          this.logger.error(`Board status update retry failed for "${taskLabel(task)}": ${retryError.message}`);
           const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
           if (shouldHalt) {
             this.halted = true;
@@ -537,10 +574,10 @@ export class Orchestrator {
       if (source === 'not_started') {
         await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.inProgress);
         await this.runStore.markStarted(task);
-        this.logger.info(`Moved to In Progress: "${task.name}" (epic child)`);
+        this.logger.info(`Moved to In Progress: "${taskLabel(task)}"`);
       } else {
         await this.runStore.markStarted(task);
-        this.logger.info(`Resuming In Progress task: "${task.name}" (epic child)`);
+        this.logger.info(`Resuming In Progress Task: "${taskLabel(task)}"`);
       }
 
       const markdown = await this.boardClient.getTaskMarkdown(task.id);
@@ -548,15 +585,16 @@ export class Orchestrator {
         extraPrompt: this.config.claude.extraPrompt,
         forceTestCreation: this.config.claude.forceTestCreation,
         forceTestRun: this.config.claude.forceTestRun,
-        forceCommit: this.config.claude.forceCommit
+        forceCommit: this.config.claude.forceCommit,
+        claudeMdInjected: this.config.claude.injectClaudeMd
       });
       if (this.config.claude.logPrompt) {
-        this.logger.block(`Prompt sent to Claude Code for "${task.name}"`, prompt);
+        this.logger.block(`Prompt sent to Claude Code for "${taskLabel(task)}"`, prompt);
       }
 
       this.currentTaskId = task.id;
-      this.currentTaskName = task.name;
-      this.logger.info(`Claude is working on: "${task.name}" | model: ${task.model || 'default'}`);
+      this.currentTaskName = taskLabel(task);
+      this.logger.info(`Claude is working on: "${taskLabel(task)}" | model: ${task.model || 'default'}`);
 
       const { signal } = this.watchdog.start(task);
       const executionStartTime = Date.now();
@@ -577,10 +615,10 @@ export class Orchestrator {
         let executionElapsed = Date.now() - executionStartTime;
 
         if (normalize(execution.status) !== 'done') {
-          this.logger.info(`Claude finished: "${task.name}" (${formatDuration(executionElapsed)})`);
+          this.logger.info(`Claude finished: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`);
           this.logger.info(buildContractJson(execution));
           await this.runStore.markFailed(task, `Claude retornou status=${execution.status || 'desconhecido'}`);
-          this.logger.warn(`Task blocked by Claude: "${task.name}" (status: ${execution.status || 'unknown'})`);
+          this.logger.warn(`Task blocked by Claude: "${taskLabel(task)}" (status: ${execution.status || 'unknown'})`);
 
           const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
           if (shouldHalt) {
@@ -590,22 +628,22 @@ export class Orchestrator {
 
           if (this.config.state.autoResetFailedTask) {
             await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.notStarted);
-            this.logger.warn(`Returned to Not Started after block: "${task.name}"`);
+            this.logger.warn(`Returned to Not Started after block: "${taskLabel(task)}"`);
           }
 
           break;
         }
 
-        this.logger.info(`Claude finished: "${task.name}" (${formatDuration(executionElapsed)})`);
+        this.logger.info(`Claude finished: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`);
 
         const validation = validateExecution(this.config.claude.workdir, headBefore, execution);
         if (!validation.valid) {
-          this.logger.warn(`Hallucination detected for "${task.name}": ${validation.reason}`);
-          this.logger.warn(`Retrying task "${task.name}" with corrective prompt...`);
+          this.logger.warn(`Hallucination detected for "${taskLabel(task)}": ${validation.reason}`);
+          this.logger.warn(`Retrying task "${taskLabel(task)}" with corrective prompt...`);
 
           const retryPrompt = buildRetryPrompt(task, prompt);
           if (this.config.claude.logPrompt) {
-            this.logger.block(`Retry prompt for "${task.name}"`, retryPrompt);
+            this.logger.block(`Retry prompt for "${taskLabel(task)}"`, retryPrompt);
           }
 
           const retryHeadBefore = getGitHead(this.config.claude.workdir);
@@ -616,12 +654,12 @@ export class Orchestrator {
 
           this.watchdog.stop();
           executionElapsed = Date.now() - retryStartTime;
-          this.logger.info(`Claude retry finished: "${task.name}" (${formatDuration(executionElapsed)})`);
+          this.logger.info(`Claude retry finished: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`);
 
           if (normalize(execution.status) !== 'done') {
             this.logger.info(buildContractJson(execution));
             await this.runStore.markFailed(task, `Retry also returned status=${execution.status || 'unknown'}`);
-            this.logger.warn(`Task blocked on retry: "${task.name}" (status: ${execution.status || 'unknown'})`);
+            this.logger.warn(`Task blocked on retry: "${taskLabel(task)}" (status: ${execution.status || 'unknown'})`);
 
             const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
             if (shouldHalt) {
@@ -634,7 +672,7 @@ export class Orchestrator {
           if (!retryValidation.valid) {
             this.logger.info(buildContractJson(execution));
             await this.runStore.markFailed(task, 'Hallucination persisted after retry. No artifacts produced.');
-            this.logger.error(`Hallucination persisted after retry for "${task.name}". Giving up.`);
+            this.logger.error(`Hallucination persisted after retry for "${taskLabel(task)}". Giving up.`);
 
             const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
             if (shouldHalt) {
@@ -660,11 +698,11 @@ export class Orchestrator {
               const header = `## Opus Review Feedback (${new Date().toISOString()})\nStatus: ${finalExecution.status || 'blocked'}\n`;
               await this.boardClient.appendMarkdown(task.id, header + reviewNotes);
               await this.runStore.markFailed(task, `Opus review returned status=${finalExecution.status || 'blocked'}`);
-              this.logger.warn(`Opus review blocked task: "${task.name}" (status: ${finalExecution.status || 'blocked'})`);
+              this.logger.warn(`Opus review blocked task: "${taskLabel(task)}" (status: ${finalExecution.status || 'blocked'})`);
               break;
             }
 
-            this.logger.success(`Opus review approved: "${task.name}"`);
+            this.logger.success(`Opus review approved: "${taskLabel(task)}"`);
           } catch (reviewError) {
             const errorNote = `## Opus Review Error (${new Date().toISOString()})\nReview failed: ${reviewError.message}\n`;
             await this.boardClient.appendMarkdown(task.id, errorNote);
@@ -679,7 +717,7 @@ export class Orchestrator {
               break;
             }
 
-            this.logger.error(`Opus review failed for "${task.name}": ${reviewError.message}`);
+            this.logger.error(`Opus review failed for "${taskLabel(task)}": ${reviewError.message}`);
 
             const shouldHaltReview = this.watchdog.recordFailure(task.id, task.name);
             if (shouldHaltReview) {
@@ -691,6 +729,24 @@ export class Orchestrator {
         }
 
         await this.boardClient.updateCheckboxes(task.id, finalExecution.completedAcs);
+
+        // Verify all ACs are checked before moving to Done
+        const epicPostCheckMarkdown = await this.boardClient.getTaskMarkdown(task.id);
+        const epicRemainingUnchecked = (epicPostCheckMarkdown.match(/^\s*-\s*\[ \]\s+/gm) || []).length;
+
+        if (epicRemainingUnchecked > 0) {
+          this.logger.warn(
+            `Task "${taskLabel(task)}" has ${epicRemainingUnchecked} unchecked Acceptance Criteria. Keeping in In Progress.`
+          );
+          await this.runStore.markFailed(task, `${epicRemainingUnchecked} Acceptance Criteria still unchecked after execution.`);
+
+          const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
+          if (shouldHalt) {
+            this.halted = true;
+          }
+          break;
+        }
+
         await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.done);
         this.claudeCompletedTaskIds.delete(task.id);
         const completionNotes = buildTaskCompletionNotes(task, finalExecution);
@@ -698,11 +754,11 @@ export class Orchestrator {
         await this.runStore.markDone(task, finalExecution);
         processed += 1;
 
-        this.logger.success(`Moved to Done: "${task.name}" (epic child)`);
+        this.logger.success(`Moved to Done: "${taskLabel(task)}"`);
       } catch (error) {
         this.watchdog.stop();
         const executionElapsed = Date.now() - executionStartTime;
-        this.logger.info(`Claude finished: "${task.name}" (${formatDuration(executionElapsed)})`);
+        this.logger.info(`Claude finished: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`);
 
         await this.runStore.markFailed(task, error.message);
         const resetHint = extractResetHint(error.message);
@@ -715,7 +771,7 @@ export class Orchestrator {
           break;
         }
 
-        this.logger.error(`Failed to execute task "${task.name}": ${error.message}`);
+        this.logger.error(`Failed to execute task "${taskLabel(task)}": ${error.message}`);
 
         const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
         if (shouldHalt) {
@@ -725,7 +781,7 @@ export class Orchestrator {
 
         if (this.config.state.autoResetFailedTask) {
           await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.notStarted);
-          this.logger.warn(`Returned to Not Started after failure: "${task.name}"`);
+          this.logger.warn(`Returned to Not Started after failure: "${taskLabel(task)}"`);
         }
 
         break;
@@ -739,24 +795,32 @@ export class Orchestrator {
     this.observeStatuses(finalTasks);
     await this.closeCompletedEpics(finalTasks);
 
-    this.logger.success(`Epic reconciliation finished (epic: "${epic.name}", processed: ${processed}, reason: ${reason})`);
+    this.logger.success(`Epic reconciliation finished (epic: "${taskLabel(epic)}", processed: ${processed}, reason: ${reason})`);
+
+    // If the epic was completed and moved to Done, stop the automation process.
+    const postCloseTasks = await this.boardClient.listTasks();
+    const completedEpic = postCloseTasks.find(t => t.id === epic.id);
+    if (completedEpic && normalize(completedEpic.status) === normalize(this.config.board.statuses.done)) {
+      this.logger.success(`Epic "${taskLabel(epic)}" completed successfully. Stopping automation.`);
+      setTimeout(() => process.exit(0), 1500);
+    }
   }
 
   async reviewWithOpus(task, markdown, executionResult) {
-    this.logger.info(`Starting Opus review for: "${task.name}"`);
+    this.logger.info(`Starting Opus review for: "${taskLabel(task)}"`);
 
     const reviewPrompt = buildReviewPrompt(task, markdown, executionResult);
     if (this.config.claude.logPrompt) {
-      this.logger.block(`Opus review prompt for "${task.name}"`, reviewPrompt);
+      this.logger.block(`Opus review prompt for "${taskLabel(task)}"`, reviewPrompt);
     }
 
-    this.logger.info(`Opus is reviewing: "${task.name}" | model: ${OPUS_REVIEW_MODEL}`);
+    this.logger.info(`Opus is reviewing: "${taskLabel(task)}" | model: ${OPUS_REVIEW_MODEL}`);
 
     const reviewStartTime = Date.now();
     const reviewExecution = await runClaudeTask(task, reviewPrompt, this.config, { overrideModel: OPUS_REVIEW_MODEL });
     const reviewElapsed = Date.now() - reviewStartTime;
 
-    this.logger.info(`Opus review finished: "${task.name}" (${formatDuration(reviewElapsed)})`);
+    this.logger.info(`Opus review finished: "${taskLabel(task)}" (${formatDuration(reviewElapsed)})`);
     this.logger.info(buildContractJson(reviewExecution));
 
     return reviewExecution;
@@ -778,7 +842,7 @@ export class Orchestrator {
     }
 
     if (sorted.length > 0) {
-      this.logger.info(`Stamped ${sorted.length} children for epic "${epic.name}" (first: In Progress, rest: Not Started)`);
+      this.logger.info(`Stamped ${sorted.length} children for epic "${taskLabel(epic)}" (first: In Progress, rest: Not Started)`);
     }
   }
 
@@ -803,33 +867,33 @@ export class Orchestrator {
 
       if (this.config.claude.epicReviewEnabled) {
         this.currentTaskId = task.id;
-        this.currentTaskName = task.name;
+        this.currentTaskName = taskLabel(task);
 
         try {
-          this.logger.info(`Starting Epic review for: "${task.name}" (${epicResult.children.length} children)`);
+          this.logger.info(`Starting Epic review for: "${taskLabel(task)}" (${epicResult.children.length} children)`);
 
           const reviewPrompt = buildEpicReviewPrompt(task, epicResult.children, summary);
           if (this.config.claude.logPrompt) {
-            this.logger.block(`Epic review prompt for "${task.name}"`, reviewPrompt);
+            this.logger.block(`Epic review prompt for "${taskLabel(task)}"`, reviewPrompt);
           }
 
-          this.logger.info(`Opus is reviewing epic: "${task.name}" | model: ${OPUS_REVIEW_MODEL}`);
+          this.logger.info(`Opus is reviewing epic: "${taskLabel(task)}" | model: ${OPUS_REVIEW_MODEL}`);
 
           const epicReviewStartTime = Date.now();
           const reviewExecution = await runClaudeTask(task, reviewPrompt, this.config, { overrideModel: OPUS_REVIEW_MODEL });
           const epicReviewElapsed = Date.now() - epicReviewStartTime;
 
-          this.logger.info(`Opus epic review finished: "${task.name}" (${formatDuration(epicReviewElapsed)})`);
+          this.logger.info(`Opus epic review finished: "${taskLabel(task)}" (${formatDuration(epicReviewElapsed)})`);
 
           if (normalize(reviewExecution.status) !== 'done') {
             const reviewNotes = buildTaskCompletionNotes(task, reviewExecution);
             const header = `## Epic Review Feedback (${new Date().toISOString()})\nStatus: ${reviewExecution.status || 'blocked'}\n`;
             await this.boardClient.appendMarkdown(task.id, header + reviewNotes);
-            this.logger.warn(`Epic review blocked: "${task.name}" (status: ${reviewExecution.status || 'blocked'})`);
+            this.logger.warn(`Epic review blocked: "${taskLabel(task)}" (status: ${reviewExecution.status || 'blocked'})`);
             return;
           }
 
-          this.logger.success(`Epic review approved: "${task.name}"`);
+          this.logger.success(`Epic review approved: "${taskLabel(task)}"`);
 
           const reviewNotes = buildTaskCompletionNotes(task, reviewExecution);
           await this.boardClient.appendMarkdown(task.id, `## Epic Review Approved (${new Date().toISOString()})\n` + reviewNotes);
@@ -846,7 +910,7 @@ export class Orchestrator {
             return;
           }
 
-          this.logger.error(`Epic review failed for "${task.name}": ${reviewError.message}`);
+          this.logger.error(`Epic review failed for "${taskLabel(task)}": ${reviewError.message}`);
 
           const shouldHaltEpic = this.watchdog.recordFailure(task.id, task.name);
           if (shouldHaltEpic) {
@@ -865,7 +929,7 @@ export class Orchestrator {
       const summaryMarkdown = buildEpicSummary(task, summary);
       await this.boardClient.appendMarkdown(task.id, summaryMarkdown);
 
-      this.logger.success(`Epic moved to Done automatically: "${task.name}" (children: ${epicResult.children.length})`);
+      this.logger.success(`Epic moved to Done automatically: "${taskLabel(task)}" (children: ${epicResult.children.length})`);
     }
   }
 }

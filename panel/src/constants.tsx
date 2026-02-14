@@ -3,6 +3,7 @@
 import {
   Activity,
   AlertCircle,
+  Asterisk02,
   Beaker01,
   CheckCircle,
   Columns03,
@@ -147,8 +148,6 @@ export const SIDEBAR_NAV_ITEMS = [
 ] as const;
 
 export const CLAUDE_CHAT_MAX_CHARS = 12000;
-export const CLAUDE_CODE_AVATAR_URL = 'https://upload.wikimedia.org/wikipedia/commons/b/b0/Claude_AI_symbol.svg';
-
 export const LOG_LEVEL_META: Record<string, LogLevelMeta> = {
   info: {
     label: 'Info',
@@ -192,10 +191,10 @@ export const LOG_SOURCE_META: Record<string, LogSourceMeta> = {
   },
   chat_claude: {
     label: 'Claude Code',
-    icon: MessageChatCircle,
+    icon: Asterisk02,
     side: 'incoming',
-    avatarUrl: CLAUDE_CODE_AVATAR_URL,
     avatarInitials: 'CC',
+    avatarColor: '#d97757',
     directClaude: true
   },
   api: {
