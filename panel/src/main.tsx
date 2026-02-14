@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { App } from './App.jsx';
+import { App } from './app';
 import './theme.css';
 
 const THEME_MODE_STORAGE_KEY = 'pm-panel-theme-mode';

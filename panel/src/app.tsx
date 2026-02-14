@@ -5,21 +5,15 @@ import {
   Asterisk02,
   ArrowUpRight,
   Check,
-  CheckCircle,
   Clock,
   Copy01,
-  Database01,
   Eye,
   EyeOff,
   File03,
   Flash,
   Folder,
   HelpCircle,
-  InfoCircle,
-  Key01,
   LinkExternal01,
-  LockUnlocked01,
-  MessageChatCircle,
   Moon01,
   PlayCircle,
   Save01,
@@ -30,666 +24,61 @@ import {
   Sun,
   TerminalBrowser,
   Toggle01Right,
-  User01,
-  X,
-  XCircle
+  X
 } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { Input } from '@/components/base/input/input';
 import { Toggle } from '@/components/base/toggle/toggle';
 import { Tooltip, TooltipTrigger } from '@/components/base/tooltip/tooltip';
-import { Badge } from '@/components/base/badges/badges';
 import { Tabs } from '@/components/application/tabs/tabs';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
-
-function classNames(...parts) {
-  return parts.filter(Boolean).join(' ');
-}
-
-function Icon({ icon: IconComponent, className = 'size-4' }) {
-  if (!IconComponent) {
-    return null;
-  }
-
-  return <IconComponent aria-hidden="true" className={className} />;
-}
-
-function envToBool(value, fallback = true) {
-  if (value === undefined || value === null || value === '') {
-    return fallback;
-  }
-
-  return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase());
-}
-
-function boolToEnv(value) {
-  return value ? 'true' : 'false';
-}
-
-function normalizeText(value) {
-  return String(value ?? '').trim();
-}
-
-function normalizeDatabaseId(value) {
-  return normalizeText(value).replace(/-/g, '');
-}
-
-function buildInitialConfig() {
-  return {
-    NOTION_API_TOKEN: '',
-    NOTION_DATABASE_ID: '',
-    CLAUDE_CODE_OAUTH_TOKEN: '',
-    CLAUDE_WORKDIR: '.',
-    CLAUDE_FULL_ACCESS: true,
-    CLAUDE_STREAM_OUTPUT: true,
-    CLAUDE_LOG_PROMPT: true
-  };
-}
-
-const TEXT_FIELD_CONFIG = [
-  {
-    key: 'NOTION_API_TOKEN',
-    label: 'Notion API Token',
-    icon: Key01,
-    placeholder: 'ntn_... or secret_...',
-    description: 'Used to read and update tasks in your Notion database.',
-    help: {
-      title: 'How to get Notion API Token',
-      summary: 'Create a Notion integration and copy its internal token.',
-      steps: [
-        'Open Notion and go to Settings & members > Connections.',
-        'Create or open an internal integration.',
-        'Copy the integration token and paste it here.',
-        'Share your target database with this integration and grant edit access.'
-      ]
-    },
-    password: true
-  },
-  {
-    key: 'NOTION_DATABASE_ID',
-    label: 'Notion Database ID',
-    icon: Database01,
-    placeholder: '32-char database id or UUID with hyphens',
-    description: 'Identifies which Notion database is used as your Kanban board.',
-    help: {
-      title: 'How to find Notion Database ID',
-      summary: 'Use the URL of your Notion database page.',
-      steps: [
-        'Open the database in Notion.',
-        'Copy the URL from your browser.',
-        'Find the long ID segment in the URL (with or without hyphens).',
-        'Paste that value here.'
-      ]
-    }
-  },
-  {
-    key: 'CLAUDE_CODE_OAUTH_TOKEN',
-    label: 'Claude OAuth Token',
-    icon: User01,
-    placeholder: 'sk-ant-...',
-    description: 'Allows Claude to run in non-interactive mode.',
-    help: {
-      title: 'How to get Claude OAuth Token',
-      summary: 'Generate a token from Claude CLI on your machine.',
-      steps: ['Run: /opt/homebrew/bin/claude setup-token', 'Copy the generated token.', 'Paste the token in this field.']
-    },
-    password: true
-  },
-  {
-    key: 'CLAUDE_WORKDIR',
-    label: 'Claude Working Directory',
-    icon: Folder,
-    placeholder: '/Users/you/your-project',
-    description: 'Folder where Claude will run commands and modify files.',
-    help: {
-      title: 'How to choose Claude Working Directory',
-      summary: 'Pick the repository folder Claude should work on.',
-      steps: [
-        'Use Choose Folder to select a local directory.',
-        'Or type a path manually.',
-        'The automation will execute Claude commands in this folder.'
-      ]
-    },
-    folderPicker: true
-  }
-];
-
-const TOGGLE_CONFIG = [
-  {
-    key: 'CLAUDE_FULL_ACCESS',
-    label: 'Allow Claude Full Access',
-    icon: LockUnlocked01,
-    description: 'Lets Claude run task commands without extra permission prompts.'
-  },
-  {
-    key: 'CLAUDE_STREAM_OUTPUT',
-    label: 'Show Claude Live Output',
-    icon: Activity,
-    description: 'Streams Claude execution logs live in terminal and panel feed.'
-  },
-  {
-    key: 'CLAUDE_LOG_PROMPT',
-    label: 'Log Prompt Sent to Claude',
-    icon: File03,
-    description: 'Prints the full generated prompt before each task execution.'
-  }
-];
-
-const TEXT_FIELD_KEYS = TEXT_FIELD_CONFIG.map((field) => field.key);
-const TOGGLE_KEYS = TOGGLE_CONFIG.map((field) => field.key);
-const TEXT_FIELD_BY_KEY = Object.fromEntries(TEXT_FIELD_CONFIG.map((field) => [field.key, field]));
-const TOGGLE_BY_KEY = Object.fromEntries(TOGGLE_CONFIG.map((field) => [field.key, field]));
-
-const SETUP_SECTIONS = [
-  {
-    key: 'notion',
-    title: 'Notion',
-    description: 'Credentials and database settings.',
-    textKeys: ['NOTION_API_TOKEN', 'NOTION_DATABASE_ID'],
-    toggleKeys: []
-  },
-  {
-    key: 'claude',
-    title: 'Claude Runner',
-    description: 'Authentication, command, and workspace configuration.',
-    textKeys: ['CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_WORKDIR'],
-    toggleKeys: ['CLAUDE_FULL_ACCESS']
-  },
-  {
-    key: 'execution',
-    title: 'Execution & Logs',
-    description: 'Controls terminal streaming and prompt logging for task runs.',
-    textKeys: [],
-    toggleKeys: ['CLAUDE_STREAM_OUTPUT', 'CLAUDE_LOG_PROMPT']
-  }
-];
-
-const LABEL_BY_KEY = Object.fromEntries([...TEXT_FIELD_CONFIG, ...TOGGLE_CONFIG].map((field) => [field.key, field.label]));
-
-const NAV_TAB_KEYS = {
-  setup: 'setup',
-  operations: 'operations'
-};
-
-const CLAUDE_CHAT_MAX_CHARS = 12000;
-const CLAUDE_CODE_AVATAR_URL = 'https://upload.wikimedia.org/wikipedia/commons/b/b0/Claude_AI_symbol.svg';
-
-const LOG_LEVEL_META = {
-  info: {
-    label: 'Info',
-    icon: InfoCircle
-  },
-  success: {
-    label: 'Success',
-    icon: CheckCircle
-  },
-  warn: {
-    label: 'Alert',
-    icon: AlertCircle
-  },
-  error: {
-    label: 'Error',
-    icon: XCircle
-  }
-};
-
-const LOG_SOURCE_META = {
-  panel: {
-    label: 'Panel',
-    icon: Settings01,
-    side: 'outgoing',
-    avatarInitials: 'PN',
-    directClaude: false
-  },
-  claude: {
-    label: 'Claude',
-    icon: TerminalBrowser,
-    side: 'incoming',
-    avatarInitials: 'CL',
-    directClaude: false
-  },
-  chat_user: {
-    label: 'You',
-    icon: User01,
-    side: 'outgoing',
-    avatarInitials: 'YO',
-    directClaude: false
-  },
-  chat_claude: {
-    label: 'Claude Code',
-    icon: MessageChatCircle,
-    side: 'incoming',
-    avatarUrl: CLAUDE_CODE_AVATAR_URL,
-    avatarInitials: 'CC',
-    directClaude: true
-  },
-  api: {
-    label: 'Automation App',
-    icon: Server01,
-    side: 'incoming',
-    avatarInitials: 'AA',
-    directClaude: false
-  },
-};
-
-const TOAST_TONE_CLASSES = {
-  neutral: 'border-secondary bg-primary text-secondary',
-  success: 'border-transparent bg-utility-success-50 text-success-primary',
-  warning: 'border-transparent bg-utility-warning-50 text-warning-primary',
-  danger: 'border-transparent bg-utility-error-50 text-error-primary'
-};
-const PROCESS_ACTION_BUTTON_CLASS = 'w-24 justify-center';
-const FEED_TIMESTAMP_FORMATTER = new Intl.DateTimeFormat('pt-BR', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false
-});
-
-function normalizeLogLevel(level) {
-  const normalized = String(level || '').toLowerCase();
-  if (normalized === 'warning') return 'warn';
-  if (normalized === 'warn') return 'warn';
-  if (normalized === 'error' || normalized === 'danger') return 'error';
-  if (normalized === 'success' || normalized === 'ok') return 'success';
-  return 'info';
-}
-
-function logLevelMeta(level) {
-  const normalized = normalizeLogLevel(level);
-  return LOG_LEVEL_META[normalized] || LOG_LEVEL_META.info;
-}
-
-function normalizeSourceKey(source) {
-  return normalizeText(source)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-}
-
-function isClaudeTaskContractMessage(message) {
-  const text = normalizeText(message);
-  if (!text || !text.startsWith('{') || !text.endsWith('}')) {
-    return false;
-  }
-
-  try {
-    const parsed = JSON.parse(text);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return false;
-    }
-
-    const hasStatus = typeof parsed.status === 'string' && ['done', 'blocked'].includes(parsed.status.toLowerCase());
-    if (!hasStatus) {
-      return false;
-    }
-
-    return (
-      typeof parsed.summary === 'string' ||
-      typeof parsed.notes === 'string' ||
-      typeof parsed.tests === 'string' ||
-      Array.isArray(parsed.files)
-    );
-  } catch {
-    return false;
-  }
-}
-
-function resolveLogSourceKey(source, message) {
-  const normalized = normalizeSourceKey(source);
-  const aliasMap = {
-    chatclaude: 'chat_claude',
-    claudechat: 'chat_claude',
-    claude_code: 'chat_claude',
-    chatuser: 'chat_user',
-    user: 'chat_user'
-  };
-  const resolved = aliasMap[normalized] || normalized;
-
-  if (resolved === 'api' && isClaudeTaskContractMessage(message)) {
-    return 'chat_claude';
-  }
-
-  if (resolved === 'claude' && !/^manual claude chat failed:/i.test(normalizeText(message))) {
-    return 'chat_claude';
-  }
-
-  return resolved;
-}
-
-function logSourceMeta(entry) {
-  const sourceValue = typeof entry === 'string' ? entry : entry?.source;
-  const messageValue = typeof entry === 'string' ? '' : entry?.message;
-  const normalized = resolveLogSourceKey(sourceValue, messageValue);
-  if (!normalized) {
-    return { label: 'System', icon: InfoCircle, side: 'incoming', avatarInitials: 'SY', directClaude: false };
-  }
-
-  const fallbackLabel = normalized
-    .split('_')
-    .filter(Boolean)
-    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
-    .join(' ');
-
-  return LOG_SOURCE_META[normalized] || {
-    label: fallbackLabel || normalized,
-    icon: InfoCircle,
-    side: 'incoming',
-    avatarInitials: normalized.slice(0, 2).toUpperCase(),
-    directClaude: false
-  };
-}
-
-function SourceAvatar({ sourceMeta }) {
-  const [hasImageError, setHasImageError] = useState(false);
-  const useImage = Boolean(sourceMeta.avatarUrl) && !hasImageError;
-
-  return (
-    <span
-      className={classNames(
-        'inline-flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-secondary bg-primary text-[10px] font-semibold uppercase text-secondary shadow-xs',
-        sourceMeta.directClaude ? 'border-brand/40 bg-brand-secondary text-brand-primary' : ''
-      )}
-      aria-hidden="true"
-    >
-      {useImage ? (
-        <img
-          src={sourceMeta.avatarUrl}
-          alt=""
-          className="size-full object-cover"
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          onError={() => setHasImageError(true)}
-        />
-      ) : sourceMeta.icon ? (
-        <Icon icon={sourceMeta.icon} className="size-3.5" />
-      ) : (
-        sourceMeta.avatarInitials || '?'
-      )}
-    </span>
-  );
-}
-
-function logToneClasses(level, side = 'incoming', directClaude = false) {
-  if (level === 'success') {
-    return 'bg-utility-success-50 text-success-primary';
-  }
-  if (level === 'warn') {
-    return 'bg-utility-warning-50 text-warning-primary';
-  }
-  if (level === 'error') {
-    return 'bg-utility-error-50 text-error-primary';
-  }
-  if (directClaude) {
-    return 'bg-brand-secondary text-brand-primary';
-  }
-  if (side === 'outgoing') {
-    return 'bg-brand-secondary text-brand-primary';
-  }
-  return 'bg-primary text-secondary';
-}
-
-function formatIntervalLabel(ms) {
-  const value = Number(ms);
-  if (!Number.isFinite(value) || value <= 0) {
-    return 'a custom interval';
-  }
-
-  const totalSeconds = Math.max(1, Math.round(value / 1000));
-  if (totalSeconds % 3600 === 0) {
-    const hours = totalSeconds / 3600;
-    return `${hours} hour${hours === 1 ? '' : 's'}`;
-  }
-
-  if (totalSeconds % 60 === 0) {
-    const minutes = totalSeconds / 60;
-    return `${minutes} minute${minutes === 1 ? '' : 's'}`;
-  }
-
-  return `${totalSeconds} second${totalSeconds === 1 ? '' : 's'}`;
-}
-
-function formatReasonToken(reasonToken) {
-  const token = normalizeText(reasonToken).toLowerCase();
-  if (!token) {
-    return '';
-  }
-
-  if (token === 'poll_interval') {
-    return 'scheduled interval';
-  }
-
-  if (token === 'manual') {
-    return 'manual trigger';
-  }
-
-  if (token === 'startup') {
-    return 'startup trigger';
-  }
-
-  return token.replace(/_/g, ' ');
-}
-
-function formatReconciliationReason(reasonRaw) {
-  const raw = normalizeText(reasonRaw);
-  if (!raw) {
-    return 'manual trigger';
-  }
-
-  const labels = raw
-    .split(',')
-    .map((token) => formatReasonToken(token))
-    .filter(Boolean);
-
-  if (labels.length === 0) {
-    return 'manual trigger';
-  }
-
-  return labels.join(', ');
-}
-
-function formatLiveFeedMessage(entry) {
-  const rawMessage = String(entry?.message || '');
-  const trimmed = rawMessage.trim();
-  if (!trimmed) {
-    return rawMessage;
-  }
-
-  const periodicEnabledMatch = trimmed.match(/^Periodic reconciliation enabled \(QUEUE_POLL_INTERVAL_MS=(\d+)\)$/i);
-  if (periodicEnabledMatch) {
-    return `Automatic reconciliation is enabled every ${formatIntervalLabel(Number(periodicEnabledMatch[1]))}.`;
-  }
-
-  if (/^Periodic reconciliation disabled \(QUEUE_POLL_INTERVAL_MS=0\)$/i.test(trimmed)) {
-    return 'Automatic reconciliation is disabled.';
-  }
-
-  const startupDisabledMatch = trimmed.match(/^Startup reconciliation disabled \(QUEUE_RUN_ON_STARTUP=false\)$/i);
-  if (startupDisabledMatch) {
-    return 'Startup reconciliation is disabled.';
-  }
-
-  const reconciliationStartMatch = trimmed.match(/^Starting board reconciliation \(reason:\s*(.+)\)$/i);
-  if (reconciliationStartMatch) {
-    return `Starting board reconciliation (${formatReconciliationReason(reconciliationStartMatch[1])}).`;
-  }
-
-  const reconciliationEndMatch = trimmed.match(/^Reconciliation finished \(processed:\s*(\d+),\s*reason:\s*(.+)\)$/i);
-  if (reconciliationEndMatch) {
-    const processed = Number(reconciliationEndMatch[1]);
-    const reason = formatReconciliationReason(reconciliationEndMatch[2]);
-    return `Reconciliation finished. ${processed} task${processed === 1 ? '' : 's'} processed (${reason}).`;
-  }
-
-  return rawMessage;
-}
-
-function formatFeedTimestamp(value) {
-  const parsedDate = new Date(value || Date.now());
-  if (Number.isNaN(parsedDate.getTime())) {
-    return FEED_TIMESTAMP_FORMATTER.format(new Date());
-  }
-
-  return FEED_TIMESTAMP_FORMATTER.format(parsedDate);
-}
-
-function helpTooltipContent(helperText, help) {
-  if (!helperText && !help) {
-    return null;
-  }
-
-  if (!help) {
-    return helperText;
-  }
-
-  const steps = (help.steps || []).join(' ');
-  return `${help.title}. ${help.summary}${steps ? ` ${steps}` : ''}`;
-}
-
-function validateFieldValue(key, rawValue) {
-  const value = normalizeText(rawValue);
-
-  if (key === 'NOTION_API_TOKEN') {
-    if (!value) {
-      return { level: 'error', message: 'Required. This token is needed to call the Notion API.' };
-    }
-
-    if (value.length < 20) {
-      return { level: 'warning', message: 'Token looks too short. Please verify it.' };
-    }
-
-    if (!value.startsWith('ntn_') && !value.startsWith('secret_')) {
-      return { level: 'warning', message: 'Notion tokens usually start with ntn_ or secret_.' };
-    }
-
-    return { level: 'success', message: 'Token format looks valid.' };
-  }
-
-  if (key === 'NOTION_DATABASE_ID') {
-    if (!value) {
-      return { level: 'error', message: 'Required. This identifies your Notion database.' };
-    }
-
-    const compact = normalizeDatabaseId(value);
-    if (!/^[a-f0-9]{32}$/i.test(compact)) {
-      return {
-        level: 'error',
-        message: 'Use a 32-character database ID (hex), with or without hyphens.'
-      };
-    }
-
-    return { level: 'success', message: 'Database ID format looks valid.' };
-  }
-
-  if (key === 'CLAUDE_CODE_OAUTH_TOKEN') {
-    if (!value) {
-      return {
-        level: 'warning',
-        message: 'Recommended for non-interactive execution.'
-      };
-    }
-
-    if (value.length < 20) {
-      return { level: 'warning', message: 'Token looks too short. Please verify it.' };
-    }
-
-    if (!value.startsWith('sk-ant-')) {
-      return { level: 'warning', message: 'Claude tokens usually start with sk-ant-.' };
-    }
-
-    return { level: 'success', message: 'Token format looks valid.' };
-  }
-
-  if (key === 'CLAUDE_WORKDIR') {
-    if (!value) {
-      return { level: 'error', message: 'Required. Choose the folder Claude should use.' };
-    }
-
-    if (value.includes('\n')) {
-      return { level: 'error', message: 'Path cannot contain line breaks.' };
-    }
-
-    return { level: 'success', message: 'Working directory looks valid.' };
-  }
-
-  return { level: 'neutral', message: '' };
-}
-
-function isSameConfigValue(key, a, b) {
-  if (TOGGLE_KEYS.includes(key)) {
-    return Boolean(a) === Boolean(b);
-  }
-
-  return normalizeText(a) === normalizeText(b);
-}
-
-function parseConfigPayload(values = {}) {
-  const next = buildInitialConfig();
-
-  for (const key of TEXT_FIELD_KEYS) {
-    next[key] = values[key] || next[key] || '';
-  }
-
-  for (const key of TOGGLE_KEYS) {
-    next[key] = envToBool(values[key], next[key]);
-  }
-
-  return next;
-}
-
-function parseRuntimeSettingsPayload(payload = {}) {
-  const claude = payload.claude || {};
-
-  return {
-    streamOutput: Boolean(claude.streamOutput),
-    logPrompt: Boolean(claude.logPrompt)
-  };
-}
-
-function isSetupConfigurationComplete(values = {}) {
-  return !TEXT_FIELD_KEYS.some((key) => validateFieldValue(key, values[key]).level === 'error');
-}
-
-function buildNotionDatabaseUrl(databaseId) {
-  const compact = normalizeDatabaseId(databaseId);
-  if (!/^[a-f0-9]{32}$/i.test(compact)) {
-    return '';
-  }
-
-  return `https://www.notion.so/${compact}`;
-}
-
-function resolveApiBaseUrl() {
-  const configured = normalizeText(import.meta.env.VITE_PANEL_API_BASE_URL);
-  if (configured) {
-    return configured.replace(/\/$/, '');
-  }
-
-  return '';
-}
-
-function ConnectionDot({ pulse = false }) {
-  return (
-    <span className="relative inline-flex size-2">
-      {pulse ? <span className="absolute inline-flex size-full animate-ping rounded-full bg-current opacity-35" /> : null}
-      <span className="relative inline-flex size-2 rounded-full bg-current" />
-    </span>
-  );
-}
-
-function StatusBadge({ color = 'gray', icon, children, connectionState = null }) {
-  const isConnection = Boolean(connectionState);
-  const pulse = connectionState === 'active';
-
-  return (
-    <Badge color={color} type="pill-color" size="sm" className="inline-flex items-center gap-1">
-      {isConnection ? <ConnectionDot pulse={pulse} /> : icon ? <Icon icon={icon} className="size-3.5 stroke-[2.5] text-current" /> : null}
-      <span>{children}</span>
-    </Badge>
-  );
-}
+import { cx } from '@/utils/cx';
+
+// Constants
+import {
+  TEXT_FIELD_CONFIG,
+  TOGGLE_CONFIG,
+  TEXT_FIELD_KEYS,
+  TOGGLE_KEYS,
+  TEXT_FIELD_BY_KEY,
+  TOGGLE_BY_KEY,
+  SETUP_SECTIONS,
+  LABEL_BY_KEY,
+  NAV_TAB_KEYS,
+  CLAUDE_CHAT_MAX_CHARS,
+  PROCESS_ACTION_BUTTON_CLASS
+} from './constants';
+
+// Utilities
+import {
+  envToBool,
+  boolToEnv,
+  normalizeText,
+  buildInitialConfig,
+  parseConfigPayload,
+  parseRuntimeSettingsPayload,
+  isSameConfigValue,
+  isSetupConfigurationComplete,
+  validateFieldValue,
+  buildNotionDatabaseUrl,
+  resolveApiBaseUrl
+} from './utils/config-helpers';
+
+import {
+  normalizeLogLevel,
+  logLevelMeta,
+  logSourceMeta,
+  logToneClasses,
+  formatLiveFeedMessage,
+  formatFeedTimestamp,
+  helpTooltipContent
+} from './utils/log-helpers';
+
+// Components
+import { Icon } from './components/icon';
+import { StatusBadge } from './components/status-badge';
+import { SourceAvatar } from './components/source-avatar';
+import { ToastNotification } from './components/toast-notification';
 
 export function App({ mode = 'light', setMode = () => {} }) {
   const [config, setConfig] = useState(buildInitialConfig);
@@ -1125,7 +514,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
 
   return (
     <div
-      className={classNames(
+      className={cx(
         'min-h-screen transition-colors duration-300',
         isDark ? 'bg-linear-to-b from-gray-950 via-gray-900 to-gray-950' : 'bg-linear-to-b from-utility-brand-50 via-secondary to-primary'
       )}
@@ -1262,7 +651,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
                                     <Tooltip title={validationStatusLabel} description={validation.message || undefined} placement="top">
                                       <TooltipTrigger
                                         aria-label={`${field.label} ${validationStatusLabel.toLowerCase()}`}
-                                        className={classNames(
+                                        className={cx(
                                           'absolute right-3 top-1/2 -translate-y-1/2',
                                           validation.level === 'success'
                                             ? 'text-success-primary'
@@ -1344,7 +733,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
                     ) : null}
 
                     {section.toggleKeys.length > 0 ? (
-                      <div className={classNames('space-y-3', section.textKeys.length > 0 ? 'mt-3' : '')}>
+                      <div className={cx('space-y-3', section.textKeys.length > 0 ? 'mt-3' : '')}>
                         {section.toggleKeys.map((toggleKey) => {
                           const toggle = TOGGLE_BY_KEY[toggleKey];
                           if (!toggle) {
@@ -1379,7 +768,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
               </div>
 
               <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-secondary pt-4">
-                <p className={classNames('m-0 text-sm', saveDisabled ? 'text-warning-primary' : 'text-tertiary')}>
+                <p className={cx('m-0 text-sm', saveDisabled ? 'text-warning-primary' : 'text-tertiary')}>
                   {hasBlockingErrors
                     ? 'Fix blocking errors before saving.'
                     : !allFieldsValidated
@@ -1504,10 +893,10 @@ export function App({ mode = 'light', setMode = () => {} }) {
                     return (
                       <div
                         key={line.id || `${line.ts || timestamp}-${line.source || 'system'}-${line.message || ''}`}
-                        className={classNames('flex', alignment)}
+                        className={cx('flex', alignment)}
                       >
                         <div
-                          className={classNames(
+                          className={cx(
                             'flex w-full max-w-[min(95%,900px)] items-end gap-2',
                             isOutgoing ? 'justify-end' : 'justify-start'
                           )}
@@ -1515,7 +904,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
                           {!isOutgoing ? <SourceAvatar sourceMeta={sourceMeta} /> : null}
 
                           <div
-                            className={classNames(
+                            className={cx(
                               'max-w-[min(86%,760px)] rounded-2xl px-3.5 py-2.5 shadow-xs',
                               isOutgoing ? 'rounded-br-md' : 'rounded-bl-md',
                               logToneClasses(level, sourceMeta.side, sourceMeta.directClaude),
@@ -1523,7 +912,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
                             )}
                           >
                             <div className="mb-1 inline-flex items-center gap-2 text-[11px] font-medium">
-                              <span className={classNames(sourceMeta.directClaude ? 'text-brand-primary' : 'text-tertiary')}>
+                              <span className={cx(sourceMeta.directClaude ? 'text-brand-primary' : 'text-tertiary')}>
                                 {sourceMeta.label}
                               </span>
                               {sourceMeta.directClaude ? (
@@ -1710,26 +1099,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
         </Modal>
       </ModalOverlay>
 
-      {toast.open ? (
-        <div
-          role="status"
-          aria-live="polite"
-          className={classNames(
-            'fixed bottom-4 left-1/2 z-[2000] w-[min(92vw,440px)] -translate-x-1/2 rounded-xl border px-4 py-3 text-sm shadow-lg',
-            TOAST_TONE_CLASSES[toast.color] || TOAST_TONE_CLASSES.neutral
-          )}
-        >
-          <div className="inline-flex items-center gap-2">
-            <Icon
-              icon={
-                toast.color === 'success' ? CheckCircle : toast.color === 'danger' ? XCircle : toast.color === 'warning' ? AlertCircle : InfoCircle
-              }
-              className="size-4"
-            />
-            {toast.message}
-          </div>
-        </div>
-      ) : null}
+      <ToastNotification toast={toast} />
     </div>
   );
 }

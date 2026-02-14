@@ -1,0 +1,236 @@
+// panel/src/utils/log-helpers.ts
+
+import { InfoCircle } from '@untitledui/icons';
+import { LOG_LEVEL_META, LOG_SOURCE_META, FEED_TIMESTAMP_FORMATTER } from '../constants';
+import { normalizeText } from './config-helpers';
+import type { LogEntry, LogLevelMeta, LogSourceMeta, TextFieldConfig } from '../types';
+
+export function normalizeLogLevel(level: unknown): string {
+  const normalized = String(level || '').toLowerCase();
+  if (normalized === 'warning') return 'warn';
+  if (normalized === 'warn') return 'warn';
+  if (normalized === 'error' || normalized === 'danger') return 'error';
+  if (normalized === 'success' || normalized === 'ok') return 'success';
+  return 'info';
+}
+
+export function logLevelMeta(level: unknown): LogLevelMeta {
+  const normalized = normalizeLogLevel(level);
+  return LOG_LEVEL_META[normalized] || LOG_LEVEL_META.info;
+}
+
+export function normalizeSourceKey(source: unknown): string {
+  return normalizeText(source)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+export function isClaudeTaskContractMessage(message: unknown): boolean {
+  const text = normalizeText(message);
+  if (!text || !text.startsWith('{') || !text.endsWith('}')) {
+    return false;
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return false;
+    }
+
+    const hasStatus = typeof parsed.status === 'string' && ['done', 'blocked'].includes(parsed.status.toLowerCase());
+    if (!hasStatus) {
+      return false;
+    }
+
+    return (
+      typeof parsed.summary === 'string' ||
+      typeof parsed.notes === 'string' ||
+      typeof parsed.tests === 'string' ||
+      Array.isArray(parsed.files)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function resolveLogSourceKey(source: unknown, message: unknown): string {
+  const normalized = normalizeSourceKey(source);
+  const aliasMap: Record<string, string> = {
+    chatclaude: 'chat_claude',
+    claudechat: 'chat_claude',
+    claude_code: 'chat_claude',
+    chatuser: 'chat_user',
+    user: 'chat_user'
+  };
+  const resolved = aliasMap[normalized] || normalized;
+
+  if (resolved === 'api' && isClaudeTaskContractMessage(message)) {
+    return 'chat_claude';
+  }
+
+  if (resolved === 'claude' && !/^manual claude chat failed:/i.test(normalizeText(message))) {
+    return 'chat_claude';
+  }
+
+  return resolved;
+}
+
+export function logSourceMeta(entry: LogEntry | string): LogSourceMeta {
+  const sourceValue = typeof entry === 'string' ? entry : entry?.source;
+  const messageValue = typeof entry === 'string' ? '' : entry?.message;
+  const normalized = resolveLogSourceKey(sourceValue, messageValue);
+  if (!normalized) {
+    return { label: 'System', icon: InfoCircle, side: 'incoming', avatarInitials: 'SY', directClaude: false };
+  }
+
+  const fallbackLabel = normalized
+    .split('_')
+    .filter(Boolean)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(' ');
+
+  return LOG_SOURCE_META[normalized] || {
+    label: fallbackLabel || normalized,
+    icon: InfoCircle,
+    side: 'incoming',
+    avatarInitials: normalized.slice(0, 2).toUpperCase(),
+    directClaude: false
+  };
+}
+
+export function logToneClasses(level: string, side = 'incoming', directClaude = false): string {
+  if (level === 'success') {
+    return 'bg-utility-success-50 text-success-primary';
+  }
+  if (level === 'warn') {
+    return 'bg-utility-warning-50 text-warning-primary';
+  }
+  if (level === 'error') {
+    return 'bg-utility-error-50 text-error-primary';
+  }
+  if (directClaude) {
+    return 'bg-brand-secondary text-brand-primary';
+  }
+  if (side === 'outgoing') {
+    return 'bg-brand-secondary text-brand-primary';
+  }
+  return 'bg-primary text-secondary';
+}
+
+export function formatIntervalLabel(ms: number): string {
+  const value = Number(ms);
+  if (!Number.isFinite(value) || value <= 0) {
+    return 'a custom interval';
+  }
+
+  const totalSeconds = Math.max(1, Math.round(value / 1000));
+  if (totalSeconds % 3600 === 0) {
+    const hours = totalSeconds / 3600;
+    return `${hours} hour${hours === 1 ? '' : 's'}`;
+  }
+
+  if (totalSeconds % 60 === 0) {
+    const minutes = totalSeconds / 60;
+    return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+  }
+
+  return `${totalSeconds} second${totalSeconds === 1 ? '' : 's'}`;
+}
+
+export function formatReasonToken(reasonToken: string): string {
+  const token = normalizeText(reasonToken).toLowerCase();
+  if (!token) {
+    return '';
+  }
+
+  if (token === 'poll_interval') {
+    return 'scheduled interval';
+  }
+
+  if (token === 'manual') {
+    return 'manual trigger';
+  }
+
+  if (token === 'startup') {
+    return 'startup trigger';
+  }
+
+  return token.replace(/_/g, ' ');
+}
+
+export function formatReconciliationReason(reasonRaw: string): string {
+  const raw = normalizeText(reasonRaw);
+  if (!raw) {
+    return 'manual trigger';
+  }
+
+  const labels = raw
+    .split(',')
+    .map((token) => formatReasonToken(token))
+    .filter(Boolean);
+
+  if (labels.length === 0) {
+    return 'manual trigger';
+  }
+
+  return labels.join(', ');
+}
+
+export function formatLiveFeedMessage(entry: LogEntry): string {
+  const rawMessage = String(entry?.message || '');
+  const trimmed = rawMessage.trim();
+  if (!trimmed) {
+    return rawMessage;
+  }
+
+  const periodicEnabledMatch = trimmed.match(/^Periodic reconciliation enabled \(QUEUE_POLL_INTERVAL_MS=(\d+)\)$/i);
+  if (periodicEnabledMatch) {
+    return `Automatic reconciliation is enabled every ${formatIntervalLabel(Number(periodicEnabledMatch[1]))}.`;
+  }
+
+  if (/^Periodic reconciliation disabled \(QUEUE_POLL_INTERVAL_MS=0\)$/i.test(trimmed)) {
+    return 'Automatic reconciliation is disabled.';
+  }
+
+  const startupDisabledMatch = trimmed.match(/^Startup reconciliation disabled \(QUEUE_RUN_ON_STARTUP=false\)$/i);
+  if (startupDisabledMatch) {
+    return 'Startup reconciliation is disabled.';
+  }
+
+  const reconciliationStartMatch = trimmed.match(/^Starting board reconciliation \(reason:\s*(.+)\)$/i);
+  if (reconciliationStartMatch) {
+    return `Starting board reconciliation (${formatReconciliationReason(reconciliationStartMatch[1])}).`;
+  }
+
+  const reconciliationEndMatch = trimmed.match(/^Reconciliation finished \(processed:\s*(\d+),\s*reason:\s*(.+)\)$/i);
+  if (reconciliationEndMatch) {
+    const processed = Number(reconciliationEndMatch[1]);
+    const reason = formatReconciliationReason(reconciliationEndMatch[2]);
+    return `Reconciliation finished. ${processed} task${processed === 1 ? '' : 's'} processed (${reason}).`;
+  }
+
+  return rawMessage;
+}
+
+export function formatFeedTimestamp(value: unknown): string {
+  const parsedDate = new Date(value as string || Date.now());
+  if (Number.isNaN(parsedDate.getTime())) {
+    return FEED_TIMESTAMP_FORMATTER.format(new Date());
+  }
+
+  return FEED_TIMESTAMP_FORMATTER.format(parsedDate);
+}
+
+export function helpTooltipContent(helperText: string | undefined, help: TextFieldConfig['help']): string | null {
+  if (!helperText && !help) {
+    return null;
+  }
+
+  if (!help) {
+    return helperText || null;
+  }
+
+  const steps = (help.steps || []).join(' ');
+  return `${help.title}. ${help.summary}${steps ? ` ${steps}` : ''}`;
+}
