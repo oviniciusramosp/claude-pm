@@ -19,7 +19,6 @@ import {
   isSameConfigValue,
   isSetupConfigurationComplete,
   validateFieldValue,
-  buildNotionDatabaseUrl,
   resolveApiBaseUrl
 } from './utils/config-helpers';
 
@@ -59,8 +58,6 @@ export function App({ mode = 'light', setMode = () => {} }) {
   const apiBaseUrl = useMemo(resolveApiBaseUrl, []);
   const currentMode = mode || 'light';
   const isDark = currentMode === 'dark';
-  const notionDatabaseUrl = useMemo(() => buildNotionDatabaseUrl(config.NOTION_DATABASE_ID), [config.NOTION_DATABASE_ID]);
-
   const validationMap = useMemo(() => {
     const map = {};
     for (const field of TEXT_FIELD_CONFIG) {
@@ -81,12 +78,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
 
   const apiRunning = status?.api?.status === 'running';
 
-  const notionTokenPresent = Boolean(savedConfig.NOTION_API_TOKEN?.trim());
-  const disabledTabs = useMemo(() => {
-    const disabled = new Set<string>();
-    if (!notionTokenPresent) disabled.add(NAV_TAB_KEYS.board);
-    return disabled;
-  }, [notionTokenPresent]);
+  const disabledTabs = useMemo(() => new Set<string>(), []);
 
   useEffect(() => {
     if (apiRunning) {
@@ -447,34 +439,6 @@ export function App({ mode = 'light', setMode = () => {} }) {
     [apiRunning, callApi, config, refreshStatus, showToast]
   );
 
-  const onSaveDatabaseId = useCallback(
-    async (databaseId: string) => {
-      setBusy((prev) => ({ ...prev, saveBoardDbId: true }));
-      try {
-        const updates = { NOTION_DATABASE_ID: databaseId };
-        await callApi('/api/config', {
-          method: 'POST',
-          body: JSON.stringify(updates)
-        });
-
-        setConfig((prev) => ({ ...prev, NOTION_DATABASE_ID: databaseId }));
-        setSavedConfig((prev) => ({ ...prev, NOTION_DATABASE_ID: databaseId }));
-
-        if (apiRunning) {
-          await callApi('/api/process/api/restart', { method: 'POST', body: '{}' });
-          showToast('Database ID saved and app restarted.', 'success');
-        } else {
-          showToast('Database ID saved.', 'success');
-        }
-      } catch (error) {
-        showToast(`Failed to save Database ID: ${error.message}`, 'danger');
-      } finally {
-        setBusy((prev) => ({ ...prev, saveBoardDbId: false }));
-      }
-    },
-    [apiRunning, callApi, showToast]
-  );
-
   const onSaveClick = useCallback(async () => {
     if (hasBlockingErrors) {
       showToast('Please fix required fields before saving.', 'danger');
@@ -596,7 +560,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
         </div>
 
         <div className={cx(
-          'mx-auto w-full flex-1 px-4 py-6 sm:px-6 lg:px-8',
+          'mx-auto flex w-full min-h-0 flex-1 flex-col px-4 py-6 sm:px-6 lg:px-8',
           activeTab === NAV_TAB_KEYS.board ? 'max-w-[1600px]' : 'max-w-[1200px]'
         )}>
           {activeTab === NAV_TAB_KEYS.setup ? (
@@ -606,7 +570,6 @@ export function App({ mode = 'light', setMode = () => {} }) {
               validationMap={validationMap}
               revealedFields={revealedFields}
               toggleFieldVisibility={toggleFieldVisibility}
-              notionDatabaseUrl={notionDatabaseUrl}
               busy={busy}
               pickClaudeWorkdir={pickClaudeWorkdir}
               saveDisabled={saveDisabled}
@@ -620,10 +583,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
               apiBaseUrl={apiBaseUrl}
               showToast={showToast}
               refreshTrigger={boardRefreshTrigger}
-              savedConfig={savedConfig}
-              onSaveDatabaseId={onSaveDatabaseId}
               onShowErrorDetail={(title, message) => setErrorModal({ open: true, title, message })}
-              busy={busy}
             />
           ) : (
             <FeedTab

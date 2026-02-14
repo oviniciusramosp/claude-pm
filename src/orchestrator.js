@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { runClaudeTask } from './claudeRunner.js';
 import { buildEpicReviewPrompt, buildEpicSummary, buildRetryPrompt, buildReviewPrompt, buildTaskCompletionNotes, buildTaskPrompt, formatDuration } from './promptBuilder.js';
-import { allEpicChildrenAreDone, isEpicTask, pickNextEpic, pickNextEpicChild, pickNextTask } from './selectTask.js';
+import { allEpicChildrenAreDone, isEpicTask, pickNextEpic, pickNextEpicChild, pickNextTask, sortCandidates } from './selectTask.js';
 import { Watchdog } from './watchdog.js';
 
 function normalize(value) {
@@ -464,6 +464,8 @@ export class Orchestrator {
     if (epicCandidate.source === 'not_started') {
       await this.boardClient.updateTaskStatus(epic.id, this.config.board.statuses.inProgress);
       this.logger.info(`Epic moved to In Progress: "${epic.name}"`);
+
+      await this.stampEpicChildrenStatuses(epic, tasks);
     } else {
       this.logger.info(`Resuming In Progress epic: "${epic.name}"`);
     }
@@ -715,6 +717,26 @@ export class Orchestrator {
     this.logger.info(buildContractJson(reviewExecution));
 
     return reviewExecution;
+  }
+
+  async stampEpicChildrenStatuses(epic, previousTasks) {
+    const freshTasks = await this.boardClient.listTasks();
+    const children = freshTasks.filter(
+      (t) => t.parentId === epic.id && !isEpicTask(t, freshTasks, this.config)
+    );
+
+    const sorted = sortCandidates(children, this.config.queue.order);
+
+    for (let i = 0; i < sorted.length; i++) {
+      const childStatus = i === 0
+        ? this.config.board.statuses.inProgress
+        : this.config.board.statuses.notStarted;
+      await this.boardClient.updateTaskStatus(sorted[i].id, childStatus);
+    }
+
+    if (sorted.length > 0) {
+      this.logger.info(`Stamped ${sorted.length} children for epic "${epic.name}" (first: In Progress, rest: Not Started)`);
+    }
   }
 
   async closeCompletedEpics(tasks) {

@@ -19,7 +19,7 @@ function parsePriority(priority) {
   return Number(match[1]);
 }
 
-function sortCandidates(tasks, order) {
+export function sortCandidates(tasks, order) {
   const copied = [...tasks];
 
   copied.sort((a, b) => {
@@ -40,7 +40,7 @@ function sortCandidates(tasks, order) {
 }
 
 export function isEpicTask(task, tasks, config) {
-  const epicType = normalize(config.notion.typeValues.epic);
+  const epicType = normalize(config.board.typeValues.epic);
   if (normalize(task.type) === epicType) {
     return true;
   }
@@ -50,8 +50,8 @@ export function isEpicTask(task, tasks, config) {
 }
 
 export function pickNextTask(tasks, config) {
-  const inProgressStatus = normalize(config.notion.statuses.inProgress);
-  const notStartedStatus = normalize(config.notion.statuses.notStarted);
+  const inProgressStatus = normalize(config.board.statuses.inProgress);
+  const notStartedStatus = normalize(config.board.statuses.notStarted);
 
   const workItems = tasks.filter((task) => !isEpicTask(task, tasks, config));
   const inProgress = sortCandidates(
@@ -82,8 +82,8 @@ export function pickNextTask(tasks, config) {
 }
 
 export function pickNextEpic(tasks, config) {
-  const inProgressStatus = normalize(config.notion.statuses.inProgress);
-  const notStartedStatus = normalize(config.notion.statuses.notStarted);
+  const inProgressStatus = normalize(config.board.statuses.inProgress);
+  const notStartedStatus = normalize(config.board.statuses.notStarted);
 
   const epics = tasks.filter((task) => isEpicTask(task, tasks, config));
 
@@ -109,8 +109,8 @@ export function pickNextEpic(tasks, config) {
 }
 
 export function pickNextEpicChild(tasks, config, epicId) {
-  const inProgressStatus = normalize(config.notion.statuses.inProgress);
-  const notStartedStatus = normalize(config.notion.statuses.notStarted);
+  const inProgressStatus = normalize(config.board.statuses.inProgress);
+  const notStartedStatus = normalize(config.board.statuses.notStarted);
 
   const children = tasks.filter(
     (task) => !isEpicTask(task, tasks, config) && task.parentId === epicId
@@ -138,7 +138,7 @@ export function pickNextEpicChild(tasks, config, epicId) {
 }
 
 export function allEpicChildrenAreDone(epic, tasks, config) {
-  const doneStatus = normalize(config.notion.statuses.done);
+  const doneStatus = normalize(config.board.statuses.done);
 
   const children = tasks.filter(
     (task) => !isEpicTask(task, tasks, config) && task.parentId && task.parentId === epic.id

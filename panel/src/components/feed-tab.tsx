@@ -11,11 +11,13 @@ import {
   resolveLogSourceKey,
   logToneClasses,
   formatLiveFeedMessage,
-  formatFeedTimestamp
+  formatFeedTimestamp,
+  parseClaudeTaskContract,
+  formatClaudeTaskContract
 } from '../utils/log-helpers';
 import { Icon } from './icon';
 import { SourceAvatar } from './source-avatar';
-import type { LogEntry } from '../types';
+import type { LogEntry, TaskContractData } from '../types';
 
 function ExpandablePrompt({
   title,
@@ -65,6 +67,87 @@ function ExpandablePrompt({
   );
 }
 
+function ExpandableTaskResult({
+  contract,
+  onCopy
+}: {
+  contract: TaskContractData;
+  onCopy: (text: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const statusLabel = contract.status === 'done' ? 'Task completed' : 'Task blocked';
+  const badgeParts: string[] = [];
+  if (contract.files.length > 0) {
+    badgeParts.push(`${contract.files.length} file${contract.files.length === 1 ? '' : 's'}`);
+  }
+  if (contract.tests) {
+    badgeParts.push('tests');
+  }
+  const badge = badgeParts.length > 0 ? ` \u2014 ${badgeParts.join(', ')}` : '';
+
+  const copyText = formatClaudeTaskContract(JSON.stringify({
+    status: contract.status,
+    summary: contract.summary,
+    notes: contract.notes,
+    files: contract.files,
+    tests: contract.tests
+  })) || '';
+
+  return (
+    <div className="space-y-1.5">
+      <button
+        type="button"
+        className="m-0 flex w-full cursor-pointer items-center gap-1.5 border-none bg-transparent p-0 text-left text-sm font-medium leading-5 text-current hover:opacity-80"
+        onClick={() => setExpanded((prev) => !prev)}
+        aria-expanded={expanded}
+      >
+        <Icon icon={expanded ? ChevronDown : ChevronRight} className="size-3.5 shrink-0" />
+        <span>{statusLabel}{badge}</span>
+        {!expanded ? (
+          <span className="ml-1 text-[11px] font-normal text-tertiary">
+            (click to expand)
+          </span>
+        ) : null}
+      </button>
+
+      {expanded ? (
+        <div className="relative">
+          <div className="max-h-[400px] space-y-2 overflow-auto rounded-lg bg-primary/50 p-3 text-xs leading-relaxed text-current">
+            {contract.summary ? (
+              <p className="m-0">{contract.summary}</p>
+            ) : null}
+            {contract.notes ? (
+              <p className="m-0 opacity-75">Notes: {contract.notes}</p>
+            ) : null}
+            {contract.files.length > 0 ? (
+              <div>
+                <p className="m-0 font-medium">Files ({contract.files.length}):</p>
+                <ul className="m-0 list-none pl-2">
+                  {contract.files.map((file, i) => (
+                    <li key={i} className="opacity-75">{file}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {contract.tests ? (
+              <p className="m-0 opacity-75">Tests: {contract.tests}</p>
+            ) : null}
+          </div>
+          <Button
+            size="sm"
+            color="tertiary"
+            className="absolute right-1.5 top-1.5 h-6 w-6 shrink-0 [&_svg]:!size-3"
+            aria-label="Copy result"
+            iconLeading={Copy01}
+            onPress={() => onCopy(copyText)}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function FeedTab({
   logs,
   logFeedRef,
@@ -83,7 +166,7 @@ export function FeedTab({
   busy: Record<string, any>;
 }) {
   return (
-    <section className="flex h-full flex-col gap-4 rounded-2xl border border-secondary bg-primary p-4 shadow-sm">
+    <section className="flex min-h-0 flex-1 flex-col gap-4 rounded-2xl border border-secondary bg-primary p-4 shadow-sm">
       <div className="space-y-1">
         <h2 className="m-0 inline-flex items-center gap-2 text-xl font-semibold text-primary">
           <Icon icon={TerminalBrowser} className="size-5" />
@@ -94,13 +177,14 @@ export function FeedTab({
 
       <div
         ref={logFeedRef}
-        className="min-h-[420px] flex-1 space-y-2 overflow-auto rounded-2xl border border-secondary bg-secondary p-3"
+        className="min-h-0 flex-1 space-y-2 overflow-auto rounded-2xl border border-secondary bg-secondary p-3"
       >
         {logs.map((line, index) => {
           const timestamp = formatFeedTimestamp(line.ts);
           const level = normalizeLogLevel(line.level);
           const levelMeta = logLevelMeta(level);
           const sourceMeta = logSourceMeta(line);
+          const taskContract = parseClaudeTaskContract(line.message);
           const displayMessage = formatLiveFeedMessage(line);
           const isOutgoing = sourceMeta.side === 'outgoing';
           const alignment = isOutgoing ? 'justify-end' : 'justify-start';
@@ -139,6 +223,11 @@ export function FeedTab({
                     <ExpandablePrompt
                       title={line.promptTitle || 'Prompt sent to Claude Code'}
                       content={displayMessage}
+                      onCopy={copyLiveFeedMessage}
+                    />
+                  ) : taskContract ? (
+                    <ExpandableTaskResult
+                      contract={taskContract}
                       onCopy={copyLiveFeedMessage}
                     />
                   ) : (
