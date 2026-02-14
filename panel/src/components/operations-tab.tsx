@@ -10,9 +10,9 @@ import {
   Send01,
   Server01,
   Settings01,
+  Settings04,
   StopCircle,
-  TerminalBrowser,
-  Toggle01Right
+  TerminalBrowser
 } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { Input } from '@/components/base/input/input';
@@ -120,7 +120,7 @@ export function OperationsTab({
       <section className="space-y-4 rounded-2xl border border-secondary bg-primary p-4 shadow-sm">
         <div className="space-y-1">
           <h2 className="m-0 inline-flex items-center gap-2 text-xl font-semibold text-primary">
-            <Icon icon={Toggle01Right} className="size-5" />
+            <Icon icon={Settings04} className="size-5" />
             Process Controls
           </h2>
           <p className="m-0 text-sm text-tertiary">Start/stop the local services required for automation.</p>
