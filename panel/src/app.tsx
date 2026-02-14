@@ -39,7 +39,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
   const [status, setStatus] = useState(null);
   const [logs, setLogs] = useState([]);
   const [runtimeSettings, setRuntimeSettings] = useState({ streamOutput: false, logPrompt: true });
-  const [toast, setToast] = useState({ open: false, message: '', color: 'success' });
+  const [toasts, setToasts] = useState([]);
   const [busy, setBusy] = useState({});
   const [saveConfirm, setSaveConfirm] = useState({ open: false, changedKeys: [] });
   const [revealedFields, setRevealedFields] = useState({});
@@ -85,21 +85,14 @@ export function App({ mode = 'light', setMode = () => {} }) {
     setMode(isDark ? 'light' : 'dark');
   }, [isDark, setMode]);
 
-  const showToast = useCallback((message, color = 'success') => {
-    setToast({ open: true, message, color });
+  const showToast = useCallback((message: string, color: 'success' | 'warning' | 'danger' | 'neutral' = 'success') => {
+    const id = `toast-${Date.now()}-${Math.random()}`;
+    setToasts((prev) => [...prev, { id, message, color }]);
   }, []);
 
-  useEffect(() => {
-    if (!toast.open) {
-      return undefined;
-    }
-
-    const timeout = setTimeout(() => {
-      setToast((prev) => ({ ...prev, open: false }));
-    }, 2600);
-
-    return () => clearTimeout(timeout);
-  }, [toast.open]);
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   const appendLog = useCallback((entry) => {
     setLogs((prev) => {
@@ -586,7 +579,10 @@ export function App({ mode = 'light', setMode = () => {} }) {
         errorMessage={errorModal.message}
       />
 
-      <ToastNotification toast={toast} />
+      <ToastNotification
+        toasts={toasts}
+        onDismiss={dismissToast}
+      />
     </div>
   );
 }

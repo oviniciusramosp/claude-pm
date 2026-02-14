@@ -45,11 +45,13 @@ export interface LogEntry {
   promptTitle?: string;
 }
 
-export interface ToastState {
-  open: boolean;
+export interface Toast {
+  id: string;
   message: string;
   color: 'success' | 'warning' | 'danger' | 'neutral';
 }
+
+export type ToastState = Toast[];
 
 export interface RuntimeSettings {
   streamOutput: boolean;
