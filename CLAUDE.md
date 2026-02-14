@@ -96,6 +96,7 @@ From the Operations tab:
 - `CLAUDE_STREAM_OUTPUT` - Stream Claude output to logs (default `false`).
 - `CLAUDE_LOG_PROMPT` - Log prompts sent to Claude (default `true`).
 - `OPUS_REVIEW_ENABLED` - When true, tasks completed by non-Opus models are reviewed by Opus before moving to Done (default `false`).
+- `EPIC_REVIEW_ENABLED` - When true, completed Epics are reviewed by Opus (runs tests + full review) before moving to Done (default `false`).
 - `CLAUDE_TIMEOUT_MS` - Claude execution timeout (default `4500000` = 75min). Should be higher than `WATCHDOG_INTERVAL_MS * WATCHDOG_MAX_WARNINGS`.
 - `CLAUDE_EXTRA_PROMPT` - Additional prompt text appended to every task.
 - `PORT` - Automation API port (default `3000`).

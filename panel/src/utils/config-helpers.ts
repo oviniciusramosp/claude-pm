@@ -32,7 +32,8 @@ export function buildInitialConfig(): Record<string, string | boolean> {
     CLAUDE_FULL_ACCESS: true,
     CLAUDE_STREAM_OUTPUT: true,
     CLAUDE_LOG_PROMPT: true,
-    OPUS_REVIEW_ENABLED: false
+    OPUS_REVIEW_ENABLED: false,
+    EPIC_REVIEW_ENABLED: false
   };
 }
 

@@ -1053,6 +1053,7 @@ app.get('/api/config', async (_req, res) => {
       CLAUDE_STREAM_OUTPUT: env.CLAUDE_STREAM_OUTPUT || 'true',
       CLAUDE_LOG_PROMPT: env.CLAUDE_LOG_PROMPT || 'true',
       OPUS_REVIEW_ENABLED: env.OPUS_REVIEW_ENABLED || 'false',
+      EPIC_REVIEW_ENABLED: env.EPIC_REVIEW_ENABLED || 'false',
       MANUAL_RUN_TOKEN: env.MANUAL_RUN_TOKEN || ''
     }
   });

@@ -129,6 +129,52 @@ export function buildReviewPrompt(task, markdown, executionResult) {
   return lines.join('\n');
 }
 
+export function buildEpicReviewPrompt(epicTask, children, epicSummary) {
+  const childList = children.map((child) => {
+    const row = epicSummary.rows.find((r) => r.id === child.id);
+    const duration = row?.durationMs ? formatDuration(row.durationMs) : '(sem dados)';
+    return `- ${child.name} (duracao: ${duration})`;
+  }).join('\n');
+
+  const lines = [
+    'Voce esta revisando um Epic completo. Todas as sub-tarefas foram concluidas por outros modelos.',
+    'Seu papel e garantir que a implementacao do Epic como um todo esta correta e funcional.',
+    '',
+    'Contexto do Epic:',
+    `- Nome: ${normalizeText(epicTask.name)}`,
+    `- ID no Notion: ${normalizeText(epicTask.id)}`,
+    `- Tipo: ${normalizeText(epicTask.type)}`,
+    `- Prioridade: ${normalizeText(epicTask.priority)}`,
+    `- Duracao total acumulada: ${formatDuration(epicSummary.totalDurationMs)}`,
+    '',
+    '## Sub-tarefas concluidas',
+    childList,
+    '',
+    'Instrucoes de revisao:',
+    '1. Rode todos os testes automatizados do projeto (npm test, npm run test, ou o comando de teste disponivel).',
+    '2. Revise a implementacao completa do Epic, verificando consistencia entre as sub-tarefas.',
+    '3. Verifique qualidade de codigo, aderencia as convencoes do projeto e ausencia de regressoes.',
+    '4. Se encontrar problemas (testes falhando, bugs, inconsistencias), corrija-os diretamente.',
+    '5. Crie um commit com suas correcoes se houver alteracoes.',
+    '',
+    'Criterios de aprovacao:',
+    '- Todos os testes automatizados passando.',
+    '- Implementacao consistente e sem regressoes.',
+    '- Codigo seguindo as convencoes do projeto.',
+    '',
+    'Requisitos de resposta:',
+    '- Responda APENAS com um JSON valido em uma unica linha.',
+    '- Estrutura obrigatoria:',
+    '{"status":"done|blocked","summary":"...","notes":"...","files":["..."],"tests":"..."}',
+    '- Use "done" quando tudo estiver verificado e correto (com ou sem suas correcoes).',
+    '- Use "blocked" apenas para problemas que voce nao consegue resolver.',
+    '- No campo "tests", inclua o resultado da execucao dos testes.',
+    ''
+  ];
+
+  return lines.join('\n');
+}
+
 export function formatDuration(ms) {
   if (!ms || ms <= 0) {
     return '0m';

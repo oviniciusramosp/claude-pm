@@ -1,5 +1,5 @@
 import { runClaudeTask } from './claudeRunner.js';
-import { buildEpicSummary, buildReviewPrompt, buildTaskCompletionNotes, buildTaskPrompt } from './promptBuilder.js';
+import { buildEpicReviewPrompt, buildEpicSummary, buildReviewPrompt, buildTaskCompletionNotes, buildTaskPrompt } from './promptBuilder.js';
 import { allEpicChildrenAreDone, isEpicTask, pickNextTask } from './selectTask.js';
 import { Watchdog } from './watchdog.js';
 
@@ -310,9 +310,55 @@ export class Orchestrator {
         continue;
       }
 
+      const summary = await this.runStore.getEpicSummary(epicResult.children);
+
+      if (this.config.claude.epicReviewEnabled) {
+        this.currentTaskId = task.id;
+
+        try {
+          this.logger.info(`Starting Epic review for: "${task.name}" (${epicResult.children.length} children)`);
+
+          const reviewPrompt = buildEpicReviewPrompt(task, epicResult.children, summary);
+          if (this.config.claude.logPrompt) {
+            this.logger.block(`Epic review prompt for "${task.name}"`, reviewPrompt);
+          }
+
+          this.logger.info(`Epic review model: ${OPUS_REVIEW_MODEL}`);
+          const reviewExecution = await runClaudeTask(task, reviewPrompt, this.config, { overrideModel: OPUS_REVIEW_MODEL });
+
+          if (normalize(reviewExecution.status) !== 'done') {
+            const reviewNotes = buildTaskCompletionNotes(task, reviewExecution);
+            const header = `## Epic Review Feedback (${new Date().toISOString()})\nStatus: ${reviewExecution.status || 'blocked'}\n`;
+            await this.notionClient.appendMarkdown(task.id, header + reviewNotes);
+            this.logger.warn(`Epic review blocked: "${task.name}" (status: ${reviewExecution.status || 'blocked'})`);
+            return;
+          }
+
+          this.logger.success(`Epic review approved: "${task.name}"`);
+
+          const reviewNotes = buildTaskCompletionNotes(task, reviewExecution);
+          await this.notionClient.appendMarkdown(task.id, `## Epic Review Approved (${new Date().toISOString()})\n` + reviewNotes);
+        } catch (reviewError) {
+          const errorNote = `## Epic Review Error (${new Date().toISOString()})\nReview failed: ${reviewError.message}\n`;
+          await this.notionClient.appendMarkdown(task.id, errorNote);
+
+          if (isClaudeLimitError(reviewError.message)) {
+            const resetHint = extractResetHint(reviewError.message);
+            this.logger.warn(
+              `Claude usage limit reached during Epic review. Queue paused until ${resetHint || 'unknown reset time'}.`
+            );
+          } else {
+            this.logger.error(`Epic review failed for "${task.name}": ${reviewError.message}`);
+          }
+
+          return;
+        } finally {
+          this.currentTaskId = null;
+        }
+      }
+
       await this.notionClient.updateTaskStatus(task.id, this.config.notion.statuses.done);
 
-      const summary = await this.runStore.getEpicSummary(epicResult.children);
       const summaryMarkdown = buildEpicSummary(task, summary);
       await this.notionClient.appendMarkdown(task.id, summaryMarkdown);
 

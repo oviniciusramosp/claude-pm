@@ -118,6 +118,12 @@ export const TOGGLE_CONFIG: ToggleConfig[] = [
     label: 'Opus Review After Completion',
     icon: CheckCircle,
     description: 'Tasks completed by non-Opus models are reviewed by Opus before moving to Done.'
+  },
+  {
+    key: 'EPIC_REVIEW_ENABLED',
+    label: 'Epic Review Before Closing',
+    icon: CheckCircle,
+    description: 'When all sub-tasks are done, Opus runs tests and reviews the entire Epic before moving it to Done.'
   }
 ];
 
@@ -146,7 +152,7 @@ export const SETUP_SECTIONS: SetupSection[] = [
     title: 'Execution & Logs',
     description: 'Controls terminal streaming and prompt logging for task runs.',
     textKeys: [],
-    toggleKeys: ['CLAUDE_STREAM_OUTPUT', 'CLAUDE_LOG_PROMPT', 'OPUS_REVIEW_ENABLED']
+    toggleKeys: ['CLAUDE_STREAM_OUTPUT', 'CLAUDE_LOG_PROMPT', 'OPUS_REVIEW_ENABLED', 'EPIC_REVIEW_ENABLED']
   }
 ];
 

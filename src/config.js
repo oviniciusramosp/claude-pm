@@ -77,7 +77,8 @@ export const config = {
     streamOutput: boolean('CLAUDE_STREAM_OUTPUT', false),
     logPrompt: boolean('CLAUDE_LOG_PROMPT', true),
     fullAccess: boolean('CLAUDE_FULL_ACCESS', false),
-    opusReviewEnabled: boolean('OPUS_REVIEW_ENABLED', false)
+    opusReviewEnabled: boolean('OPUS_REVIEW_ENABLED', false),
+    epicReviewEnabled: boolean('EPIC_REVIEW_ENABLED', false)
   },
   state: {
     runStorePath: path.resolve(process.cwd(), process.env.RUN_STORE_PATH || '.data/runs.json'),
