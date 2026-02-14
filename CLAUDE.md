@@ -8,7 +8,7 @@ Core flow:
 2. Move one task to `In Progress` when queue is empty.
 3. Execute task instructions with Claude Code.
 4. Move task to `Done` after successful execution.
-5. React to Notion webhook events to continue processing.
+5. Periodically reconcile the board to pick up new tasks.
 
 ## Your Role (as Claude)
 You are the setup and operations assistant for this repository.
@@ -34,8 +34,8 @@ npm run panel:dev
 
 ### Panel Features
 - **Setup Tab** - Form-based configuration wizard with validation and help tooltips for all `.env` values (Notion token, database ID, Claude token, working directory, runtime toggles).
-- **Operations Tab** - Start/stop/restart the Automation API and Tunnel processes, trigger manual runs, copy webhook URL.
-- **Live Log Feed** - Real-time streaming of all logs via SSE, color-coded by level and source (Panel, API, Tunnel, Claude, Chat).
+- **Operations Tab** - Start/stop/restart the Automation API, trigger manual runs.
+- **Live Log Feed** - Real-time streaming of all logs via SSE, color-coded by level and source (Panel, API, Claude, Chat).
 - **Claude Chat** - Send one-shot prompts to Claude directly from the panel.
 - **Theme Toggle** - Light/dark mode with OS preference detection.
 
@@ -49,10 +49,9 @@ Setup is done through the visual panel at `http://localhost:4100`.
 The Setup tab guides the user through configuring:
 1. **Notion API Token** - Integration token from Notion.
 2. **Notion Database ID** - ID of the Kanban database.
-3. **Notion Webhook Secret** - For webhook signature validation.
-4. **Claude OAuth Token** - Obtained via `/opt/homebrew/bin/claude setup-token`.
-5. **Claude Working Directory** - Where Claude executes tasks (supports native folder picker).
-6. **Runtime Toggles** - Full Access, Stream Output, Log Prompt.
+3. **Claude OAuth Token** - Obtained via `/opt/homebrew/bin/claude setup-token`.
+4. **Claude Working Directory** - Where Claude executes tasks (supports native folder picker).
+5. **Runtime Toggles** - Full Access, Stream Output, Log Prompt.
 
 After saving, the panel can restart the API service automatically.
 
@@ -64,11 +63,6 @@ If creating a new database, ensure this schema:
 - `Priority` (select): `P0`, `P1`, `P2`, `P3`
 - `Type` (select): `Epic`, `UserStory`, `Defect`, `Discovery`
 - Sub-items feature enabled (so `Parent item` relation is available)
-
-### Webhook Configuration
-- Create webhook in Notion targeting `<PUBLIC_URL>/webhooks/notion`.
-- Use `npm run tunnel` (ngrok) or `npm run tunnel:localtunnel` to expose locally.
-- If Notion returns a verification token, enter it in the panel's Webhook Secret field.
 
 ### Validation
 From the Operations tab:
@@ -85,8 +79,6 @@ From the Operations tab:
 | `npm run panel:dev` | Panel in hot-reload development mode |
 | `npm run dev` | Start automation API in watch mode (port 3000) |
 | `npm start` | Start automation API normally |
-| `npm run tunnel` | Expose local service via ngrok |
-| `npm run tunnel:localtunnel` | Expose local service via localtunnel |
 | `npm run claude:chat` | Interactive Claude chat session (CLI) |
 | `npm run claude:manual -- "<prompt>"` | One-shot Claude prompt (CLI) |
 | `npm run setup:claude-md` | Regenerate this CLAUDE.md playbook |
@@ -98,7 +90,6 @@ From the Operations tab:
 - `NOTION_DATABASE_ID` - Target Kanban database.
 
 ### Optional `.env` Values
-- `NOTION_WEBHOOK_SECRET` - Webhook signature validation.
 - `CLAUDE_CODE_OAUTH_TOKEN` - For non-interactive Claude auth.
 - `CLAUDE_WORKDIR` - Working directory for Claude execution (default `.`).
 - `CLAUDE_FULL_ACCESS` - Skip Claude permission prompts (default `false`).
@@ -196,7 +187,7 @@ Logs are streamed to the panel's Live Log Feed in real time. They are color-code
 
 Prefer concise, human-readable lines such as:
 - `INFO - Moved to In Progress: "Task Name"`
-- `SUCCESS - Webhook received: moved to Done: "Task Name"`
+- `SUCCESS - Moved to Done: "Task Name"`
 
 ## Project Structure
 ```
