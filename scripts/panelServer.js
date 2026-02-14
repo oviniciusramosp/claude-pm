@@ -1301,6 +1301,7 @@ app.post('/api/claude/chat', async (req, res) => {
 
 app.get('/api/automation/runtime', async (_req, res) => {
   const baseUrl = getApiBaseUrl();
+  const defaults = { streamOutput: false, logPrompt: true };
 
   try {
     const response = await fetch(`${baseUrl}/settings/runtime`, {
@@ -1309,13 +1310,13 @@ app.get('/api/automation/runtime', async (_req, res) => {
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      res.status(response.status).json({ ok: false, message: payload?.error || payload?.message || 'Request failed' });
+      res.json(defaults);
       return;
     }
 
     res.json(payload);
-  } catch (error) {
-    res.status(500).json({ ok: false, message: error.message });
+  } catch {
+    res.json(defaults);
   }
 });
 

@@ -209,12 +209,11 @@ export function App({ mode = 'light', setMode = () => {} }) {
     let canceled = false;
 
     async function bootstrap() {
-      try {
-        await Promise.all([loadConfig(), loadLogs(), loadRuntimeSettings(), refreshStatus()]);
-      } catch (error) {
-        if (!canceled) {
-          showToast(`Failed to load panel data: ${error.message}`, 'danger');
-        }
+      const results = await Promise.allSettled([loadConfig(), loadLogs(), loadRuntimeSettings(), refreshStatus()]);
+      if (canceled) return;
+      const failed = results.filter((r) => r.status === 'rejected');
+      if (failed.length === results.length) {
+        showToast(`Failed to load panel data: ${failed[0].reason?.message || 'unknown error'}`, 'danger');
       }
     }
 
