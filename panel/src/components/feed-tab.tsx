@@ -187,25 +187,21 @@ export function FeedTab({
         ) : null}
       </div>
 
-      <div className="space-y-3 rounded-xl border border-secondary bg-secondary p-4">
-        <p className="m-0 text-sm font-medium text-secondary">Chat With Claude</p>
-
-        <div className="flex items-stretch gap-2">
-          <div className="min-w-0 flex-1">
-            <Input
-              size="md"
-              aria-label="Chat prompt"
-              placeholder="Ask Claude about this project..."
-              value={chatDraft}
-              isDisabled={Boolean(busy.chat)}
-              onChange={(value) => setChatDraft(value || '')}
-              onKeyDown={onChatDraftKeyDown}
-            />
-          </div>
-          <Button size="md" color="primary" iconLeading={Send01} className="shrink-0" isLoading={Boolean(busy.chat)} onPress={sendClaudeChatMessage}>
-            Send
-          </Button>
+      <div className="flex items-stretch gap-2">
+        <div className="min-w-0 flex-1">
+          <Input
+            size="md"
+            aria-label="Chat prompt"
+            placeholder="Ask Claude about this project..."
+            value={chatDraft}
+            isDisabled={Boolean(busy.chat)}
+            onChange={(value) => setChatDraft(value || '')}
+            onKeyDown={onChatDraftKeyDown}
+          />
         </div>
+        <Button size="md" color="primary" iconLeading={Send01} className="h-[42px] shrink-0" isLoading={Boolean(busy.chat)} onPress={sendClaudeChatMessage}>
+          Send
+        </Button>
       </div>
     </section>
   );
