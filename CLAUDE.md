@@ -47,6 +47,346 @@ Acceptance criteria and instructions for Claude go here.
 - **Epic children status** = tracked via `status` field in frontmatter (children don't move on disk).
 - **Task ID** = filename without extension (e.g. `my-standalone-task`, `Epic-1/us-001-login`).
 
+## Task and Epic Format Guide
+
+This section defines the complete format for creating tasks and epics that the automation system can understand.
+
+### YAML Frontmatter Fields
+
+All task files must start with YAML frontmatter between `---` delimiters.
+
+#### Required Fields
+| Field | Type | Description | Example |
+|-------|------|-------------|---------|
+| `name` | string | Human-readable task name | `"Implement login page"` |
+| `priority` | string | Priority level | `"P0"`, `"P1"`, `"P2"`, `"P3"` |
+| `type` | string | Task type | `"UserStory"`, `"Epic"`, `"Bug"`, `"Chore"` |
+
+#### Optional Fields
+| Field | Type | Description | Example |
+|-------|------|-------------|---------|
+| `model` | string | Claude model to use | `"claude-opus-4-6"`, `"claude-sonnet-4-5-20250929"` |
+| `agents` | string or array | Agents to run | `"frontend, design"` or `["frontend", "design"]` |
+| `status` | string | Epic child status only | `"Not Started"`, `"In Progress"`, `"Done"` |
+
+**Important**:
+- The `status` field is ONLY used for Epic children (to track their progress within an Epic).
+- Standalone tasks DO NOT use the `status` field — their status is determined by which folder they're in.
+- The `model` field is optional. If not specified, the default model from config is used.
+
+### Acceptance Criteria Format
+
+Acceptance Criteria MUST be defined as markdown checkboxes in the task body.
+
+**Format**:
+```markdown
+## Acceptance Criteria
+- [ ] First acceptance criterion
+- [ ] Second acceptance criterion
+- [ ] Third acceptance criterion
+```
+
+**Rules**:
+1. Use exact format: `- [ ] ` (dash, space, open bracket, space, close bracket, space)
+2. Each AC must be on its own line
+3. The text after `- [ ] ` is the AC text that Claude will reference
+4. When Claude completes an AC, the checkbox becomes `- [x]`
+5. ACs can appear in multiple sections (e.g., "Acceptance Criteria", "Standard Completion Criteria")
+
+**Example**:
+```markdown
+## Acceptance Criteria
+- [ ] Login form renders with email and password fields
+- [ ] Form validates email format
+- [ ] Form validates password strength
+- [ ] Submit button is disabled when form is invalid
+- [ ] Error messages are displayed below each field
+
+## Standard Completion Criteria
+- [ ] Tests written with 5+ test cases
+- [ ] `npm test` runs with zero failures
+- [ ] `npx tsc --noEmit` compiles without errors
+- [ ] Commit: `feat(auth): implement login page [US-001]`
+```
+
+### Standalone Task Format
+
+A standalone task is a single `.md` file placed directly in a status folder.
+
+**File location**: `Board/Not Started/my-task-name.md`
+
+**Complete example**:
+```markdown
+---
+name: Implement login page
+priority: P1
+type: UserStory
+model: claude-sonnet-4-5-20250929
+agents: frontend, design
+---
+
+# Implement Login Page
+
+**User Story**: As a user, I want to log in with my email and password so that I can access my account.
+
+## Acceptance Criteria
+- [ ] Login form renders with email and password fields
+- [ ] Form validates email format before submission
+- [ ] Form validates password is not empty
+- [ ] Submit button is disabled when form is invalid
+- [ ] Error messages are displayed below each field when validation fails
+- [ ] Successful login redirects to dashboard
+
+## Technical Tasks
+1. Create `src/pages/Login.tsx` component
+2. Add form validation using React Hook Form
+3. Create `useAuth` hook for authentication logic
+4. Add error message display component
+5. Implement redirect logic after successful login
+
+## Tests
+Component tests (React Testing Library):
+- **File**: `__tests__/pages/Login.test.tsx`
+- Login form renders correctly
+- Email validation works
+- Password validation works
+- Submit button disabled state
+- Error messages display correctly
+- Successful login redirects to dashboard
+- 10+ test cases
+
+## Dependencies
+- None
+
+## Standard Completion Criteria
+- [ ] Tests written as described above
+- [ ] `npm test` runs with zero failures
+- [ ] `npx tsc --noEmit` compiles without errors
+- [ ] `npm run lint` passes
+- [ ] Commit: `feat(auth): implement login page [US-001]`
+```
+
+### Epic Format
+
+An Epic is a folder containing multiple related tasks. The folder must contain an `epic.md` file and child task files.
+
+**File structure**:
+```
+Board/Not Started/Epic-Auth/
+├── epic.md              # Epic definition
+├── us-001-login.md      # Child task 1
+├── us-002-signup.md     # Child task 2
+└── us-003-logout.md     # Child task 3
+```
+
+**Epic file example** (`epic.md`):
+```markdown
+---
+name: Authentication System
+priority: P0
+type: Epic
+agents: frontend, backend
+---
+
+# Authentication System Epic
+
+**Epic Goal**: Build a complete authentication system with login, signup, and logout functionality.
+
+## Scope
+This Epic includes:
+- User login with email/password
+- New user signup with validation
+- User logout with session cleanup
+- Persistent authentication state
+
+## Acceptance Criteria
+- [ ] Users can log in with valid credentials
+- [ ] Users can create new accounts
+- [ ] Users can log out
+- [ ] Authentication state persists across page refreshes
+- [ ] All auth flows have proper error handling
+
+## Technical Approach
+- Use JWT tokens for authentication
+- Store tokens in httpOnly cookies
+- Implement refresh token rotation
+- Use React Context for auth state
+
+## Dependencies
+- None
+
+## Child Tasks
+See individual user story files in this Epic folder.
+```
+
+**Epic child task example** (`us-001-login.md`):
+```markdown
+---
+name: Implement Login Page
+priority: P1
+type: UserStory
+model: claude-sonnet-4-5-20250929
+agents: frontend
+status: Not Started
+---
+
+# Implement Login Page
+
+**User Story**: As a user, I want to log in with my email and password so that I can access my account.
+
+## Acceptance Criteria
+- [ ] Login form renders with email and password fields
+- [ ] Form validates email format before submission
+- [ ] Successful login redirects to dashboard
+- [ ] Failed login shows error message
+
+## Technical Tasks
+1. Create login page component
+2. Implement form validation
+3. Connect to authentication API
+4. Handle success/error states
+
+## Tests
+- Login form renders correctly
+- Form validation works
+- API integration works
+- Error handling works
+
+## Dependencies
+- API authentication endpoint must exist
+
+## Standard Completion Criteria
+- [ ] Tests written and passing
+- [ ] TypeScript compiles without errors
+- [ ] Linter passes
+- [ ] Commit: `feat(auth): implement login page [US-001]`
+```
+
+**Important Epic Rules**:
+1. Epic children MUST have a `status` field in frontmatter (standalone tasks must NOT)
+2. Epic children do NOT move between folders — they stay in the Epic folder
+3. The Epic folder itself moves between status folders
+4. Child `status` values: `"Not Started"`, `"In Progress"`, `"Done"`
+5. The Epic is only moved to Done when ALL children have `status: Done`
+
+### Naming Conventions
+
+**Task file naming**:
+- Use kebab-case: `my-task-name.md`
+- Be descriptive but concise
+- Avoid special characters except hyphens
+- Good: `implement-login-page.md`, `fix-auth-bug.md`
+- Bad: `task1.md`, `login page.md`, `implement_login.md`
+
+**Epic folder naming**:
+- Use PascalCase or kebab-case with prefix: `Epic-Auth`, `E01-Project-Foundation`
+- Include a clear identifier: `Epic-`, `E01-`, etc.
+- Good: `Epic-Auth`, `E01-Foundation`, `Epic-Payment-System`
+- Bad: `auth`, `epic`, `Epic1`
+
+**Epic file naming**:
+- Main file MUST be named `epic.md`
+- Child files can use any kebab-case naming
+- Common pattern: `us-001-description.md`, `bug-fix-login.md`
+
+### Task ID Resolution
+
+The system generates Task IDs automatically from file paths:
+
+**Standalone task**:
+- File: `Board/Not Started/implement-login.md`
+- Task ID: `implement-login`
+
+**Epic**:
+- File: `Board/Not Started/Epic-Auth/epic.md`
+- Task ID: `Epic-Auth`
+
+**Epic child**:
+- File: `Board/Not Started/Epic-Auth/us-001-login.md`
+- Task ID: `Epic-Auth/us-001-login`
+
+The Task ID is used in logs, run history, and Execution Notes.
+
+### Common Patterns
+
+**Infrastructure task** (no business logic, no tests):
+```markdown
+---
+name: Install Dependencies
+priority: P0
+type: Chore
+agents: devops
+---
+
+# Install Dependencies
+
+Install all required npm packages for the project.
+
+## Acceptance Criteria
+- [ ] All dependencies installed via `npm install`
+- [ ] No peer dependency warnings
+- [ ] `package.json` and `package-lock.json` are in sync
+
+## Technical Tasks
+1. Run `npm install`
+2. Verify no warnings or errors
+3. Commit lockfile changes
+
+## Tests
+N/A — infrastructure task, no business logic to test
+
+## Standard Completion Criteria
+- [ ] Tests: N/A
+- [ ] `npx tsc --noEmit` compiles without errors
+- [ ] Commit: `chore(deps): install project dependencies`
+```
+
+**Bug fix task**:
+```markdown
+---
+name: Fix login redirect loop
+priority: P0
+type: Bug
+model: claude-opus-4-6
+agents: frontend, debugging
+---
+
+# Fix Login Redirect Loop
+
+**Bug**: Users are stuck in an infinite redirect loop after logging in.
+
+## Acceptance Criteria
+- [ ] Users can log in without redirect loop
+- [ ] Redirect logic only triggers once
+- [ ] Unit test added to prevent regression
+
+## Technical Tasks
+1. Identify root cause of redirect loop
+2. Fix the redirect logic in authentication flow
+3. Add unit test to prevent regression
+4. Verify fix in development environment
+
+## Tests
+- Add test case: "login redirect should only happen once"
+- Verify existing login tests still pass
+
+## Standard Completion Criteria
+- [ ] Tests written and passing
+- [ ] Bug verified fixed in development
+- [ ] Commit: `fix(auth): resolve login redirect loop [BUG-042]`
+```
+
+### Validation Checklist
+
+Before creating a task file, verify:
+- ✅ YAML frontmatter is valid and includes required fields (`name`, `priority`, `type`)
+- ✅ Acceptance Criteria are formatted as markdown checkboxes (`- [ ] ...`)
+- ✅ File naming follows conventions (kebab-case for tasks, epic.md for epics)
+- ✅ For Epic children: `status` field is present in frontmatter
+- ✅ For standalone tasks: NO `status` field in frontmatter
+- ✅ Task ID would be unique (no duplicate filenames)
+- ✅ Markdown content is clear and actionable for Claude
+
 ## Your Role (as Claude)
 You are the setup and operations assistant for this repository.
 

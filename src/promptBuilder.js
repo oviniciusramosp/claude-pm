@@ -1,6 +1,6 @@
 function normalizeText(value) {
   if (!value || String(value).trim().length === 0) {
-    return '(nao informado)';
+    return '(not provided)';
   }
 
   return String(value).trim();
@@ -14,55 +14,101 @@ export function buildTaskPrompt(task, markdown, options = {}) {
     forceCommit = false
   } = typeof options === 'string' ? { extraPrompt: options } : options;
 
-  const agents = task.agents.length > 0 ? task.agents.join(', ') : '(nenhum agente informado)';
+  const agents = task.agents.length > 0 ? task.agents.join(', ') : '(no agents specified)';
 
   const basePrompt = [
-    'Execute a tarefa descrita abaixo:',
+    'Execute the task described below:',
     '',
-    'Contexto da tarefa:',
-    `- Nome: ${normalizeText(task.name)}`,
+    'Task Context:',
+    `- Name: ${normalizeText(task.name)}`,
     `- ID: ${normalizeText(task.id)}`,
-    `- Tipo: ${normalizeText(task.type)}`,
-    `- Prioridade: ${normalizeText(task.priority)}`,
-    `- Rode os seguintes agentes para essa tarefa: ${agents}`,
+    `- Type: ${normalizeText(task.type)}`,
+    `- Priority: ${normalizeText(task.priority)}`,
+    `- Run these agents for this task: ${agents}`,
     '',
-    normalizeText(markdown || '(sem descricao)'),
+    '='.repeat(80),
+    '🚨 CRITICAL: ACCEPTANCE CRITERIA TRACKING (MANDATORY)',
+    '='.repeat(80),
     '',
-    'Regras de execucao:',
-    '- Conclua os Acceptance Criteria da tarefa.',
-    '- IMPORTANTE: Ao concluir CADA Acceptance Criteria individualmente, emita imediatamente uma linha no formato exato: [AC_COMPLETE] <texto exato da AC sem o "- [ ] " inicial>',
-    '- Exemplo: ao concluir "- [ ] Login page renders correctly", emita: [AC_COMPLETE] Login page renders correctly',
-    '- Emita o marcador ASSIM QUE a AC for concluida, antes de passar para a proxima.',
-    '- Ao finalizar com sucesso, crie um commit com mensagem clara e objetiva.',
-    '- Nao inclua segredos em codigo, commits ou logs.',
+    'You MUST track Acceptance Criteria completion in TWO ways:',
+    '',
+    '1. INCREMENTAL TRACKING (during execution):',
+    '   - As you complete EACH Acceptance Criteria individually, emit immediately:',
+    '   - Format: [AC_COMPLETE] <exact AC text without the "- [ ] " prefix>',
+    '   - Example: if AC is "- [ ] Login page renders correctly"',
+    '   - Emit: [AC_COMPLETE] Login page renders correctly',
+    '   - Emit this marker IMMEDIATELY after completing each AC, before moving to the next.',
+    '',
+    '2. FINAL TRACKING (in JSON response):',
+    '   - Your JSON response MUST include a "completed_acs" field',
+    '   - This field is MANDATORY, not optional',
+    '   - List ALL completed Acceptance Criteria exactly as they appear (without "- [ ]")',
+    '   - Example: "completed_acs": ["Login page renders correctly", "Form validates email"]',
+    '',
+    'If you complete ANY Acceptance Criteria but fail to include them in "completed_acs",',
+    'your response will be REJECTED and you will be asked to retry.',
+    '',
+    '='.repeat(80),
+    '',
+    normalizeText(markdown || '(no description)'),
+    '',
+    'Execution Rules:',
+    '- Complete all Acceptance Criteria in the task.',
+    '- Track EACH completed AC using [AC_COMPLETE] markers (see above).',
+    '- On successful completion, create a commit with a clear, objective message.',
+    '- Never include secrets in code, commits, or logs.',
     ''
   ];
 
   if (forceTestCreation || forceTestRun || forceCommit) {
-    basePrompt.push('Regras obrigatorias ao finalizar:');
+    basePrompt.push('Mandatory completion rules:');
 
     if (forceTestCreation) {
-      basePrompt.push('- Ao terminar a tarefa, certifique-se de que testes automatizados para ela foram criados (quando fizer sentido).');
+      basePrompt.push('- After finishing the task, ensure automated tests were created (when applicable).');
     }
 
     if (forceTestRun) {
-      basePrompt.push('- Ao terminar a tarefa, certifique-se de rodar os testes e todos eles passarem.');
+      basePrompt.push('- After finishing the task, ensure all tests are run and passing.');
     }
 
     if (forceCommit) {
-      basePrompt.push('- Ao terminar a tarefa, se tudo estiver ok, crie o commit para mim antes de mover as tarefas para Done.');
+      basePrompt.push('- After finishing the task, if everything is ok, create a commit before moving tasks to Done.');
     }
 
     basePrompt.push('');
   }
 
-  basePrompt.push('Requisitos de resposta:');
-  basePrompt.push('- Responda APENAS com um JSON valido em uma unica linha.');
-  basePrompt.push('- Estrutura obrigatoria:');
-  basePrompt.push('{"status":"done|blocked","summary":"...","notes":"...","files":["..."],"tests":"...","completed_acs":["..."]}');
-  basePrompt.push('- No campo "completed_acs", liste o texto exato de cada Acceptance Criteria concluido (sem o "- [ ] " inicial). Exemplo: se a AC e "- [ ] Login page renders correctly", inclua "Login page renders correctly".');
-  basePrompt.push('- Use "done" apenas quando a implementacao estiver concluida.');
-  basePrompt.push('- Se houver bloqueio, use "blocked" e detalhe em notes.');
+  basePrompt.push('='.repeat(80));
+  basePrompt.push('RESPONSE REQUIREMENTS (MANDATORY)');
+  basePrompt.push('='.repeat(80));
+  basePrompt.push('');
+  basePrompt.push('You MUST respond with a valid JSON object in a single line.');
+  basePrompt.push('');
+  basePrompt.push('Required JSON structure:');
+  basePrompt.push('{');
+  basePrompt.push('  "status": "done|blocked",');
+  basePrompt.push('  "summary": "Brief summary of what was done",');
+  basePrompt.push('  "notes": "Additional details or context",');
+  basePrompt.push('  "files": ["path/to/file1.js", "path/to/file2.ts"],');
+  basePrompt.push('  "tests": "Test results summary",');
+  basePrompt.push('  "completed_acs": ["First AC text", "Second AC text", "Third AC text"]');
+  basePrompt.push('}');
+  basePrompt.push('');
+  basePrompt.push('Field requirements:');
+  basePrompt.push('- status: Use "done" only when implementation is complete. Use "blocked" if blocked.');
+  basePrompt.push('- summary: Concise description of what was accomplished.');
+  basePrompt.push('- notes: Any important details, decisions, or context.');
+  basePrompt.push('- files: Array of file paths that were created or modified.');
+  basePrompt.push('- tests: Summary of test results or "N/A" if not applicable.');
+  basePrompt.push('- completed_acs: 🚨 MANDATORY FIELD - Array of completed Acceptance Criteria texts.');
+  basePrompt.push('');
+  basePrompt.push('⚠️  WARNING: If you complete ANY Acceptance Criteria but omit them from "completed_acs",');
+  basePrompt.push('your response will be REJECTED. This field is NOT optional.');
+  basePrompt.push('');
+  basePrompt.push('Example valid response:');
+  basePrompt.push('{"status":"done","summary":"Implemented login page with form validation","notes":"Used React Hook Form for validation, added error messages","files":["src/pages/Login.tsx","src/components/LoginForm.tsx"],"tests":"5 tests passing: form renders, validates email, validates password, submits on valid input, shows error on invalid input","completed_acs":["Login page renders correctly","Form validates email format","Form validates password strength","Error messages are displayed","Submit button is disabled when invalid"]}');
+  basePrompt.push('');
+  basePrompt.push('='.repeat(80));
   basePrompt.push('');
 
   if (extraPrompt && extraPrompt.trim().length > 0) {
@@ -136,46 +182,46 @@ export function buildTaskCompletionNotes(task, execution) {
 }
 
 export function buildReviewPrompt(task, markdown, executionResult) {
-  const agents = task.agents.length > 0 ? task.agents.join(', ') : '(nenhum agente informado)';
+  const agents = task.agents.length > 0 ? task.agents.join(', ') : '(no agents specified)';
   const filesList = Array.isArray(executionResult.files) && executionResult.files.length > 0
     ? executionResult.files.join(', ')
-    : '(nenhum)';
+    : '(none)';
 
   const lines = [
-    'Voce esta revisando o trabalho feito por outro modelo Claude na tarefa abaixo.',
-    'Seu papel e verificar se a implementacao atende aos criterios de aceitacao, identificar problemas e corrigi-los.',
+    'You are reviewing work done by another Claude model on the task below.',
+    'Your role is to verify the implementation meets acceptance criteria, identify issues, and fix them.',
     '',
-    'Contexto da tarefa:',
-    `- Nome: ${normalizeText(task.name)}`,
+    'Task Context:',
+    `- Name: ${normalizeText(task.name)}`,
     `- ID: ${normalizeText(task.id)}`,
-    `- Tipo: ${normalizeText(task.type)}`,
-    `- Prioridade: ${normalizeText(task.priority)}`,
-    `- Agentes: ${agents}`,
+    `- Type: ${normalizeText(task.type)}`,
+    `- Priority: ${normalizeText(task.priority)}`,
+    `- Agents: ${agents}`,
     '',
-    '## Descricao original da tarefa',
-    normalizeText(markdown || '(sem descricao)'),
+    '## Original Task Description',
+    normalizeText(markdown || '(no description)'),
     '',
-    '## Resultado da execucao anterior',
+    '## Previous Execution Result',
     `- Status: ${executionResult.status || 'done'}`,
-    `- Resumo: ${executionResult.summary || '(nenhum)'}`,
-    `- Notas: ${executionResult.notes || '(nenhum)'}`,
-    `- Testes: ${executionResult.tests || '(nenhum)'}`,
-    `- Arquivos alterados: ${filesList}`,
+    `- Summary: ${executionResult.summary || '(none)'}`,
+    `- Notes: ${executionResult.notes || '(none)'}`,
+    `- Tests: ${executionResult.tests || '(none)'}`,
+    `- Files Changed: ${filesList}`,
     '',
-    'Instrucoes de revisao:',
-    '- Verifique se todos os Acceptance Criteria da descricao da tarefa foram atendidos.',
-    '- Revise os arquivos alterados quanto a corretude, qualidade de codigo e aderencia as convencoes do projeto.',
-    '- Se encontrar problemas, corrija-os diretamente. Crie um commit com suas correcoes.',
-    '- Se tudo estiver correto ou voce corrigiu todos os problemas, retorne status "done".',
-    '- Use "blocked" apenas se houver um problema que voce nao consegue resolver (acesso faltando, dependencia externa, requisitos ambiguos).',
-    '- Nao exponha segredos em codigo, commits ou logs.',
+    'Review Instructions:',
+    '- Verify all Acceptance Criteria from the task description were met.',
+    '- Review changed files for correctness, code quality, and adherence to project conventions.',
+    '- If you find issues, fix them directly. Create a commit with your corrections.',
+    '- If everything is correct or you fixed all issues, return status "done".',
+    '- Use "blocked" only if there is a problem you cannot resolve (missing access, external dependency, ambiguous requirements).',
+    '- Never expose secrets in code, commits, or logs.',
     '',
-    'Requisitos de resposta:',
-    '- Responda APENAS com um JSON valido em uma unica linha.',
-    '- Estrutura obrigatoria:',
+    'Response Requirements:',
+    '- Respond ONLY with a valid JSON object in a single line.',
+    '- Required structure:',
     '{"status":"done|blocked","summary":"...","notes":"...","files":["..."],"tests":"..."}',
-    '- Use "done" quando a implementacao estiver verificada e correta (com ou sem suas correcoes).',
-    '- Use "blocked" apenas para problemas que voce nao consegue resolver, e detalhe o motivo em notes.',
+    '- Use "done" when the implementation is verified and correct (with or without your corrections).',
+    '- Use "blocked" only for problems you cannot resolve, and detail the reason in notes.',
     ''
   ];
 
@@ -185,43 +231,43 @@ export function buildReviewPrompt(task, markdown, executionResult) {
 export function buildEpicReviewPrompt(epicTask, children, epicSummary) {
   const childList = children.map((child) => {
     const row = epicSummary.rows.find((r) => r.id === child.id);
-    const duration = row?.durationMs ? formatDuration(row.durationMs) : '(sem dados)';
-    return `- ${child.name} (duracao: ${duration})`;
+    const duration = row?.durationMs ? formatDuration(row.durationMs) : '(no data)';
+    return `- ${child.name} (duration: ${duration})`;
   }).join('\n');
 
   const lines = [
-    'Voce esta revisando um Epic completo. Todas as sub-tarefas foram concluidas por outros modelos.',
-    'Seu papel e garantir que a implementacao do Epic como um todo esta correta e funcional.',
+    'You are reviewing a complete Epic. All sub-tasks have been completed by other models.',
+    'Your role is to ensure the Epic implementation as a whole is correct and functional.',
     '',
-    'Contexto do Epic:',
-    `- Nome: ${normalizeText(epicTask.name)}`,
+    'Epic Context:',
+    `- Name: ${normalizeText(epicTask.name)}`,
     `- ID: ${normalizeText(epicTask.id)}`,
-    `- Tipo: ${normalizeText(epicTask.type)}`,
-    `- Prioridade: ${normalizeText(epicTask.priority)}`,
-    `- Duracao total acumulada: ${formatDuration(epicSummary.totalDurationMs)}`,
+    `- Type: ${normalizeText(epicTask.type)}`,
+    `- Priority: ${normalizeText(epicTask.priority)}`,
+    `- Total accumulated duration: ${formatDuration(epicSummary.totalDurationMs)}`,
     '',
-    '## Sub-tarefas concluidas',
+    '## Completed Sub-tasks',
     childList,
     '',
-    'Instrucoes de revisao:',
-    '1. Rode todos os testes automatizados do projeto (npm test, npm run test, ou o comando de teste disponivel).',
-    '2. Revise a implementacao completa do Epic, verificando consistencia entre as sub-tarefas.',
-    '3. Verifique qualidade de codigo, aderencia as convencoes do projeto e ausencia de regressoes.',
-    '4. Se encontrar problemas (testes falhando, bugs, inconsistencias), corrija-os diretamente.',
-    '5. Crie um commit com suas correcoes se houver alteracoes.',
+    'Review Instructions:',
+    '1. Run all automated tests in the project (npm test, npm run test, or available test command).',
+    '2. Review the complete Epic implementation, checking consistency between sub-tasks.',
+    '3. Verify code quality, adherence to project conventions, and absence of regressions.',
+    '4. If you find issues (failing tests, bugs, inconsistencies), fix them directly.',
+    '5. Create a commit with your corrections if there are changes.',
     '',
-    'Criterios de aprovacao:',
-    '- Todos os testes automatizados passando.',
-    '- Implementacao consistente e sem regressoes.',
-    '- Codigo seguindo as convencoes do projeto.',
+    'Approval Criteria:',
+    '- All automated tests passing.',
+    '- Consistent implementation without regressions.',
+    '- Code following project conventions.',
     '',
-    'Requisitos de resposta:',
-    '- Responda APENAS com um JSON valido em uma unica linha.',
-    '- Estrutura obrigatoria:',
+    'Response Requirements:',
+    '- Respond ONLY with a valid JSON object in a single line.',
+    '- Required structure:',
     '{"status":"done|blocked","summary":"...","notes":"...","files":["..."],"tests":"..."}',
-    '- Use "done" quando tudo estiver verificado e correto (com ou sem suas correcoes).',
-    '- Use "blocked" apenas para problemas que voce nao consegue resolver.',
-    '- No campo "tests", inclua o resultado da execucao dos testes.',
+    '- Use "done" when everything is verified and correct (with or without your corrections).',
+    '- Use "blocked" only for problems you cannot resolve.',
+    '- In the "tests" field, include the test execution result.',
     ''
   ];
 
