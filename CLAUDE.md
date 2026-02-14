@@ -107,7 +107,7 @@ From the Operations tab:
 - `PANEL_AUTO_OPEN` - Auto-open browser on panel start (default `true`).
 - `PANEL_AUTO_START_API` - Auto-start API when panel starts (default `false`).
 - `QUEUE_DEBOUNCE_MS` - Reconciliation debounce (default `1500`).
-- `QUEUE_ORDER` - Task ordering: `created` or `priority_then_created`.
+- `QUEUE_ORDER` - Task ordering: `alphabetical` (default, A→Z by name) or `priority_then_alphabetical`.
 - `QUEUE_RUN_ON_STARTUP` - Run reconciliation on boot (default `true`).
 - `QUEUE_POLL_INTERVAL_MS` - Fallback polling interval (default `60000`).
 - `MAX_TASKS_PER_RUN` - Max tasks per reconciliation cycle (default `50`).
