@@ -220,7 +220,7 @@ export function OperationsTab({
           ref={logFeedRef}
           className="max-h-[68vh] min-h-[420px] space-y-2 overflow-auto rounded-2xl border border-secondary bg-secondary p-3"
         >
-          {logs.map((line) => {
+          {logs.map((line, index) => {
             const timestamp = formatFeedTimestamp(line.ts);
             const level = normalizeLogLevel(line.level);
             const levelMeta = logLevelMeta(level);
@@ -229,10 +229,15 @@ export function OperationsTab({
             const isOutgoing = sourceMeta.side === 'outgoing';
             const alignment = isOutgoing ? 'justify-end' : 'justify-start';
 
+            const currentSourceKey = resolveLogSourceKey(line.source, line.message);
+            const prevLine = index > 0 ? logs[index - 1] : null;
+            const prevSourceKey = prevLine ? resolveLogSourceKey(prevLine.source, prevLine.message) : null;
+            const isGroupContinuation = currentSourceKey === prevSourceKey;
+
             return (
               <div
                 key={line.id || `${line.ts || timestamp}-${line.source || 'system'}-${line.message || ''}`}
-                className={cx('flex', alignment)}
+                className={cx('flex', alignment, isGroupContinuation ? '!mt-0.5' : '')}
               >
                 <div
                   className={cx(
@@ -240,7 +245,11 @@ export function OperationsTab({
                     isOutgoing ? 'justify-end' : 'justify-start'
                   )}
                 >
-                  {!isOutgoing ? <SourceAvatar sourceMeta={sourceMeta} /> : null}
+                  {!isOutgoing ? (
+                    isGroupContinuation
+                      ? <span className="size-8 shrink-0" aria-hidden="true" />
+                      : <SourceAvatar sourceMeta={sourceMeta} />
+                  ) : null}
 
                   <div
                     className={cx(
@@ -250,16 +259,18 @@ export function OperationsTab({
                       sourceMeta.directClaude ? 'ring-1 ring-brand/45' : ''
                     )}
                   >
-                    <div className="mb-1 inline-flex items-center gap-2 text-[11px] font-medium">
-                      <span className={cx(sourceMeta.directClaude ? 'text-brand-primary' : 'text-tertiary')}>
-                        {sourceMeta.label}
-                      </span>
-                      {sourceMeta.directClaude ? (
-                        <span className="rounded-full bg-primary/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-primary">
-                          Direct
+                    {!isGroupContinuation ? (
+                      <div className="mb-1 inline-flex items-center gap-2 text-[11px] font-medium">
+                        <span className={cx(sourceMeta.directClaude ? 'text-brand-primary' : 'text-tertiary')}>
+                          {sourceMeta.label}
                         </span>
-                      ) : null}
-                    </div>
+                        {sourceMeta.directClaude ? (
+                          <span className="rounded-full bg-primary/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-primary">
+                            Direct
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
 
                     {line.isPrompt ? (
                       <ExpandablePrompt
@@ -293,7 +304,11 @@ export function OperationsTab({
                     </div>
                   </div>
 
-                  {isOutgoing ? <SourceAvatar sourceMeta={sourceMeta} /> : null}
+                  {isOutgoing ? (
+                    isGroupContinuation
+                      ? <span className="size-8 shrink-0" aria-hidden="true" />
+                      : <SourceAvatar sourceMeta={sourceMeta} />
+                  ) : null}
                 </div>
               </div>
             );
