@@ -78,6 +78,9 @@ export function App({ mode = 'light', setMode = () => {} }) {
 
   const apiRunning = status?.api?.status === 'running';
   const orchestratorState = status?.automationApi?.health?.payload?.orchestrator || null;
+  const isEpicRunning = useMemo(() => {
+    return orchestratorState?.active && orchestratorState?.mode === 'epic';
+  }, [orchestratorState]);
 
   const disabledTabs = useMemo(() => new Set<string>(), []);
 
@@ -524,6 +527,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
         isDark={isDark}
         onThemeToggle={onThemeToggle}
         apiRunning={apiRunning}
+        isEpicRunning={isEpicRunning}
         apiHealthStatus={apiHealthStatus}
         busy={busy}
         runAction={runAction}

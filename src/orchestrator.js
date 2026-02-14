@@ -188,7 +188,8 @@ export class Orchestrator {
       currentTaskId: this.currentTaskId,
       currentTaskName: this.currentTaskName,
       queuedReasons: this.pendingReasons,
-      halted: this.halted
+      halted: this.halted,
+      mode: this.pendingMode
     };
   }
 

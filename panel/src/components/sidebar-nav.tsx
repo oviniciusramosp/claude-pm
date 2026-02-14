@@ -14,6 +14,7 @@ export function SidebarNav({
   isDark,
   onThemeToggle,
   apiRunning,
+  isEpicRunning,
   apiHealthStatus,
   busy,
   runAction,
@@ -33,6 +34,7 @@ export function SidebarNav({
   isDark: boolean;
   onThemeToggle: () => void;
   apiRunning: boolean;
+  isEpicRunning: boolean;
   apiHealthStatus: { label: string; color: string; connectionState: string };
   busy: Record<string, any>;
   runAction: (key: string, endpoint: string, successMessage: string) => void;
@@ -141,9 +143,9 @@ export function SidebarNav({
             className="w-full justify-center"
             iconLeading={StopCircle}
             isLoading={Boolean(busy.stopApi)}
-            onPress={() => runAction('stopApi', '/api/process/api/stop', 'App stop requested')}
+            onPress={() => runAction('stopApi', '/api/process/api/stop', isEpicRunning ? 'Epic stop requested' : 'App stop requested')}
           >
-            Stop App
+            {isEpicRunning ? 'Stop Epic' : 'Stop App'}
           </Button>
         ) : (
           <div className="relative" ref={runMenuRef}>
