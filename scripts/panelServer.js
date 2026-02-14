@@ -765,28 +765,25 @@ async function autoStartApiIfNeeded() {
   pushLog('warn', LOG_SOURCE.panel, 'Automation App auto-start skipped because process is already running.');
 }
 
-function openBrowser(url) {
-  const platform = process.platform;
-  if (platform === 'darwin') {
-    // Try to refresh existing tab in Chrome or Safari using AppleScript
-    const script = `
+function buildMacOsReuseTabScript(url) {
+  // Each browser has a different AppleScript API for tab control.
+  // Dia: supports `focus` command but URL is read-only.
+  // Chrome/Brave/Edge: supports `set URL` and `active tab index`.
+  // Safari: supports `set URL` and `current tab`.
+  return `
 set targetUrl to "${url}"
 set urlPrefix to "${url}"
-set tabFound to false
 
--- Try Google Chrome first
+-- Dia (focus-only API, URL is read-only)
 try
-  tell application "Google Chrome"
+  tell application "Dia"
     if it is running then
       repeat with w in windows
         repeat with t in tabs of w
           if URL of t starts with urlPrefix then
-            set tabFound to true
-            set URL of t to targetUrl
-            set active tab index of w to (index of t)
-            set index of w to 1
+            focus t
             activate
-            return
+            return "found"
           end if
         end repeat
       end repeat
@@ -794,36 +791,55 @@ try
   end tell
 end try
 
--- Try Safari if Chrome didn't have the tab
-if not tabFound then
+-- Chromium browsers with full tab control (set URL + active tab index)
+repeat with browserName in {"Google Chrome", "Brave Browser", "Microsoft Edge", "Arc"}
   try
-    tell application "Safari"
+    tell application browserName
       if it is running then
         repeat with w in windows
           repeat with t in tabs of w
             if URL of t starts with urlPrefix then
-              set tabFound to true
               set URL of t to targetUrl
-              set current tab of w to t
+              set active tab index of w to (index of t)
               set index of w to 1
               activate
-              return
+              return "found"
             end if
           end repeat
         end repeat
       end if
     end tell
   end try
-end if
+end repeat
 
--- If no existing tab found, open in default browser
-if not tabFound then
-  open location targetUrl
-end if
+-- Safari
+try
+  tell application "Safari"
+    if it is running then
+      repeat with w in windows
+        repeat with t in tabs of w
+          if URL of t starts with urlPrefix then
+            set URL of t to targetUrl
+            set current tab of w to t
+            set index of w to 1
+            activate
+            return "found"
+          end if
+        end repeat
+      end repeat
+    end if
+  end tell
+end try
+
+open location targetUrl
 `.trim();
+}
 
+function openBrowser(url) {
+  const platform = process.platform;
+  if (platform === 'darwin') {
+    const script = buildMacOsReuseTabScript(url);
     spawn('osascript', ['-e', script], { stdio: 'ignore' }).on('error', () => {
-      // Fallback to default browser if AppleScript fails
       spawn('open', [url], { stdio: 'ignore' });
     });
     return;
@@ -1125,6 +1141,25 @@ app.post('/api/automation/run', async (_req, res) => {
     res.json({ ok: true, payload });
   } catch (error) {
     pushLog('error', LOG_SOURCE.panel, `Manual run error: ${error.message}`);
+    res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get('/api/automation/board', async (_req, res) => {
+  const baseUrl = getApiBaseUrl();
+  try {
+    const response = await fetch(`${baseUrl}/board`, {
+      headers: getAutomationHeaders()
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      res.status(response.status).json({ ok: false, message: payload?.error || payload?.message || 'Failed to fetch board' });
+      return;
+    }
+
+    res.json(payload);
+  } catch (error) {
     res.status(500).json({ ok: false, message: error.message });
   }
 });
