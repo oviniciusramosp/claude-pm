@@ -768,7 +768,64 @@ async function autoStartApiIfNeeded() {
 function openBrowser(url) {
   const platform = process.platform;
   if (platform === 'darwin') {
-    spawn('open', [url], { stdio: 'ignore' });
+    // Try to refresh existing tab in Chrome or Safari using AppleScript
+    const script = `
+set targetUrl to "${url}"
+set urlPrefix to "${url}"
+set tabFound to false
+
+-- Try Google Chrome first
+try
+  tell application "Google Chrome"
+    if it is running then
+      repeat with w in windows
+        repeat with t in tabs of w
+          if URL of t starts with urlPrefix then
+            set tabFound to true
+            set URL of t to targetUrl
+            set active tab index of w to (index of t)
+            set index of w to 1
+            activate
+            return
+          end if
+        end repeat
+      end repeat
+    end if
+  end tell
+end try
+
+-- Try Safari if Chrome didn't have the tab
+if not tabFound then
+  try
+    tell application "Safari"
+      if it is running then
+        repeat with w in windows
+          repeat with t in tabs of w
+            if URL of t starts with urlPrefix then
+              set tabFound to true
+              set URL of t to targetUrl
+              set current tab of w to t
+              set index of w to 1
+              activate
+              return
+            end if
+          end repeat
+        end repeat
+      end if
+    end tell
+  end try
+end if
+
+-- If no existing tab found, open in default browser
+if not tabFound then
+  open location targetUrl
+end if
+`.trim();
+
+    spawn('osascript', ['-e', script], { stdio: 'ignore' }).on('error', () => {
+      // Fallback to default browser if AppleScript fails
+      spawn('open', [url], { stdio: 'ignore' });
+    });
     return;
   }
 
