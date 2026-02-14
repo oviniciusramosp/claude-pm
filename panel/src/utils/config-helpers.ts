@@ -31,7 +31,8 @@ export function buildInitialConfig(): Record<string, string | boolean> {
     CLAUDE_WORKDIR: '.',
     CLAUDE_FULL_ACCESS: true,
     CLAUDE_STREAM_OUTPUT: true,
-    CLAUDE_LOG_PROMPT: true
+    CLAUDE_LOG_PROMPT: true,
+    OPUS_REVIEW_ENABLED: false
   };
 }
 

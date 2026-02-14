@@ -1052,6 +1052,7 @@ app.get('/api/config', async (_req, res) => {
       CLAUDE_FULL_ACCESS: env.CLAUDE_FULL_ACCESS || 'true',
       CLAUDE_STREAM_OUTPUT: env.CLAUDE_STREAM_OUTPUT || 'true',
       CLAUDE_LOG_PROMPT: env.CLAUDE_LOG_PROMPT || 'true',
+      OPUS_REVIEW_ENABLED: env.OPUS_REVIEW_ENABLED || 'false',
       MANUAL_RUN_TOKEN: env.MANUAL_RUN_TOKEN || ''
     }
   });
@@ -1143,6 +1144,29 @@ app.post('/api/automation/run', async (_req, res) => {
     res.json({ ok: true, payload });
   } catch (error) {
     pushLog('error', LOG_SOURCE.panel, `Manual run error: ${error.message}`);
+    res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.post('/api/automation/resume', async (_req, res) => {
+  const baseUrl = getApiBaseUrl();
+  try {
+    const response = await fetch(`${baseUrl}/resume`, {
+      method: 'POST',
+      headers: getAutomationHeaders()
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      pushLog('warn', LOG_SOURCE.panel, `Resume failed (${response.status})`);
+      res.status(response.status).json({ ok: false, payload });
+      return;
+    }
+
+    pushLog('success', LOG_SOURCE.panel, 'Orchestrator resumed successfully');
+    res.json({ ok: true, payload });
+  } catch (error) {
+    pushLog('error', LOG_SOURCE.panel, `Resume error: ${error.message}`);
     res.status(500).json({ ok: false, message: error.message });
   }
 });

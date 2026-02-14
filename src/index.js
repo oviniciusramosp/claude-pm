@@ -81,6 +81,22 @@ app.post('/run', async (req, res) => {
   res.status(202).json({ accepted: true, message: 'Reconciliation queued' });
 });
 
+app.post('/resume', (req, res) => {
+  if (!checkManualToken(req, res)) {
+    return;
+  }
+
+  const resumed = orchestrator.resume();
+  if (!resumed) {
+    res.status(409).json({ ok: false, message: 'Orchestrator is not halted' });
+    return;
+  }
+
+  logger.info('Orchestrator resumed via API');
+  orchestrator.schedule('manual_resume');
+  res.json({ ok: true, message: 'Orchestrator resumed' });
+});
+
 app.get('/settings/runtime', (req, res) => {
   if (!checkManualToken(req, res)) {
     return;

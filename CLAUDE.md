@@ -95,7 +95,8 @@ From the Operations tab:
 - `CLAUDE_FULL_ACCESS` - Skip Claude permission prompts (default `false`).
 - `CLAUDE_STREAM_OUTPUT` - Stream Claude output to logs (default `false`).
 - `CLAUDE_LOG_PROMPT` - Log prompts sent to Claude (default `true`).
-- `CLAUDE_TIMEOUT_MS` - Claude execution timeout (default `2700000` = 45min).
+- `OPUS_REVIEW_ENABLED` - When true, tasks completed by non-Opus models are reviewed by Opus before moving to Done (default `false`).
+- `CLAUDE_TIMEOUT_MS` - Claude execution timeout (default `4500000` = 75min). Should be higher than `WATCHDOG_INTERVAL_MS * WATCHDOG_MAX_WARNINGS`.
 - `CLAUDE_EXTRA_PROMPT` - Additional prompt text appended to every task.
 - `PORT` - Automation API port (default `3000`).
 - `PANEL_PORT` - Panel server port (default `4100`).
@@ -108,7 +109,11 @@ From the Operations tab:
 - `MAX_TASKS_PER_RUN` - Max tasks per reconciliation cycle (default `50`).
 - `AUTO_RESET_FAILED_TASK` - Reset failed tasks to Not Started (default `false`).
 - `NOTION_PROP_MODEL` - Name of the Notion property for model selection (default `Model`).
-- `MANUAL_RUN_TOKEN` - Auth token for the `/run` endpoint.
+- `MANUAL_RUN_TOKEN` - Auth token for the `/run` and `/resume` endpoints.
+- `WATCHDOG_ENABLED` - Enable watchdog timer for long-running tasks (default `true`).
+- `WATCHDOG_INTERVAL_MS` - Watchdog check interval (default `1200000` = 20min).
+- `WATCHDOG_MAX_WARNINGS` - Warnings before killing a task process (default `3`).
+- `WATCHDOG_MAX_CONSECUTIVE_FAILURES` - Same-task failures before halting the orchestrator (default `3`).
 
 ## Code Standards
 - **All code must be written in English.** This includes variable names, function names, class names, comments, log messages, error messages, JSDoc annotations, and any other code artifacts. The only exception is user-facing UI text that is explicitly requested in another language.
@@ -202,6 +207,7 @@ Product Manager/
 │   ├── config.js           # Environment config parsing
 │   ├── logger.js           # Colored console output
 │   ├── runStore.js         # Run history (JSON store)
+│   ├── watchdog.js         # Long-running task monitor
 │   └── notion/             # Notion API integration
 │       ├── client.js       # API wrapper
 │       ├── mapper.js       # Page-to-task conversion

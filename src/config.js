@@ -70,17 +70,24 @@ export const config = {
   },
   claude: {
     command: FIXED_CLAUDE_COMMAND,
-    timeoutMs: number('CLAUDE_TIMEOUT_MS', 45 * 60 * 1000),
+    timeoutMs: number('CLAUDE_TIMEOUT_MS', 75 * 60 * 1000),
     extraPrompt: process.env.CLAUDE_EXTRA_PROMPT || '',
     oauthToken: process.env.CLAUDE_CODE_OAUTH_TOKEN || '',
     workdir: path.resolve(process.cwd(), process.env.CLAUDE_WORKDIR || '.'),
     streamOutput: boolean('CLAUDE_STREAM_OUTPUT', false),
     logPrompt: boolean('CLAUDE_LOG_PROMPT', true),
-    fullAccess: boolean('CLAUDE_FULL_ACCESS', false)
+    fullAccess: boolean('CLAUDE_FULL_ACCESS', false),
+    opusReviewEnabled: boolean('OPUS_REVIEW_ENABLED', false)
   },
   state: {
     runStorePath: path.resolve(process.cwd(), process.env.RUN_STORE_PATH || '.data/runs.json'),
     autoResetFailedTask: boolean('AUTO_RESET_FAILED_TASK', false)
+  },
+  watchdog: {
+    enabled: boolean('WATCHDOG_ENABLED', true),
+    intervalMs: number('WATCHDOG_INTERVAL_MS', 20 * 60 * 1000),
+    maxWarnings: number('WATCHDOG_MAX_WARNINGS', 3),
+    maxConsecutiveFailures: number('WATCHDOG_MAX_CONSECUTIVE_FAILURES', 3)
   },
   manualRun: {
     token: process.env.MANUAL_RUN_TOKEN || ''

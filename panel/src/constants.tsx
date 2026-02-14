@@ -112,6 +112,12 @@ export const TOGGLE_CONFIG: ToggleConfig[] = [
     label: 'Log Prompt Sent to Claude',
     icon: File03,
     description: 'Prints the full generated prompt before each task execution.'
+  },
+  {
+    key: 'OPUS_REVIEW_ENABLED',
+    label: 'Opus Review After Completion',
+    icon: CheckCircle,
+    description: 'Tasks completed by non-Opus models are reviewed by Opus before moving to Done.'
   }
 ];
 
@@ -140,7 +146,7 @@ export const SETUP_SECTIONS: SetupSection[] = [
     title: 'Execution & Logs',
     description: 'Controls terminal streaming and prompt logging for task runs.',
     textKeys: [],
-    toggleKeys: ['CLAUDE_STREAM_OUTPUT', 'CLAUDE_LOG_PROMPT']
+    toggleKeys: ['CLAUDE_STREAM_OUTPUT', 'CLAUDE_LOG_PROMPT', 'OPUS_REVIEW_ENABLED']
   }
 ];
 

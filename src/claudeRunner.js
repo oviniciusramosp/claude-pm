@@ -29,11 +29,12 @@ function parseJsonFromOutput(stdout) {
   }
 }
 
-function buildCommand(config, task) {
+function buildCommand(config, task, overrideModel) {
   let cmd = FIXED_CLAUDE_COMMAND;
 
-  if (task.model) {
-    cmd += ` --model ${task.model}`;
+  const model = overrideModel || task.model;
+  if (model) {
+    cmd += ` --model ${model}`;
   }
 
   if (config.claude.fullAccess && !cmd.includes('--dangerously-skip-permissions')) {
@@ -61,14 +62,14 @@ function summarizeCommandOutput(stderr, stdout) {
   return `${line.slice(0, 320)}...`;
 }
 
-export function runClaudeTask(task, prompt, config) {
+export function runClaudeTask(task, prompt, config, { signal, overrideModel } = {}) {
   return new Promise((resolve, reject) => {
     const commandEnv = { ...process.env };
     if (config.claude.oauthToken) {
       commandEnv.CLAUDE_CODE_OAUTH_TOKEN = config.claude.oauthToken;
     }
 
-    const command = buildCommand(config, task);
+    const command = buildCommand(config, task, overrideModel);
 
     const child = spawn(command, {
       shell: true,
@@ -82,6 +83,18 @@ export function runClaudeTask(task, prompt, config) {
         PM_TASK_PRIORITY: task.priority || ''
       }
     });
+
+    function onAbort() {
+      child.kill('SIGTERM');
+    }
+
+    if (signal) {
+      if (signal.aborted) {
+        child.kill('SIGTERM');
+      } else {
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+    }
 
     let stdout = '';
     let stderr = '';
@@ -110,17 +123,19 @@ export function runClaudeTask(task, prompt, config) {
 
     child.on('error', (error) => {
       clearTimeout(timer);
+      if (signal) signal.removeEventListener('abort', onAbort);
       reject(error);
     });
 
-    child.on('close', (code, signal) => {
+    child.on('close', (code, exitSignal) => {
       clearTimeout(timer);
+      if (signal) signal.removeEventListener('abort', onAbort);
 
       if (code !== 0) {
         const summary = summarizeCommandOutput(stderr, stdout);
         reject(
           new Error(
-            `Claude command falhou (exit=${code}, signal=${signal || 'none'}): ${summary}`
+            `Claude command falhou (exit=${code}, signal=${exitSignal || 'none'}): ${summary}`
           )
         );
         return;

@@ -1,6 +1,6 @@
 {
   "name": "product-manager-automation",
-  "version": "1.10.5",
+  "version": "1.12.0",
   "description": "Automacao de Product Manager com Notion + Claude Code",
   "type": "module",
   "engines": {
