@@ -81,6 +81,62 @@ export function pickNextTask(tasks, config) {
   return null;
 }
 
+export function pickNextEpic(tasks, config) {
+  const inProgressStatus = normalize(config.notion.statuses.inProgress);
+  const notStartedStatus = normalize(config.notion.statuses.notStarted);
+
+  const epics = tasks.filter((task) => isEpicTask(task, tasks, config));
+
+  const inProgress = sortCandidates(
+    epics.filter((task) => normalize(task.status) === inProgressStatus),
+    config.queue.order
+  );
+
+  if (inProgress.length > 0) {
+    return { source: 'in_progress', task: inProgress[0] };
+  }
+
+  const notStarted = sortCandidates(
+    epics.filter((task) => normalize(task.status) === notStartedStatus),
+    config.queue.order
+  );
+
+  if (notStarted.length > 0) {
+    return { source: 'not_started', task: notStarted[0] };
+  }
+
+  return null;
+}
+
+export function pickNextEpicChild(tasks, config, epicId) {
+  const inProgressStatus = normalize(config.notion.statuses.inProgress);
+  const notStartedStatus = normalize(config.notion.statuses.notStarted);
+
+  const children = tasks.filter(
+    (task) => !isEpicTask(task, tasks, config) && task.parentId === epicId
+  );
+
+  const inProgress = sortCandidates(
+    children.filter((task) => normalize(task.status) === inProgressStatus),
+    config.queue.order
+  );
+
+  if (inProgress.length > 0) {
+    return { source: 'in_progress', task: inProgress[0] };
+  }
+
+  const notStarted = sortCandidates(
+    children.filter((task) => normalize(task.status) === notStartedStatus),
+    config.queue.order
+  );
+
+  if (notStarted.length > 0) {
+    return { source: 'not_started', task: notStarted[0] };
+  }
+
+  return null;
+}
+
 export function allEpicChildrenAreDone(epic, tasks, config) {
   const doneStatus = normalize(config.notion.statuses.done);
 

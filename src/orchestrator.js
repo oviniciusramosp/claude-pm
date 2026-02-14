@@ -1,6 +1,6 @@
 import { runClaudeTask } from './claudeRunner.js';
 import { buildEpicReviewPrompt, buildEpicSummary, buildReviewPrompt, buildTaskCompletionNotes, buildTaskPrompt } from './promptBuilder.js';
-import { allEpicChildrenAreDone, isEpicTask, pickNextTask } from './selectTask.js';
+import { allEpicChildrenAreDone, isEpicTask, pickNextEpic, pickNextEpicChild, pickNextTask } from './selectTask.js';
 import { Watchdog } from './watchdog.js';
 
 function normalize(value) {
@@ -44,19 +44,25 @@ export class Orchestrator {
     this.timer = null;
     this.pending = false;
     this.pendingReasons = [];
+    this.pendingMode = 'normal';
     this.currentTaskId = null;
     this.lastKnownStatusByTaskId = new Map();
+    this.claudeCompletedTaskIds = new Map();
     this.watchdog = new Watchdog({ config, logger });
     this.halted = false;
   }
 
-  schedule(reason) {
+  schedule(reason, options = {}) {
     if (this.halted) {
       this.logger.warn('Orchestrator halted. Ignoring schedule request.');
       return;
     }
 
     this.pendingReasons.push(reason);
+
+    if (options.mode) {
+      this.pendingMode = options.mode;
+    }
 
     if (this.running) {
       this.pending = true;
@@ -89,7 +95,17 @@ export class Orchestrator {
 
         const reasons = this.pendingReasons.splice(0);
         const reason = reasons.length > 0 ? reasons.join(', ') : 'manual';
-        await this.reconcile(reason);
+        const mode = this.pendingMode;
+        this.pendingMode = 'normal';
+
+        if (mode === 'epic') {
+          await this.reconcileEpic(reason);
+        } else if (mode === 'task') {
+          await this.reconcile(reason, 1);
+        } else {
+          await this.reconcile(reason);
+        }
+
         if (this.halted) {
           break;
         }
@@ -132,12 +148,13 @@ export class Orchestrator {
     }
   }
 
-  async reconcile(reason) {
+  async reconcile(reason, maxTasks) {
+    const limit = maxTasks || this.config.queue.maxTasksPerRun;
     this.logger.info(`Starting board reconciliation (reason: ${reason})`);
 
     let processed = 0;
 
-    for (let iteration = 0; iteration < this.config.queue.maxTasksPerRun; iteration += 1) {
+    for (let iteration = 0; iteration < limit; iteration += 1) {
       const tasks = await this.notionClient.listTasks();
       this.observeStatuses(tasks);
       await this.closeCompletedEpics(tasks);
@@ -281,6 +298,175 @@ export class Orchestrator {
     await this.closeCompletedEpics(finalTasks);
 
     this.logger.success(`Reconciliation finished (processed: ${processed}, reason: ${reason})`);
+  }
+
+  async reconcileEpic(reason) {
+    this.logger.info(`Starting epic reconciliation (reason: ${reason})`);
+
+    const tasks = await this.notionClient.listTasks();
+    this.observeStatuses(tasks);
+
+    const epicCandidate = pickNextEpic(tasks, this.config);
+    if (!epicCandidate) {
+      this.logger.info('No epic found to run.');
+      return;
+    }
+
+    const epic = epicCandidate.task;
+
+    if (epicCandidate.source === 'not_started') {
+      await this.notionClient.updateTaskStatus(epic.id, this.config.notion.statuses.inProgress);
+      this.logger.info(`Epic moved to In Progress: "${epic.name}"`);
+    } else {
+      this.logger.info(`Resuming In Progress epic: "${epic.name}"`);
+    }
+
+    let processed = 0;
+
+    for (let iteration = 0; iteration < this.config.queue.maxTasksPerRun; iteration += 1) {
+      const currentTasks = await this.notionClient.listTasks();
+      this.observeStatuses(currentTasks);
+
+      const childCandidate = pickNextEpicChild(currentTasks, this.config, epic.id);
+      if (!childCandidate) {
+        this.logger.info(`All children of epic "${epic.name}" are done or none remain.`);
+        break;
+      }
+
+      const task = childCandidate.task;
+      const source = childCandidate.source;
+
+      if (source === 'not_started') {
+        await this.notionClient.updateTaskStatus(task.id, this.config.notion.statuses.inProgress);
+        await this.runStore.markStarted(task);
+        this.logger.info(`Moved to In Progress: "${task.name}" (epic child)`);
+      } else {
+        await this.runStore.markStarted(task);
+        this.logger.info(`Resuming In Progress task: "${task.name}" (epic child)`);
+      }
+
+      const markdown = await this.notionClient.getTaskMarkdown(task.id);
+      const prompt = buildTaskPrompt(task, markdown, {
+        extraPrompt: this.config.claude.extraPrompt,
+        forceTestCreation: this.config.claude.forceTestCreation,
+        forceTestRun: this.config.claude.forceTestRun,
+        forceCommit: this.config.claude.forceCommit
+      });
+      if (this.config.claude.logPrompt) {
+        this.logger.block(`Prompt sent to Claude Code for "${task.name}"`, prompt);
+      }
+
+      this.currentTaskId = task.id;
+
+      if (task.model) {
+        this.logger.info(`Using model: ${task.model}`);
+      }
+
+      const { signal } = this.watchdog.start(task);
+
+      try {
+        const execution = await runClaudeTask(task, prompt, this.config, { signal });
+
+        this.watchdog.stop();
+
+        if (normalize(execution.status) !== 'done') {
+          await this.runStore.markFailed(task, `Claude retornou status=${execution.status || 'desconhecido'}`);
+          this.logger.warn(`Task blocked by Claude: "${task.name}" (status: ${execution.status || 'unknown'})`);
+
+          const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
+          if (shouldHalt) {
+            this.halted = true;
+            break;
+          }
+
+          if (this.config.state.autoResetFailedTask) {
+            await this.notionClient.updateTaskStatus(task.id, this.config.notion.statuses.notStarted);
+            this.logger.warn(`Returned to Not Started after block: "${task.name}"`);
+          }
+
+          break;
+        }
+
+        this.watchdog.recordSuccess(task.id);
+
+        let finalExecution = execution;
+        const shouldReview = this.config.claude.opusReviewEnabled && !isOpusModel(task.model);
+
+        if (shouldReview) {
+          try {
+            finalExecution = await this.reviewWithOpus(task, markdown, execution);
+
+            if (normalize(finalExecution.status) !== 'done') {
+              const reviewNotes = buildTaskCompletionNotes(task, finalExecution);
+              const header = `## Opus Review Feedback (${new Date().toISOString()})\nStatus: ${finalExecution.status || 'blocked'}\n`;
+              await this.notionClient.appendMarkdown(task.id, header + reviewNotes);
+              await this.runStore.markFailed(task, `Opus review returned status=${finalExecution.status || 'blocked'}`);
+              this.logger.warn(`Opus review blocked task: "${task.name}" (status: ${finalExecution.status || 'blocked'})`);
+              break;
+            }
+
+            this.logger.success(`Opus review approved: "${task.name}"`);
+          } catch (reviewError) {
+            const errorNote = `## Opus Review Error (${new Date().toISOString()})\nReview failed: ${reviewError.message}\n`;
+            await this.notionClient.appendMarkdown(task.id, errorNote);
+            await this.runStore.markFailed(task, `Opus review error: ${reviewError.message}`);
+
+            if (isClaudeLimitError(reviewError.message)) {
+              const resetHint = extractResetHint(reviewError.message);
+              this.logger.warn(
+                `Claude usage limit reached during Opus review. Queue paused until ${resetHint || 'unknown reset time'}.`
+              );
+            } else {
+              this.logger.error(`Opus review failed for "${task.name}": ${reviewError.message}`);
+            }
+
+            break;
+          }
+        }
+
+        await this.notionClient.updateTaskStatus(task.id, this.config.notion.statuses.done);
+        const completionNotes = buildTaskCompletionNotes(task, finalExecution);
+        await this.notionClient.appendMarkdown(task.id, completionNotes);
+        await this.runStore.markDone(task, finalExecution);
+        processed += 1;
+
+        this.logger.success(`Moved to Done: "${task.name}" (epic child)`);
+      } catch (error) {
+        this.watchdog.stop();
+
+        await this.runStore.markFailed(task, error.message);
+        const resetHint = extractResetHint(error.message);
+
+        if (isClaudeLimitError(error.message)) {
+          this.logger.warn(
+            `Claude usage limit reached. Queue paused until ${resetHint || 'unknown reset time'}.`
+          );
+        } else {
+          this.logger.error(`Failed to execute task "${task.name}": ${error.message}`);
+        }
+
+        const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
+        if (shouldHalt) {
+          this.halted = true;
+          break;
+        }
+
+        if (this.config.state.autoResetFailedTask) {
+          await this.notionClient.updateTaskStatus(task.id, this.config.notion.statuses.notStarted);
+          this.logger.warn(`Returned to Not Started after failure: "${task.name}"`);
+        }
+
+        break;
+      } finally {
+        this.currentTaskId = null;
+      }
+    }
+
+    const finalTasks = await this.notionClient.listTasks();
+    this.observeStatuses(finalTasks);
+    await this.closeCompletedEpics(finalTasks);
+
+    this.logger.success(`Epic reconciliation finished (epic: "${epic.name}", processed: ${processed}, reason: ${reason})`);
   }
 
   async reviewWithOpus(task, markdown, executionResult) {

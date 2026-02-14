@@ -81,6 +81,26 @@ app.post('/run', async (req, res) => {
   res.status(202).json({ accepted: true, message: 'Reconciliation queued' });
 });
 
+app.post('/run-task', async (req, res) => {
+  if (!checkManualToken(req, res)) {
+    return;
+  }
+
+  logger.info('Manual single-task run requested');
+  orchestrator.schedule('manual_task', { mode: 'task' });
+  res.status(202).json({ accepted: true, message: 'Single-task run queued' });
+});
+
+app.post('/run-epic', async (req, res) => {
+  if (!checkManualToken(req, res)) {
+    return;
+  }
+
+  logger.info('Manual epic reconciliation requested');
+  orchestrator.schedule('manual_epic', { mode: 'epic' });
+  res.status(202).json({ accepted: true, message: 'Epic reconciliation queued' });
+});
+
 app.post('/resume', (req, res) => {
   if (!checkManualToken(req, res)) {
     return;

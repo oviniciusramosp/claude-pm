@@ -1152,6 +1152,52 @@ app.post('/api/automation/run', async (_req, res) => {
   }
 });
 
+app.post('/api/automation/run-task', async (_req, res) => {
+  const baseUrl = getApiBaseUrl();
+  try {
+    const response = await fetch(`${baseUrl}/run-task`, {
+      method: 'POST',
+      headers: getAutomationHeaders()
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      pushLog('warn', LOG_SOURCE.panel, `Single-task run failed (${response.status})`);
+      res.status(response.status).json({ ok: false, payload });
+      return;
+    }
+
+    pushLog('success', LOG_SOURCE.panel, 'Single-task run requested successfully');
+    res.json({ ok: true, payload });
+  } catch (error) {
+    pushLog('error', LOG_SOURCE.panel, `Single-task run error: ${error.message}`);
+    res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.post('/api/automation/run-epic', async (_req, res) => {
+  const baseUrl = getApiBaseUrl();
+  try {
+    const response = await fetch(`${baseUrl}/run-epic`, {
+      method: 'POST',
+      headers: getAutomationHeaders()
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      pushLog('warn', LOG_SOURCE.panel, `Epic run failed (${response.status})`);
+      res.status(response.status).json({ ok: false, payload });
+      return;
+    }
+
+    pushLog('success', LOG_SOURCE.panel, 'Epic run requested successfully');
+    res.json({ ok: true, payload });
+  } catch (error) {
+    pushLog('error', LOG_SOURCE.panel, `Epic run error: ${error.message}`);
+    res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
 app.post('/api/automation/resume', async (_req, res) => {
   const baseUrl = getApiBaseUrl();
   try {
