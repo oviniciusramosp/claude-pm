@@ -29,18 +29,18 @@ function parseJsonFromOutput(stdout) {
   }
 }
 
-function buildCommand(config) {
-  const base = FIXED_CLAUDE_COMMAND;
+function buildCommand(config, task) {
+  let cmd = FIXED_CLAUDE_COMMAND;
 
-  if (!config.claude.fullAccess) {
-    return base;
+  if (task.model) {
+    cmd += ` --model ${task.model}`;
   }
 
-  if (base.includes('--dangerously-skip-permissions')) {
-    return base;
+  if (config.claude.fullAccess && !cmd.includes('--dangerously-skip-permissions')) {
+    cmd += ' --dangerously-skip-permissions';
   }
 
-  return `${base} --dangerously-skip-permissions`;
+  return cmd;
 }
 
 function summarizeCommandOutput(stderr, stdout) {
@@ -68,7 +68,7 @@ export function runClaudeTask(task, prompt, config) {
       commandEnv.CLAUDE_CODE_OAUTH_TOKEN = config.claude.oauthToken;
     }
 
-    const command = buildCommand(config);
+    const command = buildCommand(config, task);
 
     const child = spawn(command, {
       shell: true,

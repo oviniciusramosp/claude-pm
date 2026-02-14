@@ -62,6 +62,7 @@ If creating a new database, ensure this schema:
 - `Agent` (multi-select)
 - `Priority` (select): `P0`, `P1`, `P2`, `P3`
 - `Type` (select): `Epic`, `UserStory`, `Defect`, `Discovery`
+- `Model` (select): Claude model to use for the task (e.g. `claude-sonnet-4-5-20250929`, `claude-opus-4-6`). If empty, Claude CLI uses its default model.
 - Sub-items feature enabled (so `Parent item` relation is available)
 
 ### Validation
@@ -107,6 +108,7 @@ From the Operations tab:
 - `QUEUE_POLL_INTERVAL_MS` - Fallback polling interval (default `60000`).
 - `MAX_TASKS_PER_RUN` - Max tasks per reconciliation cycle (default `50`).
 - `AUTO_RESET_FAILED_TASK` - Reset failed tasks to Not Started (default `false`).
+- `NOTION_PROP_MODEL` - Name of the Notion property for model selection (default `Model`).
 - `MANUAL_RUN_TOKEN` - Auth token for the `/run` endpoint.
 
 ## Code Standards

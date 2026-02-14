@@ -116,6 +116,7 @@ export function mapNotionPageToTask(page, config) {
   const agentProperty = props[config.notion.properties.agent];
   const priorityProperty = props[config.notion.properties.priority];
   const typeProperty = props[config.notion.properties.type];
+  const modelProperty = props[config.notion.properties.model];
 
   return {
     id: page.id,
@@ -124,6 +125,7 @@ export function mapNotionPageToTask(page, config) {
     agents: readMultiSelect(agentProperty),
     priority: readSelect(priorityProperty),
     type: readSelect(typeProperty),
+    model: readSelect(modelProperty),
     parentId: readParentTaskId(page, props, config),
     url: page.url,
     createdTime: page.created_time,

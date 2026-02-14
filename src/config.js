@@ -49,7 +49,8 @@ export const config = {
       agent: process.env.NOTION_PROP_AGENT || 'Agent',
       priority: process.env.NOTION_PROP_PRIORITY || 'Priority',
       type: process.env.NOTION_PROP_TYPE || 'Type',
-      parentItem: process.env.NOTION_PROP_PARENT_ITEM || process.env.NOTION_PROP_EPIC || 'Parent item'
+      parentItem: process.env.NOTION_PROP_PARENT_ITEM || process.env.NOTION_PROP_EPIC || 'Parent item',
+      model: process.env.NOTION_PROP_MODEL || 'Model'
     },
     statuses: {
       notStarted: process.env.NOTION_STATUS_NOT_STARTED || 'Not Started',

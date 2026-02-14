@@ -139,6 +139,10 @@ export class Orchestrator {
 
       this.currentTaskId = task.id;
 
+      if (task.model) {
+        this.logger.info(`Using model: ${task.model}`);
+      }
+
       try {
         const execution = await runClaudeTask(task, prompt, this.config);
 
