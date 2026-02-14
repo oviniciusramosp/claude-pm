@@ -54,18 +54,19 @@ function formatErrorForModal(err: BoardError): string {
 
   const d = err.details;
   if (d) {
-    if (d.errorId) lines.push(`Error ID:    ${d.errorId}`);
-    if (d.databaseId) lines.push(`Database ID: ${d.databaseId}`);
+    if (d.errorId) lines.push(`Error ID:      ${d.errorId}`);
+    if (d.databaseId) lines.push(`Database ID:   ${d.databaseId}`);
     if (d.notionStatus) lines.push(`Notion Status: ${d.notionStatus}`);
-    if (d.notionCode) lines.push(`Notion Code: ${d.notionCode}`);
-    if (d.timestamp) lines.push(`Timestamp:   ${d.timestamp}`);
+    if (d.notionCode) lines.push(`Notion Code:   ${d.notionCode}`);
+    if (d.contentType) lines.push(`Content-Type:  ${d.contentType}`);
+    if (d.timestamp) lines.push(`Timestamp:     ${d.timestamp}`);
     if (d.hint) {
       lines.push('');
       lines.push(`Hint: ${d.hint}`);
     }
     if (d.raw && d.raw !== err.message) {
       lines.push('');
-      lines.push('--- Raw Error ---');
+      lines.push('--- Raw Response ---');
       lines.push(d.raw);
     }
     if (d.stack) {
@@ -206,9 +207,37 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, savedConfig, o
           headers: { 'Content-Type': 'application/json' }
         });
 
-        const payload = await response.json().catch(() => ({}));
-
         if (!mountedRef.current) return;
+
+        const contentType = response.headers.get('content-type') || '';
+        const isJson = contentType.includes('application/json');
+
+        if (!isJson) {
+          const rawBody = await response.text().catch(() => '');
+          const isDev = window.location.port === '5174';
+          const err: BoardError = {
+            message: isDev
+              ? 'Panel server is not running. In dev mode, both the Vite dev server and the panel server must be running. Start it with: npm run panel'
+              : 'Could not connect to the panel server API.',
+            code: 'NOT_JSON',
+            details: {
+              errorId: `board-${Date.now()}`,
+              httpStatus: response.status,
+              contentType,
+              hint: isDev
+                ? 'You are using panel:dev (Vite on port 5174) which proxies /api requests to localhost:4100. The panel server is not running on port 4100. Run "npm run panel" in a separate terminal.'
+                : 'Make sure the panel server is running (npm run panel).',
+              raw: rawBody.slice(0, 2000),
+              timestamp: new Date().toISOString()
+            },
+            httpStatus: response.status
+          };
+          setBoardError(err);
+          if (!silent) showToast(err.message, 'danger');
+          return;
+        }
+
+        const payload = await response.json().catch(() => ({}));
 
         if (!response.ok) {
           const err: BoardError = {
@@ -227,12 +256,23 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, savedConfig, o
         setBoardError(null);
       } catch (err: any) {
         if (!mountedRef.current) return;
+        const isDev = window.location.port === '5174';
         const networkError: BoardError = {
           message: err instanceof TypeError
-            ? `Failed to reach panel server at ${apiBaseUrl || window.location.origin}. Is the panel running?`
+            ? (isDev
+              ? 'Panel server is not running. In dev mode, run "npm run panel" in a separate terminal.'
+              : 'Could not reach the panel server. Is it running?')
             : (err.message || 'Unknown error'),
           code: 'NETWORK_ERROR',
-          details: { raw: err.message, stack: err.stack?.split('\n').slice(0, 4).join('\n'), timestamp: new Date().toISOString() },
+          details: {
+            errorId: `board-${Date.now()}`,
+            hint: isDev
+              ? 'You are using panel:dev (Vite on port 5174) which proxies /api requests to localhost:4100. The panel server is not running on port 4100.'
+              : 'Make sure the panel server is running (npm run panel).',
+            raw: err.message,
+            stack: err.stack?.split('\n').slice(0, 4).join('\n'),
+            timestamp: new Date().toISOString()
+          },
           httpStatus: null
         };
         setBoardError(networkError);
@@ -292,7 +332,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, savedConfig, o
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <Icon icon={Columns03} className="size-5 text-tertiary" />
-          <h2 className="text-lg font-semibold text-primary">Board</h2>
+          <h2 className="text-lg font-semibold text-primary">Board Preview</h2>
           {totalCount > 0 && (
             <Badge size="sm" color="gray">{totalCount}</Badge>
           )}
@@ -303,15 +343,15 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, savedConfig, o
               Updated {lastRefreshed.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
             </span>
           )}
-          <Button
-            size="sm"
-            color="secondary"
-            onPress={() => fetchBoard()}
-            isDisabled={refreshing}
+          <button
+            type="button"
+            className="rounded-lg p-1.5 text-tertiary transition hover:bg-primary_hover hover:text-secondary disabled:opacity-50"
+            onClick={() => fetchBoard()}
+            disabled={refreshing}
+            aria-label="Refresh board"
           >
-            <RefreshCw01 className={cx('size-4', refreshing && 'animate-spin')} data-icon />
-            Refresh
-          </Button>
+            <RefreshCw01 className={cx('size-4', refreshing && 'animate-spin')} />
+          </button>
         </div>
       </div>
 
