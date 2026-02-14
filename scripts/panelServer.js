@@ -1153,12 +1153,22 @@ app.get('/api/board', async (_req, res) => {
   const databaseId = (env.NOTION_DATABASE_ID || '').trim();
 
   if (!token) {
-    res.status(400).json({ ok: false, code: 'MISSING_TOKEN', message: 'Notion API Token is not configured. Go to Setup to add it.' });
+    res.status(400).json({
+      ok: false,
+      code: 'MISSING_TOKEN',
+      message: 'Notion API Token is not configured. Go to Setup to add it.',
+      details: { hint: 'Add NOTION_API_TOKEN to .env or set it via the Setup page.' }
+    });
     return;
   }
 
   if (!databaseId) {
-    res.status(400).json({ ok: false, code: 'MISSING_DATABASE_ID', message: 'Notion Database ID is not configured.' });
+    res.status(400).json({
+      ok: false,
+      code: 'MISSING_DATABASE_ID',
+      message: 'Notion Database ID is not configured.',
+      details: { hint: 'Add NOTION_DATABASE_ID to .env or enter it below.' }
+    });
     return;
   }
 
@@ -1199,24 +1209,56 @@ app.get('/api/board', async (_req, res) => {
     res.json({ ok: true, tasks });
   } catch (error) {
     const msg = error.message || String(error);
-    const status = error.status || 500;
+    const notionStatus = error.status || null;
+    const notionCode = error.code || null;
+    const httpStatus = (notionStatus >= 400 && notionStatus < 600) ? notionStatus : 500;
+    const errorId = `board-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+    const baseDetails = {
+      errorId,
+      databaseId,
+      notionStatus,
+      notionCode,
+      raw: msg,
+      stack: error.stack ? error.stack.split('\n').slice(0, 6).join('\n') : undefined,
+      timestamp: new Date().toISOString()
+    };
 
     if (msg.includes('Could not find database') || msg.includes('object not found')) {
-      res.status(400).json({ ok: false, code: 'INVALID_DATABASE_ID', message: `Database not found. Check your Database ID. (${msg})` });
+      res.status(400).json({
+        ok: false,
+        code: 'INVALID_DATABASE_ID',
+        message: 'Database not found. Check your Database ID.',
+        details: { ...baseDetails, hint: 'Verify the NOTION_DATABASE_ID value matches the ID in your Notion database URL.' }
+      });
       return;
     }
 
-    if (msg.includes('API token is invalid') || msg.includes('Unauthorized') || status === 401) {
-      res.status(401).json({ ok: false, code: 'INVALID_TOKEN', message: `Notion API Token is invalid or expired. Update it in Setup. (${msg})` });
+    if (msg.includes('API token is invalid') || msg.includes('Unauthorized') || notionStatus === 401) {
+      res.status(401).json({
+        ok: false,
+        code: 'INVALID_TOKEN',
+        message: 'Notion API Token is invalid or expired. Update it in Setup.',
+        details: { ...baseDetails, hint: 'Go to https://www.notion.so/my-integrations and regenerate the token.' }
+      });
       return;
     }
 
-    if (msg.includes('does not have access') || status === 403) {
-      res.status(403).json({ ok: false, code: 'NO_ACCESS', message: `The Notion integration does not have access to this database. Share the database with your integration. (${msg})` });
+    if (msg.includes('does not have access') || notionStatus === 403) {
+      res.status(403).json({
+        ok: false,
+        code: 'NO_ACCESS',
+        message: 'The Notion integration does not have access to this database.',
+        details: { ...baseDetails, hint: 'Open the database in Notion, click "..." → "Connections" and add your integration.' }
+      });
       return;
     }
 
-    res.status(status >= 400 && status < 600 ? status : 500).json({ ok: false, code: 'NOTION_ERROR', message: `Notion API error: ${msg}` });
+    res.status(httpStatus).json({
+      ok: false,
+      code: 'NOTION_ERROR',
+      message: `Notion API error: ${msg}`,
+      details: { ...baseDetails, hint: 'Check the Notion API status page or try again later.' }
+    });
   }
 });
 

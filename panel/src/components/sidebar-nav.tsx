@@ -167,7 +167,7 @@ export function SidebarNav({
       <div className="flex-1" />
 
       {/* Footer */}
-      <div className="px-3 pb-4">
+      <div className="px-3 pb-2">
         <button
           type="button"
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-tertiary transition hover:bg-primary_hover hover:text-secondary"
@@ -181,9 +181,11 @@ export function SidebarNav({
             </span>
           ) : null}
         </button>
+      </div>
 
-        <div className="mx-3 my-1 border-t border-secondary" />
+      <div className="border-t border-secondary" />
 
+      <div className="px-3 py-3">
         <button
           type="button"
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-tertiary transition hover:bg-primary_hover hover:text-secondary"

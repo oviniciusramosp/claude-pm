@@ -448,6 +448,34 @@ export function App({ mode = 'light', setMode = () => {} }) {
     [apiRunning, callApi, config, refreshStatus, showToast]
   );
 
+  const onSaveDatabaseId = useCallback(
+    async (databaseId: string) => {
+      setBusy((prev) => ({ ...prev, saveBoardDbId: true }));
+      try {
+        const updates = { NOTION_DATABASE_ID: databaseId };
+        await callApi('/api/config', {
+          method: 'POST',
+          body: JSON.stringify(updates)
+        });
+
+        setConfig((prev) => ({ ...prev, NOTION_DATABASE_ID: databaseId }));
+        setSavedConfig((prev) => ({ ...prev, NOTION_DATABASE_ID: databaseId }));
+
+        if (apiRunning) {
+          await callApi('/api/process/api/restart', { method: 'POST', body: '{}' });
+          showToast('Database ID saved and app restarted.', 'success');
+        } else {
+          showToast('Database ID saved.', 'success');
+        }
+      } catch (error) {
+        showToast(`Failed to save Database ID: ${error.message}`, 'danger');
+      } finally {
+        setBusy((prev) => ({ ...prev, saveBoardDbId: false }));
+      }
+    },
+    [apiRunning, callApi, showToast]
+  );
+
   const onSaveClick = useCallback(async () => {
     if (hasBlockingErrors) {
       showToast('Please fix required fields before saving.', 'danger');
@@ -590,9 +618,13 @@ export function App({ mode = 'light', setMode = () => {} }) {
             />
           ) : activeTab === NAV_TAB_KEYS.board ? (
             <BoardTab
-              callApi={callApi}
+              apiBaseUrl={apiBaseUrl}
               showToast={showToast}
               refreshTrigger={boardRefreshTrigger}
+              savedConfig={savedConfig}
+              onSaveDatabaseId={onSaveDatabaseId}
+              onShowErrorDetail={(title, message) => setErrorModal({ open: true, title, message })}
+              busy={busy}
             />
           ) : (
             <FeedTab

@@ -1,9 +1,10 @@
 // panel/src/components/board-tab.tsx
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Columns03, RefreshCw01, Users01 } from '@untitledui/icons';
+import { Columns03, Database01, RefreshCw01, Users01 } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
+import { Input } from '@/components/base/input/input';
 import { cx } from '@/utils/cx';
 import { Icon } from './icon';
 import {
@@ -15,9 +16,20 @@ import {
 import type { BoardTask } from '../types';
 
 interface BoardTabProps {
-  callApi: (path: string, options?: RequestInit) => Promise<any>;
+  apiBaseUrl: string;
   showToast: (message: string, color?: 'success' | 'warning' | 'danger' | 'neutral') => void;
   refreshTrigger: number;
+  savedConfig: Record<string, any>;
+  onSaveDatabaseId: (id: string) => void;
+  onShowErrorDetail: (title: string, message: string) => void;
+  busy: Record<string, any>;
+}
+
+interface BoardError {
+  message: string;
+  code: string | null;
+  details: Record<string, any> | null;
+  httpStatus: number | null;
 }
 
 const COLUMN_HEADER_COLORS: Record<string, string> = {
@@ -29,6 +41,41 @@ const COLUMN_HEADER_COLORS: Record<string, string> = {
 function isEpic(task: BoardTask, allTasks: BoardTask[]): boolean {
   if (task.type?.toLowerCase() === 'epic') return true;
   return allTasks.some((t) => t.parentId === task.id);
+}
+
+function formatErrorForModal(err: BoardError): string {
+  const lines: string[] = [];
+
+  lines.push(err.message);
+  lines.push('');
+
+  if (err.code) lines.push(`Code:        ${err.code}`);
+  if (err.httpStatus) lines.push(`HTTP Status: ${err.httpStatus}`);
+
+  const d = err.details;
+  if (d) {
+    if (d.errorId) lines.push(`Error ID:    ${d.errorId}`);
+    if (d.databaseId) lines.push(`Database ID: ${d.databaseId}`);
+    if (d.notionStatus) lines.push(`Notion Status: ${d.notionStatus}`);
+    if (d.notionCode) lines.push(`Notion Code: ${d.notionCode}`);
+    if (d.timestamp) lines.push(`Timestamp:   ${d.timestamp}`);
+    if (d.hint) {
+      lines.push('');
+      lines.push(`Hint: ${d.hint}`);
+    }
+    if (d.raw && d.raw !== err.message) {
+      lines.push('');
+      lines.push('--- Raw Error ---');
+      lines.push(d.raw);
+    }
+    if (d.stack) {
+      lines.push('');
+      lines.push('--- Stack Trace ---');
+      lines.push(d.stack);
+    }
+  }
+
+  return lines.join('\n');
 }
 
 function BoardCard({ task, epic }: { task: BoardTask; epic: boolean }) {
@@ -88,27 +135,108 @@ function SkeletonCard() {
   );
 }
 
-export function BoardTab({ callApi, showToast, refreshTrigger }: BoardTabProps) {
+function MissingDatabaseIdCard({
+  showToast,
+  onSaveDatabaseId,
+  busy
+}: {
+  showToast: BoardTabProps['showToast'];
+  onSaveDatabaseId: BoardTabProps['onSaveDatabaseId'];
+  busy: BoardTabProps['busy'];
+}) {
+  const [draftId, setDraftId] = useState('');
+
+  const handleSave = useCallback(() => {
+    const id = draftId.trim();
+    if (!id) {
+      showToast('Please enter a Database ID.', 'warning');
+      return;
+    }
+    onSaveDatabaseId(id);
+  }, [draftId, onSaveDatabaseId, showToast]);
+
+  return (
+    <div className="mx-auto max-w-md rounded-xl border border-dashed border-warning-primary bg-utility-warning-50 p-6">
+      <div className="flex items-center gap-2">
+        <Icon icon={Database01} className="size-5 text-warning-primary" />
+        <h3 className="text-sm font-semibold text-warning-primary">Database ID Required</h3>
+      </div>
+      <p className="mt-2 text-sm text-tertiary">
+        Enter your Notion Database ID to connect. You can find it in the database URL after the workspace name.
+      </p>
+      <div className="mt-4 flex gap-2">
+        <div className="flex-1">
+          <Input
+            size="sm"
+            placeholder="e.g. a1b2c3d4e5f6..."
+            icon={Database01}
+            value={draftId}
+            onChange={(value) => setDraftId(value)}
+          />
+        </div>
+        <Button
+          size="sm"
+          color="primary"
+          isLoading={Boolean(busy.saveBoardDbId)}
+          onPress={handleSave}
+        >
+          Connect
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, savedConfig, onSaveDatabaseId, onShowErrorDetail, busy }: BoardTabProps) {
   const [tasks, setTasks] = useState<BoardTask[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [boardError, setBoardError] = useState<BoardError | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const mountedRef = useRef(true);
+
+  const hasDatabaseId = Boolean(savedConfig.NOTION_DATABASE_ID?.trim());
 
   const fetchBoard = useCallback(
     async (silent = false) => {
       if (!silent) setRefreshing(true);
       try {
-        const payload = await callApi('/api/automation/board');
+        const url = `${apiBaseUrl}/api/board`;
+        const response = await fetch(url, {
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        const payload = await response.json().catch(() => ({}));
+
         if (!mountedRef.current) return;
+
+        if (!response.ok) {
+          const err: BoardError = {
+            message: payload?.message || `HTTP ${response.status}`,
+            code: payload?.code || null,
+            details: payload?.details || null,
+            httpStatus: response.status
+          };
+          setBoardError(err);
+          if (!silent) showToast(err.message, 'danger');
+          return;
+        }
+
         setTasks(payload.tasks || []);
         setLastRefreshed(new Date());
-        setError(null);
+        setBoardError(null);
       } catch (err: any) {
         if (!mountedRef.current) return;
-        setError(err.message || 'Failed to fetch board');
-        if (!silent) showToast(`Board fetch failed: ${err.message}`, 'danger');
+        const networkError: BoardError = {
+          message: err instanceof TypeError
+            ? `Failed to reach panel server at ${apiBaseUrl || window.location.origin}. Is the panel running?`
+            : (err.message || 'Unknown error'),
+          code: 'NETWORK_ERROR',
+          details: { raw: err.message, stack: err.stack?.split('\n').slice(0, 4).join('\n'), timestamp: new Date().toISOString() },
+          httpStatus: null
+        };
+        setBoardError(networkError);
+        if (!silent) showToast(networkError.message, 'danger');
       } finally {
         if (mountedRef.current) {
           setLoading(false);
@@ -116,7 +244,7 @@ export function BoardTab({ callApi, showToast, refreshTrigger }: BoardTabProps) 
         }
       }
     },
-    [callApi, showToast]
+    [apiBaseUrl, showToast]
   );
 
   // Initial load + polling
@@ -144,7 +272,19 @@ export function BoardTab({ callApi, showToast, refreshTrigger }: BoardTabProps) 
     }));
   }, [tasks]);
 
+  const errorCode = boardError?.code || null;
   const totalCount = tasks.length;
+  const showMissingDbId = errorCode === 'MISSING_DATABASE_ID' || (!hasDatabaseId && !loading && tasks.length === 0 && !errorCode);
+  const showErrorBanner = boardError && !loading && tasks.length === 0 && !showMissingDbId;
+  const showBoard = tasks.length > 0 || (loading && !showMissingDbId && !showErrorBanner) || (!boardError && !loading);
+
+  const handleViewDetails = useCallback(() => {
+    if (!boardError) return;
+    const title = boardError.code
+      ? `Board Error — ${boardError.code}`
+      : 'Board Error';
+    onShowErrorDetail(title, formatErrorForModal(boardError));
+  }, [boardError, onShowErrorDetail]);
 
   return (
     <section className="flex flex-col gap-5">
@@ -166,8 +306,8 @@ export function BoardTab({ callApi, showToast, refreshTrigger }: BoardTabProps) 
           <Button
             size="sm"
             color="secondary"
-            onClick={() => fetchBoard()}
-            disabled={refreshing}
+            onPress={() => fetchBoard()}
+            isDisabled={refreshing}
           >
             <RefreshCw01 className={cx('size-4', refreshing && 'animate-spin')} data-icon />
             Refresh
@@ -175,54 +315,69 @@ export function BoardTab({ callApi, showToast, refreshTrigger }: BoardTabProps) 
         </div>
       </div>
 
+      {/* Missing Database ID */}
+      {showMissingDbId && (
+        <MissingDatabaseIdCard
+          showToast={showToast}
+          onSaveDatabaseId={onSaveDatabaseId}
+          busy={busy}
+        />
+      )}
+
       {/* Error state */}
-      {error && !loading && tasks.length === 0 && (
+      {showErrorBanner && (
         <div className="rounded-xl border border-dashed border-error-primary bg-utility-error-50 p-8 text-center">
-          <p className="text-sm text-error-primary">{error}</p>
-          <p className="mt-1 text-xs text-tertiary">Make sure the Automation App is running.</p>
-          <Button size="sm" color="secondary" className="mt-3" onClick={() => fetchBoard()}>
-            Retry
-          </Button>
+          <p className="text-sm font-medium text-error-primary">{boardError.message}</p>
+          <div className="mt-3 flex items-center justify-center gap-2">
+            <Button size="sm" color="secondary" onPress={() => fetchBoard()}>
+              Retry
+            </Button>
+            <Button size="sm" color="tertiary" onPress={handleViewDetails}>
+              View Details
+            </Button>
+          </div>
         </div>
       )}
 
       {/* Board columns */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {columns.map((col) => (
-          <div key={col.key} className="flex flex-col gap-3">
-            {/* Column header */}
-            <div className="flex items-center justify-between">
-              <span
-                className={cx(
-                  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold',
-                  COLUMN_HEADER_COLORS[col.key]
-                )}
-              >
-                {col.label}
-              </span>
-              <span className="text-xs font-medium text-quaternary">{col.tasks.length}</span>
-            </div>
+      {showBoard && (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {columns.map((col) => (
+            <div key={col.key} className="flex flex-col gap-3">
+              {/* Column header */}
+              <div className="flex items-center justify-between">
+                <span
+                  className={cx(
+                    'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold',
+                    COLUMN_HEADER_COLORS[col.key]
+                  )}
+                >
+                  {col.label}
+                </span>
+                <span className="text-xs font-medium text-quaternary">{col.tasks.length}</span>
+              </div>
 
-            {/* Cards */}
-            <div className="flex flex-col gap-2">
-              {loading && tasks.length === 0 ? (
-                <>
-                  <SkeletonCard />
-                  <SkeletonCard />
-                </>
-              ) : col.tasks.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-secondary p-4 text-center text-sm text-quaternary">
-                  No tasks
-                </div>
-              ) : (
-                col.tasks.map((task) => (
-                  <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} />
-                ))
-              )}
+              {/* Cards */}
+              <div className="flex flex-col gap-2">
+                {loading && tasks.length === 0 ? (
+                  <>
+                    <SkeletonCard />
+                    <SkeletonCard />
+                  </>
+                ) : col.tasks.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-secondary p-4 text-center text-sm text-quaternary">
+                    No tasks
+                  </div>
+                ) : (
+                  col.tasks.map((task) => (
+                    <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} />
+                  ))
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
