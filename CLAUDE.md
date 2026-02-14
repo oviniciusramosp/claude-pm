@@ -205,14 +205,37 @@ Product Manager/
 │       ├── client.js       # API wrapper
 │       ├── mapper.js       # Page-to-task conversion
 │       └── markdown.js     # Blocks-to-markdown
-├── panel/                  # Visual control panel (React)
+├── panel/                  # Visual control panel (React + TypeScript)
 │   ├── vite.config.mjs     # Vite build config
 │   ├── index.html          # HTML entry point
 │   └── src/
-│       ├── main.jsx        # React root
-│       ├── App.jsx         # Main dashboard
-│       ├── theme.css       # Tailwind + design tokens
-│       └── components/     # UI component library
+│       ├── main.tsx         # React root
+│       ├── app.tsx          # App component (state + layout)
+│       ├── types.ts         # TypeScript interfaces
+│       ├── constants.ts     # Constants and metadata
+│       ├── theme.css        # Tailwind + design tokens
+│       ├── components/      # UI component library
+│       │   ├── base/        # Primitives (button, input, toggle, badge, tooltip)
+│       │   ├── application/ # Tabs, modals
+│       │   ├── foundations/ # Design tokens
+│       │   ├── icon.tsx              # Icon wrapper
+│       │   ├── connection-dot.tsx    # Animated connection indicator
+│       │   ├── status-badge.tsx      # Status badge with dot
+│       │   ├── source-avatar.tsx     # Log source avatar
+│       │   ├── toast-notification.tsx # Toast component
+│       │   ├── panel-header.tsx      # Fixed header with nav
+│       │   ├── setup-tab.tsx         # Setup configuration form
+│       │   ├── operations-tab.tsx    # Process controls + live feed
+│       │   ├── save-confirm-modal.tsx    # Save confirmation dialog
+│       │   └── runtime-settings-modal.tsx # Runtime settings dialog
+│       ├── utils/
+│       │   ├── cx.ts              # Tailwind class merge utility
+│       │   ├── config-helpers.ts  # Config/env helpers
+│       │   └── log-helpers.ts     # Log formatting helpers
+│       └── styles/
+│           ├── globals.css
+│           ├── theme.css
+│           └── typography.css
 ├── scripts/
 │   ├── panelServer.js      # Panel Express backend
 │   ├── claudeManual.js     # CLI chat/manual scripts
@@ -221,6 +244,53 @@ Product Manager/
 ├── .env.example            # Template
 └── .data/runs.json         # Execution history (generated)
 ```
+
+## Rules for Sonnet-Driven Execution
+
+When Claude Sonnet (or any non-Opus model) is executing a multi-step plan, it MUST follow these rules strictly. These exist because Sonnet has a tendency to skip steps, leave dangling references, and not validate its own work.
+
+### 1. Never skip steps
+- Execute **every** step in the plan, in order. No step is optional unless explicitly marked as such.
+- If a step is too large, break it into sub-steps — but never skip it entirely.
+- After finishing all steps, re-read the plan and confirm each step was completed. List any that were not and execute them.
+
+### 2. Verify imports after every file extraction
+- When moving code from file A to file B, **always** check what symbols file A still uses after the move.
+- For every symbol that was previously defined inline or imported in file A and is now only in file B, add the appropriate import to file A.
+- Conversely, ensure file B imports everything it needs (icons, utilities, types, components).
+- **Concrete check**: after editing, search the file for any identifier that is used but not imported. Use grep or a quick scan of every JSX tag, function call, and variable reference against the import block at the top.
+
+### 3. Run build AND open the app after every major step
+- `npm run panel:build` only catches compile-time errors (syntax, missing modules). It does **not** catch runtime errors like `ReferenceError: X is not defined`.
+- After completing each step that modifies imports or moves code, you MUST:
+  1. Run `npm run panel:build` — verify zero errors.
+  2. Briefly inspect the built output or mentally trace that all runtime references resolve.
+- If the plan says "validate build after each step", treat it as "validate build **and** verify no missing runtime references."
+
+### 4. Do not leave unused imports
+- After extracting code, remove imports in the source file that are no longer used there.
+- Do not leave `import { Foo } from '...'` if `Foo` no longer appears anywhere in that file.
+
+### 5. Cross-check the final file structure against the plan
+- At the end of execution, list all files that were supposed to be created (per the plan) and verify each one exists.
+- For each file, confirm it exports the expected symbols.
+- Confirm the main entry file (`app.tsx`) imports from all new files correctly.
+
+### 6. When in doubt, re-read the source
+- Before editing a file, always read its current content first. Never assume you know what the file contains.
+- After writing a file, re-read it to confirm the write was correct.
+
+### 7. Do not silently drop parts of the plan
+- If you cannot complete a step, say so explicitly and explain why.
+- Never move to the next step without either completing the current one or flagging it as blocked.
+
+### Common Sonnet failure patterns to avoid
+| Failure | What happens | How to prevent |
+|---------|-------------|----------------|
+| Missing import after extraction | `ReferenceError: X is not defined` at runtime | Rule 2: scan for dangling references |
+| Skipped extraction step | File stays monolithic, plan incomplete | Rule 1: execute every step, verify at end |
+| Build passes but app crashes | Vite tree-shakes unused imports, hiding errors | Rule 3: trace runtime references manually |
+| Orphan imports left behind | Unused imports bloat the file | Rule 4: clean up after every extraction |
 
 ## If Something Is Missing
 If required setup data is missing, ask directly and continue only after confirmation.
