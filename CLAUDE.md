@@ -118,6 +118,7 @@ From the Operations tab:
 - `WATCHDOG_INTERVAL_MS` - Watchdog check interval (default `1200000` = 20min).
 - `WATCHDOG_MAX_WARNINGS` - Warnings before killing a task process (default `3`).
 - `WATCHDOG_MAX_CONSECUTIVE_FAILURES` - Same-task failures before halting the orchestrator (default `3`).
+- `GLOBAL_MAX_CONSECUTIVE_FAILURES` - Consecutive failures across all tasks before halting (default `5`). Catches systemic issues like broken auth or CLI.
 
 ## Code Standards
 - **All code must be written in English.** This includes variable names, function names, class names, comments, log messages, error messages, JSDoc annotations, and any other code artifacts. The only exception is user-facing UI text that is explicitly requested in another language.

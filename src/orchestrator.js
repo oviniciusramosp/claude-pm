@@ -263,10 +263,17 @@ export class Orchestrator {
             if (isClaudeLimitError(reviewError.message)) {
               const resetHint = extractResetHint(reviewError.message);
               this.logger.warn(
-                `Claude usage limit reached during Opus review. Queue paused until ${resetHint || 'unknown reset time'}.`
+                `Claude usage limit reached during Opus review. Orchestrator halted until ${resetHint || 'unknown reset time'}.`
               );
-            } else {
-              this.logger.error(`Opus review failed for "${task.name}": ${reviewError.message}`);
+              this.halted = true;
+              break;
+            }
+
+            this.logger.error(`Opus review failed for "${task.name}": ${reviewError.message}`);
+
+            const shouldHaltReview = this.watchdog.recordFailure(task.id, task.name);
+            if (shouldHaltReview) {
+              this.halted = true;
             }
 
             break;
@@ -289,11 +296,13 @@ export class Orchestrator {
 
         if (isClaudeLimitError(error.message)) {
           this.logger.warn(
-            `Claude usage limit reached. Queue paused until ${resetHint || 'unknown reset time'}.`
+            `Claude usage limit reached. Orchestrator halted until ${resetHint || 'unknown reset time'}.`
           );
-        } else {
-          this.logger.error(`Failed to execute task "${task.name}": ${error.message}`);
+          this.halted = true;
+          break;
         }
+
+        this.logger.error(`Failed to execute task "${task.name}": ${error.message}`);
 
         const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
         if (shouldHalt) {
@@ -451,10 +460,17 @@ export class Orchestrator {
             if (isClaudeLimitError(reviewError.message)) {
               const resetHint = extractResetHint(reviewError.message);
               this.logger.warn(
-                `Claude usage limit reached during Opus review. Queue paused until ${resetHint || 'unknown reset time'}.`
+                `Claude usage limit reached during Opus review. Orchestrator halted until ${resetHint || 'unknown reset time'}.`
               );
-            } else {
-              this.logger.error(`Opus review failed for "${task.name}": ${reviewError.message}`);
+              this.halted = true;
+              break;
+            }
+
+            this.logger.error(`Opus review failed for "${task.name}": ${reviewError.message}`);
+
+            const shouldHaltReview = this.watchdog.recordFailure(task.id, task.name);
+            if (shouldHaltReview) {
+              this.halted = true;
             }
 
             break;
@@ -477,11 +493,13 @@ export class Orchestrator {
 
         if (isClaudeLimitError(error.message)) {
           this.logger.warn(
-            `Claude usage limit reached. Queue paused until ${resetHint || 'unknown reset time'}.`
+            `Claude usage limit reached. Orchestrator halted until ${resetHint || 'unknown reset time'}.`
           );
-        } else {
-          this.logger.error(`Failed to execute task "${task.name}": ${error.message}`);
+          this.halted = true;
+          break;
         }
+
+        this.logger.error(`Failed to execute task "${task.name}": ${error.message}`);
 
         const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
         if (shouldHalt) {
@@ -574,10 +592,17 @@ export class Orchestrator {
           if (isClaudeLimitError(reviewError.message)) {
             const resetHint = extractResetHint(reviewError.message);
             this.logger.warn(
-              `Claude usage limit reached during Epic review. Queue paused until ${resetHint || 'unknown reset time'}.`
+              `Claude usage limit reached during Epic review. Orchestrator halted until ${resetHint || 'unknown reset time'}.`
             );
-          } else {
-            this.logger.error(`Epic review failed for "${task.name}": ${reviewError.message}`);
+            this.halted = true;
+            return;
+          }
+
+          this.logger.error(`Epic review failed for "${task.name}": ${reviewError.message}`);
+
+          const shouldHaltEpic = this.watchdog.recordFailure(task.id, task.name);
+          if (shouldHaltEpic) {
+            this.halted = true;
           }
 
           return;

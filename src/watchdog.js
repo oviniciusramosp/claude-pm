@@ -10,6 +10,7 @@ export class Watchdog {
     this.taskName = null;
 
     this.consecutiveFailures = new Map();
+    this.globalConsecutiveFailures = 0;
   }
 
   start(task) {
@@ -64,8 +65,10 @@ export class Watchdog {
   recordFailure(taskId, taskName) {
     const current = (this.consecutiveFailures.get(taskId) || 0) + 1;
     this.consecutiveFailures.set(taskId, current);
+    this.globalConsecutiveFailures += 1;
 
     const maxFailures = this.config.watchdog.maxConsecutiveFailures;
+    const maxGlobal = this.config.watchdog.maxGlobalConsecutiveFailures;
 
     if (current >= maxFailures) {
       this.logger.error(
@@ -75,8 +78,16 @@ export class Watchdog {
       return true;
     }
 
+    if (this.globalConsecutiveFailures >= maxGlobal) {
+      this.logger.error(
+        `Watchdog: ${this.globalConsecutiveFailures} consecutive failures across all tasks. Orchestrator halted. Manual intervention required.`,
+        { globalConsecutiveFailures: this.globalConsecutiveFailures, maxGlobal }
+      );
+      return true;
+    }
+
     this.logger.warn(
-      `Watchdog: task "${taskName}" failed (${current}/${maxFailures} consecutive failures).`,
+      `Watchdog: task "${taskName}" failed (task: ${current}/${maxFailures}, global: ${this.globalConsecutiveFailures}/${maxGlobal}).`,
       { taskId }
     );
 
@@ -85,6 +96,7 @@ export class Watchdog {
 
   recordSuccess(taskId) {
     this.consecutiveFailures.delete(taskId);
+    this.globalConsecutiveFailures = 0;
   }
 
   clearTimer() {

@@ -91,7 +91,8 @@ export const config = {
     enabled: boolean('WATCHDOG_ENABLED', true),
     intervalMs: number('WATCHDOG_INTERVAL_MS', 20 * 60 * 1000),
     maxWarnings: number('WATCHDOG_MAX_WARNINGS', 3),
-    maxConsecutiveFailures: number('WATCHDOG_MAX_CONSECUTIVE_FAILURES', 3)
+    maxConsecutiveFailures: number('WATCHDOG_MAX_CONSECUTIVE_FAILURES', 3),
+    maxGlobalConsecutiveFailures: number('GLOBAL_MAX_CONSECUTIVE_FAILURES', 5)
   },
   manualRun: {
     token: process.env.MANUAL_RUN_TOKEN || ''
