@@ -1,6 +1,15 @@
 import { spawn } from 'node:child_process';
 const FIXED_CLAUDE_COMMAND = '/opt/homebrew/bin/claude --print';
 
+function isLikelyTaskContract(line) {
+  const trimmed = (line || '').trim();
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+    return false;
+  }
+
+  return /^\{.*"status"\s*:\s*"(done|blocked)"/.test(trimmed);
+}
+
 function parseJsonFromOutput(stdout) {
   const trimmed = (stdout || '').trim();
   if (!trimmed) {
@@ -98,6 +107,7 @@ export function runClaudeTask(task, prompt, config, { signal, overrideModel } = 
 
     let stdout = '';
     let stderr = '';
+    let streamLineBuffer = '';
 
     const timer = setTimeout(() => {
       child.kill('SIGTERM');
@@ -108,7 +118,16 @@ export function runClaudeTask(task, prompt, config, { signal, overrideModel } = 
       stdout += output;
 
       if (config.claude.streamOutput) {
-        process.stdout.write(output);
+        streamLineBuffer += output;
+        const lines = streamLineBuffer.split('\n');
+        streamLineBuffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (isLikelyTaskContract(line)) {
+            continue;
+          }
+          process.stdout.write(line + '\n');
+        }
       }
     });
 
@@ -130,6 +149,13 @@ export function runClaudeTask(task, prompt, config, { signal, overrideModel } = 
     child.on('close', (code, exitSignal) => {
       clearTimeout(timer);
       if (signal) signal.removeEventListener('abort', onAbort);
+
+      if (config.claude.streamOutput && streamLineBuffer.trim()) {
+        if (!isLikelyTaskContract(streamLineBuffer)) {
+          process.stdout.write(streamLineBuffer + '\n');
+        }
+        streamLineBuffer = '';
+      }
 
       if (code !== 0) {
         const summary = summarizeCommandOutput(stderr, stdout);

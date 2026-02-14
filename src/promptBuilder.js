@@ -21,7 +21,7 @@ export function buildTaskPrompt(task, markdown, options = {}) {
     '',
     'Contexto da tarefa:',
     `- Nome: ${normalizeText(task.name)}`,
-    `- ID no Notion: ${normalizeText(task.id)}`,
+    `- ID: ${normalizeText(task.id)}`,
     `- Tipo: ${normalizeText(task.type)}`,
     `- Prioridade: ${normalizeText(task.priority)}`,
     `- Rode os seguintes agentes para essa tarefa: ${agents}`,
@@ -47,7 +47,7 @@ export function buildTaskPrompt(task, markdown, options = {}) {
     }
 
     if (forceCommit) {
-      basePrompt.push('- Ao terminar a tarefa, se tudo estiver ok, crie o commit para mim antes de mover as tarefas para Done no Notion.');
+      basePrompt.push('- Ao terminar a tarefa, se tudo estiver ok, crie o commit para mim antes de mover as tarefas para Done.');
     }
 
     basePrompt.push('');
@@ -68,6 +68,29 @@ export function buildTaskPrompt(task, markdown, options = {}) {
   }
 
   return basePrompt.join('\n');
+}
+
+export function buildRetryPrompt(task, originalPrompt) {
+  const lines = [
+    `# RETRY: Task "${normalizeText(task.name)}" - previous attempt produced no artifacts`,
+    '',
+    'Your previous execution returned status "done", but post-execution validation found:',
+    '- No new commits in the repository.',
+    '- No modified or new files in the working directory.',
+    '- The declared output files do not exist on disk.',
+    '',
+    'This means the task was NOT actually completed. Your response was a hallucination.',
+    'You MUST actually create files, write code, run commands, and make real changes this time.',
+    'Do NOT just respond with a JSON contract without doing the work first.',
+    '',
+    '---',
+    '',
+    'Original task instructions:',
+    '',
+    originalPrompt
+  ];
+
+  return lines.join('\n');
 }
 
 export function buildTaskCompletionNotes(task, execution) {
@@ -120,7 +143,7 @@ export function buildReviewPrompt(task, markdown, executionResult) {
     '',
     'Contexto da tarefa:',
     `- Nome: ${normalizeText(task.name)}`,
-    `- ID no Notion: ${normalizeText(task.id)}`,
+    `- ID: ${normalizeText(task.id)}`,
     `- Tipo: ${normalizeText(task.type)}`,
     `- Prioridade: ${normalizeText(task.priority)}`,
     `- Agentes: ${agents}`,
@@ -168,7 +191,7 @@ export function buildEpicReviewPrompt(epicTask, children, epicSummary) {
     '',
     'Contexto do Epic:',
     `- Nome: ${normalizeText(epicTask.name)}`,
-    `- ID no Notion: ${normalizeText(epicTask.id)}`,
+    `- ID: ${normalizeText(epicTask.id)}`,
     `- Tipo: ${normalizeText(epicTask.type)}`,
     `- Prioridade: ${normalizeText(epicTask.priority)}`,
     `- Duracao total acumulada: ${formatDuration(epicSummary.totalDurationMs)}`,
@@ -203,18 +226,23 @@ export function buildEpicReviewPrompt(epicTask, children, epicSummary) {
 
 export function formatDuration(ms) {
   if (!ms || ms <= 0) {
-    return '0m';
+    return '0s';
   }
 
   const totalSeconds = Math.floor(ms / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
 
-  if (hours === 0) {
-    return `${minutes}m`;
+  if (hours > 0) {
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
   }
 
-  return `${hours}h ${minutes}m`;
+  if (minutes > 0) {
+    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+  }
+
+  return `${seconds}s`;
 }
 
 export function buildEpicSummary(epicTask, summary) {
