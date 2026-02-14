@@ -1,0 +1,40 @@
+{
+  "name": "product-manager-automation",
+  "version": "1.0.0",
+  "description": "Automacao de Product Manager com Notion + Claude Code",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "NODE_OPTIONS='--disable-warning=DEP0040' node --watch src/index.js",
+    "start": "NODE_OPTIONS='--disable-warning=DEP0040' node src/index.js",
+    "test": "node --test",
+    "panel": "npm run panel:build && node scripts/panelServer.js",
+    "panel:build": "vite build --config panel/vite.config.mjs",
+    "panel:dev": "vite --config panel/vite.config.mjs",
+    "setup:claude-md": "node scripts/setupClaudeMd.js",
+    "claude:chat": "node scripts/claudeManual.js --chat",
+    "claude:manual": "node scripts/claudeManual.js"
+  },
+  "dependencies": {
+    "@notionhq/client": "^2.3.0",
+    "@react-stately/utils": "^3.11.0",
+    "@tailwindcss/typography": "^0.5.19",
+    "@untitledui/icons": "^0.0.21",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "react": "^19.2.4",
+    "react-aria-components": "^1.15.1",
+    "react-dom": "^19.2.4",
+    "tailwind-merge": "^3.4.0",
+    "tailwindcss-animate": "^1.0.7",
+    "tailwindcss-react-aria-components": "^2.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.18",
+    "@vitejs/plugin-react": "^5.1.4",
+    "tailwindcss": "^4.1.18",
+    "vite": "^7.3.1"
+  }
+}
