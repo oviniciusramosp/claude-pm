@@ -3,15 +3,18 @@
 import {
   Activity,
   AlertCircle,
+  Beaker01,
   CheckCircle,
   Columns03,
   Database01,
   File03,
   Folder,
+  GitCommit,
   InfoCircle,
   Key01,
   LockUnlocked01,
   MessageChatCircle,
+  PlayCircle,
   Server01,
   Settings01,
   TerminalBrowser,
@@ -124,6 +127,24 @@ export const TOGGLE_CONFIG: ToggleConfig[] = [
     label: 'Epic Review Before Closing',
     icon: CheckCircle,
     description: 'When all sub-tasks are done, Opus runs tests and reviews the entire Epic before moving it to Done.'
+  },
+  {
+    key: 'FORCE_TEST_CREATION',
+    label: 'Force Test Creation',
+    icon: Beaker01,
+    description: 'Claude must create automated tests for each task when applicable.'
+  },
+  {
+    key: 'FORCE_TEST_RUN',
+    label: 'Force Test Run',
+    icon: PlayCircle,
+    description: 'Claude must run all tests and ensure they pass before finishing a task.'
+  },
+  {
+    key: 'FORCE_COMMIT',
+    label: 'Force Commit',
+    icon: GitCommit,
+    description: 'Claude must create a commit before moving the task to Done.'
   }
 ];
 
@@ -152,7 +173,7 @@ export const SETUP_SECTIONS: SetupSection[] = [
     title: 'Execution & Logs',
     description: 'Controls terminal streaming and prompt logging for task runs.',
     textKeys: [],
-    toggleKeys: ['CLAUDE_STREAM_OUTPUT', 'CLAUDE_LOG_PROMPT', 'OPUS_REVIEW_ENABLED', 'EPIC_REVIEW_ENABLED']
+    toggleKeys: ['CLAUDE_STREAM_OUTPUT', 'CLAUDE_LOG_PROMPT', 'OPUS_REVIEW_ENABLED', 'EPIC_REVIEW_ENABLED', 'FORCE_TEST_CREATION', 'FORCE_TEST_RUN', 'FORCE_COMMIT']
   }
 ];
 

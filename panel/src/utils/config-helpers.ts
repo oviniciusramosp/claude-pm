@@ -33,7 +33,10 @@ export function buildInitialConfig(): Record<string, string | boolean> {
     CLAUDE_STREAM_OUTPUT: true,
     CLAUDE_LOG_PROMPT: true,
     OPUS_REVIEW_ENABLED: false,
-    EPIC_REVIEW_ENABLED: false
+    EPIC_REVIEW_ENABLED: false,
+    FORCE_TEST_CREATION: false,
+    FORCE_TEST_RUN: false,
+    FORCE_COMMIT: false
   };
 }
 

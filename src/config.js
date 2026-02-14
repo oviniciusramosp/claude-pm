@@ -78,7 +78,10 @@ export const config = {
     logPrompt: boolean('CLAUDE_LOG_PROMPT', true),
     fullAccess: boolean('CLAUDE_FULL_ACCESS', false),
     opusReviewEnabled: boolean('OPUS_REVIEW_ENABLED', false),
-    epicReviewEnabled: boolean('EPIC_REVIEW_ENABLED', false)
+    epicReviewEnabled: boolean('EPIC_REVIEW_ENABLED', false),
+    forceTestCreation: boolean('FORCE_TEST_CREATION', false),
+    forceTestRun: boolean('FORCE_TEST_RUN', false),
+    forceCommit: boolean('FORCE_COMMIT', false)
   },
   state: {
     runStorePath: path.resolve(process.cwd(), process.env.RUN_STORE_PATH || '.data/runs.json'),

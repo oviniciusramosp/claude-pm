@@ -160,7 +160,12 @@ export class Orchestrator {
       }
 
       const markdown = await this.notionClient.getTaskMarkdown(task.id);
-      const prompt = buildTaskPrompt(task, markdown, this.config.claude.extraPrompt);
+      const prompt = buildTaskPrompt(task, markdown, {
+        extraPrompt: this.config.claude.extraPrompt,
+        forceTestCreation: this.config.claude.forceTestCreation,
+        forceTestRun: this.config.claude.forceTestRun,
+        forceCommit: this.config.claude.forceCommit
+      });
       if (this.config.claude.logPrompt) {
         this.logger.block(`Prompt sent to Claude Code for "${task.name}"`, prompt);
       }

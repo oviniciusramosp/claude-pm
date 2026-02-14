@@ -6,7 +6,14 @@ function normalizeText(value) {
   return String(value).trim();
 }
 
-export function buildTaskPrompt(task, markdown, extraPrompt = '') {
+export function buildTaskPrompt(task, markdown, options = {}) {
+  const {
+    extraPrompt = '',
+    forceTestCreation = false,
+    forceTestRun = false,
+    forceCommit = false
+  } = typeof options === 'string' ? { extraPrompt: options } : options;
+
   const agents = task.agents.length > 0 ? task.agents.join(', ') : '(nenhum agente informado)';
 
   const basePrompt = [
@@ -25,15 +32,34 @@ export function buildTaskPrompt(task, markdown, extraPrompt = '') {
     '- Conclua os Acceptance Criteria da tarefa.',
     '- Ao finalizar com sucesso, crie um commit com mensagem clara e objetiva.',
     '- Nao inclua segredos em codigo, commits ou logs.',
-    '',
-    'Requisitos de resposta:',
-    '- Responda APENAS com um JSON valido em uma unica linha.',
-    '- Estrutura obrigatoria:',
-    '{"status":"done|blocked","summary":"...","notes":"...","files":["..."],"tests":"..."}',
-    '- Use "done" apenas quando a implementacao estiver concluida.',
-    '- Se houver bloqueio, use "blocked" e detalhe em notes.',
     ''
   ];
+
+  if (forceTestCreation || forceTestRun || forceCommit) {
+    basePrompt.push('Regras obrigatorias ao finalizar:');
+
+    if (forceTestCreation) {
+      basePrompt.push('- Ao terminar a tarefa, certifique-se de que testes automatizados para ela foram criados (quando fizer sentido).');
+    }
+
+    if (forceTestRun) {
+      basePrompt.push('- Ao terminar a tarefa, certifique-se de rodar os testes e todos eles passarem.');
+    }
+
+    if (forceCommit) {
+      basePrompt.push('- Ao terminar a tarefa, se tudo estiver ok, crie o commit para mim antes de mover as tarefas para Done no Notion.');
+    }
+
+    basePrompt.push('');
+  }
+
+  basePrompt.push('Requisitos de resposta:');
+  basePrompt.push('- Responda APENAS com um JSON valido em uma unica linha.');
+  basePrompt.push('- Estrutura obrigatoria:');
+  basePrompt.push('{"status":"done|blocked","summary":"...","notes":"...","files":["..."],"tests":"..."}');
+  basePrompt.push('- Use "done" apenas quando a implementacao estiver concluida.');
+  basePrompt.push('- Se houver bloqueio, use "blocked" e detalhe em notes.');
+  basePrompt.push('');
 
   if (extraPrompt && extraPrompt.trim().length > 0) {
     basePrompt.push('Instrucoes adicionais do operador:');

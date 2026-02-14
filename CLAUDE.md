@@ -97,6 +97,9 @@ From the Operations tab:
 - `CLAUDE_LOG_PROMPT` - Log prompts sent to Claude (default `true`).
 - `OPUS_REVIEW_ENABLED` - When true, tasks completed by non-Opus models are reviewed by Opus before moving to Done (default `false`).
 - `EPIC_REVIEW_ENABLED` - When true, completed Epics are reviewed by Opus (runs tests + full review) before moving to Done (default `false`).
+- `FORCE_TEST_CREATION` - When true, Claude must create automated tests for each task when applicable (default `false`).
+- `FORCE_TEST_RUN` - When true, Claude must run all tests and ensure they pass before finishing a task (default `false`).
+- `FORCE_COMMIT` - When true, Claude must create a commit before moving the task to Done (default `false`).
 - `CLAUDE_TIMEOUT_MS` - Claude execution timeout (default `4500000` = 75min). Should be higher than `WATCHDOG_INTERVAL_MS * WATCHDOG_MAX_WARNINGS`.
 - `CLAUDE_EXTRA_PROMPT` - Additional prompt text appended to every task.
 - `PORT` - Automation API port (default `3000`).

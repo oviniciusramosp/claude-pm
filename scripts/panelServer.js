@@ -1054,6 +1054,9 @@ app.get('/api/config', async (_req, res) => {
       CLAUDE_LOG_PROMPT: env.CLAUDE_LOG_PROMPT || 'true',
       OPUS_REVIEW_ENABLED: env.OPUS_REVIEW_ENABLED || 'false',
       EPIC_REVIEW_ENABLED: env.EPIC_REVIEW_ENABLED || 'false',
+      FORCE_TEST_CREATION: env.FORCE_TEST_CREATION || 'false',
+      FORCE_TEST_RUN: env.FORCE_TEST_RUN || 'false',
+      FORCE_COMMIT: env.FORCE_COMMIT || 'false',
       MANUAL_RUN_TOKEN: env.MANUAL_RUN_TOKEN || ''
     }
   });
