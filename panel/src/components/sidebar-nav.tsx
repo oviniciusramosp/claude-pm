@@ -143,7 +143,7 @@ export function SidebarNav({
 
         <Button
           size="sm"
-          color="secondary"
+          color="tertiary"
           iconLeading={Settings01}
           className="w-full justify-center"
           onPress={() => setRuntimeSettingsModalOpen(true)}
