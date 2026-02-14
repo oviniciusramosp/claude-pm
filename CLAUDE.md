@@ -33,11 +33,10 @@ npm run panel:dev
 ```
 
 ### Panel Features
-- **Setup Tab** - Form-based configuration wizard with validation and help tooltips for all `.env` values (Notion token, database ID, Claude token, working directory, runtime toggles).
-- **Operations Tab** - Start/stop/restart the Automation API, trigger manual runs.
-- **Live Log Feed** - Real-time streaming of all logs via SSE, color-coded by level and source (Panel, API, Claude, Chat).
-- **Claude Chat** - Send one-shot prompts to Claude directly from the panel.
-- **Theme Toggle** - Light/dark mode with OS preference detection.
+- **Sidebar Navigation** - Persistent left sidebar with page navigation, process controls (start/stop API, run queue, status badges), runtime settings access, and theme toggle.
+- **Setup Page** - Form-based configuration wizard with validation and help tooltips for all `.env` values (Notion token, database ID, Claude token, working directory, runtime toggles).
+- **Feed Page** - Real-time streaming of all logs via SSE, color-coded by level and source (Panel, API, Claude, Chat), plus Claude chat input.
+- **Theme Toggle** - Light/dark mode with OS preference detection (in sidebar footer).
 
 ### Panel Architecture
 - **Frontend**: React + Tailwind CSS + Base UI components, built with Vite (`panel/src/`).
@@ -225,9 +224,9 @@ Product Manager/
 │       │   ├── status-badge.tsx      # Status badge with dot
 │       │   ├── source-avatar.tsx     # Log source avatar
 │       │   ├── toast-notification.tsx # Toast component
-│       │   ├── panel-header.tsx      # Fixed header with nav
+│       │   ├── sidebar-nav.tsx       # Sidebar navigation + process controls
 │       │   ├── setup-tab.tsx         # Setup configuration form
-│       │   ├── operations-tab.tsx    # Process controls + live feed
+│       │   ├── feed-tab.tsx          # Live feed + Claude chat
 │       │   ├── save-confirm-modal.tsx    # Save confirmation dialog
 │       │   └── runtime-settings-modal.tsx # Runtime settings dialog
 │       ├── utils/

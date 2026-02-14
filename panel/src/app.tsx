@@ -486,28 +486,58 @@ export function App({ mode = 'light', setMode = () => {} }) {
   return (
     <div
       className={cx(
-        'min-h-screen transition-colors duration-300',
+        'flex min-h-screen transition-colors duration-300',
         isDark ? 'bg-linear-to-b from-gray-950 via-gray-900 to-gray-950' : 'bg-linear-to-b from-utility-brand-50 via-secondary to-primary'
       )}
     >
-      <PanelHeader
+      {sidebarOpen ? (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 transition-opacity lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      ) : null}
+
+      <SidebarNav
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={(tab) => { setActiveTab(tab); setSidebarOpen(false); }}
         isDark={isDark}
         onThemeToggle={onThemeToggle}
+        apiRunning={apiRunning}
+        apiHealthStatus={apiHealthStatus}
+        busy={busy}
+        runAction={runAction}
+        appError={serviceErrors.app}
+        apiError={serviceErrors.api}
+        onAppBadgeClick={() => {
+          if (serviceErrors.app) {
+            setErrorModal({ open: true, title: 'App error', message: serviceErrors.app });
+          }
+        }}
+        onApiBadgeClick={() => {
+          if (serviceErrors.api) {
+            setErrorModal({ open: true, title: 'API error', message: serviceErrors.api });
+          }
+        }}
+        setRuntimeSettingsModalOpen={setRuntimeSettingsModalOpen}
+        sidebarOpen={sidebarOpen}
+        setSidebarOpen={setSidebarOpen}
       />
 
-      <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-6 px-4 pb-5 pt-28 sm:px-6 sm:pt-24 lg:px-8">
-        <Tabs
-          selectedKey={activeTab}
-          onSelectionChange={(nextValue) => {
-            if (nextValue) {
-              setActiveTab(String(nextValue));
-            }
-          }}
-          className="gap-4"
-        >
-          <Tabs.Panel id={NAV_TAB_KEYS.setup} className="pt-2">
+      <main className="flex min-h-screen flex-1 flex-col lg:ml-[280px]">
+        <div className="flex items-center gap-3 border-b border-secondary bg-primary/90 px-4 py-3 backdrop-blur-xl lg:hidden">
+          <button
+            type="button"
+            className="rounded-lg p-1.5 text-tertiary transition hover:bg-primary_hover hover:text-secondary"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Open navigation"
+          >
+            <Menu01 className="size-5" />
+          </button>
+          <span className="text-sm font-semibold text-primary">PM Automation Panel</span>
+        </div>
+
+        <div className="mx-auto w-full max-w-[1200px] flex-1 px-4 py-6 sm:px-6 lg:px-8">
+          {activeTab === NAV_TAB_KEYS.setup ? (
             <SetupTab
               config={config}
               setConfig={setConfig}
@@ -523,14 +553,8 @@ export function App({ mode = 'light', setMode = () => {} }) {
               changedKeys={changedKeys}
               onSaveClick={onSaveClick}
             />
-          </Tabs.Panel>
-
-          <Tabs.Panel id={NAV_TAB_KEYS.operations} className="pt-2">
-            <OperationsTab
-              apiRunning={apiRunning}
-              apiHealthStatus={apiHealthStatus}
-              busy={busy}
-              runAction={runAction}
+          ) : (
+            <FeedTab
               logs={logs}
               logFeedRef={logFeedRef}
               chatDraft={chatDraft}
@@ -538,23 +562,11 @@ export function App({ mode = 'light', setMode = () => {} }) {
               sendClaudeChatMessage={sendClaudeChatMessage}
               onChatDraftKeyDown={onChatDraftKeyDown}
               copyLiveFeedMessage={copyLiveFeedMessage}
-              setRuntimeSettingsModalOpen={setRuntimeSettingsModalOpen}
-              appError={serviceErrors.app}
-              apiError={serviceErrors.api}
-              onAppBadgeClick={() => {
-                if (serviceErrors.app) {
-                  setErrorModal({ open: true, title: 'App error', message: serviceErrors.app });
-                }
-              }}
-              onApiBadgeClick={() => {
-                if (serviceErrors.api) {
-                  setErrorModal({ open: true, title: 'API error', message: serviceErrors.api });
-                }
-              }}
+              busy={busy}
             />
-          </Tabs.Panel>
-        </Tabs>
-      </div>
+          )}
+        </div>
+      </main>
 
       <SaveConfirmModal
         saveConfirm={saveConfirm}

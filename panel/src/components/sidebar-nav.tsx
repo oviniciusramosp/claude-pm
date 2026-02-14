@@ -3,7 +3,7 @@
 import { Asterisk02, Flash, Moon01, PlayCircle, Settings01, StopCircle, Sun } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { cx } from '@/utils/cx';
-import { SIDEBAR_NAV_ITEMS, PROCESS_ACTION_BUTTON_CLASS } from '../constants';
+import { SIDEBAR_NAV_ITEMS } from '../constants';
 import { Icon } from './icon';
 import { StatusBadge } from './status-badge';
 
@@ -59,7 +59,6 @@ export function SidebarNav({
 
       {/* Navigation */}
       <nav className="space-y-1 px-3" aria-label="Main navigation">
-        <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-quaternary">Navigation</p>
         {SIDEBAR_NAV_ITEMS.map((item) => {
           const isActive = activeTab === item.key;
           return (
@@ -86,35 +85,10 @@ export function SidebarNav({
       <div className="mx-4 mt-5 border-t border-secondary" />
 
       {/* Controls */}
-      <div className="mt-4 space-y-3 px-3">
-        <p className="px-3 text-[11px] font-semibold uppercase tracking-wider text-quaternary">Controls</p>
-
-        <div className="space-y-2.5 rounded-xl border border-secondary bg-secondary p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            {apiRunning ? (
-              <Button
-                size="sm"
-                color="secondary-destructive"
-                className={PROCESS_ACTION_BUTTON_CLASS}
-                iconLeading={StopCircle}
-                isLoading={Boolean(busy.stopApi)}
-                onPress={() => runAction('stopApi', '/api/process/api/stop', 'App stop requested')}
-              >
-                Stop
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                color="primary"
-                className={PROCESS_ACTION_BUTTON_CLASS}
-                iconLeading={PlayCircle}
-                isLoading={Boolean(busy.startApi)}
-                onPress={() => runAction('startApi', '/api/process/api/start', 'App started')}
-              >
-                Start
-              </Button>
-            )}
-
+      <div className="mt-4 space-y-2.5 px-3">
+        <div className="flex items-center gap-2 px-3">
+          <p className="m-0 text-[11px] font-semibold uppercase tracking-wider text-quaternary">Controls</p>
+          <div className="flex items-center gap-1.5">
             <StatusBadge
               color={appError ? 'error' : apiRunning ? 'success' : 'gray'}
               connectionState={apiRunning ? 'active' : 'inactive'}
@@ -122,7 +96,6 @@ export function SidebarNav({
             >
               App
             </StatusBadge>
-
             <StatusBadge
               color={apiError ? 'error' : apiHealthStatus.connectionState === 'active' ? 'success' : 'gray'}
               connectionState={apiHealthStatus.connectionState === 'active' ? 'active' : 'inactive'}
@@ -131,27 +104,52 @@ export function SidebarNav({
               API
             </StatusBadge>
           </div>
+        </div>
 
+        {apiRunning ? (
+          <Button
+            size="sm"
+            color="secondary-destructive"
+            className="w-full justify-center"
+            iconLeading={StopCircle}
+            isLoading={Boolean(busy.stopApi)}
+            onPress={() => runAction('stopApi', '/api/process/api/stop', 'App stop requested')}
+          >
+            Stop App
+          </Button>
+        ) : (
           <Button
             size="sm"
             color="primary"
-            iconLeading={Flash}
             className="w-full justify-center"
-            isLoading={Boolean(busy.runNow)}
-            onPress={() => runAction('runNow', '/api/automation/run', 'Manual run requested')}
+            iconLeading={PlayCircle}
+            isLoading={Boolean(busy.startApi)}
+            onPress={() => runAction('startApi', '/api/process/api/start', 'App started')}
           >
-            Run Queue
+            Start App
           </Button>
-        </div>
+        )}
 
-        <button
-          type="button"
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-1.5 text-sm text-tertiary transition hover:bg-primary_hover hover:text-secondary"
-          onClick={() => setRuntimeSettingsModalOpen(true)}
+        <Button
+          size="sm"
+          color="secondary"
+          iconLeading={Flash}
+          className="w-full justify-center"
+          isLoading={Boolean(busy.runNow)}
+          onPress={() => runAction('runNow', '/api/automation/run', 'Manual run requested')}
         >
-          <Icon icon={Settings01} className="size-4" />
-          <span>Runtime Settings</span>
-        </button>
+          Run Queue
+        </Button>
+
+        <Button
+          size="sm"
+          color="secondary"
+          iconLeading={Settings01}
+          className="w-full justify-center"
+          onPress={() => setRuntimeSettingsModalOpen(true)}
+        >
+          Runtime Settings
+        </Button>
       </div>
 
       {/* Spacer */}
