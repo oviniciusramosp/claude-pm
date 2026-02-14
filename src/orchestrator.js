@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { runClaudeTask } from './claudeRunner.js';
 import { buildEpicReviewPrompt, buildEpicSummary, buildRetryPrompt, buildReviewPrompt, buildTaskCompletionNotes, buildTaskPrompt, formatDuration } from './promptBuilder.js';
-import { allEpicChildrenAreDone, isEpicTask, pickNextEpic, pickNextEpicChild, pickNextTask, sortCandidates } from './selectTask.js';
+import { allEpicChildrenAreDone, hasIncompleteEpic, isEpicTask, pickNextEpic, pickNextEpicChild, pickNextTask, sortCandidates } from './selectTask.js';
 import { Watchdog } from './watchdog.js';
 
 function normalize(value) {
@@ -218,12 +218,30 @@ export class Orchestrator {
     const limit = maxTasks || this.config.queue.maxTasksPerRun;
     this.logger.info(`Starting board reconciliation (reason: ${reason})`);
 
+    // Check for incomplete epics first — they must be finished before standalone tasks.
+    const initialTasks = await this.boardClient.listTasks();
+    this.observeStatuses(initialTasks);
+    await this.closeCompletedEpics(initialTasks);
+
+    if (hasIncompleteEpic(initialTasks, this.config)) {
+      this.logger.info('Incomplete epic detected — delegating to epic reconciliation.');
+      await this.reconcileEpic(reason);
+      return;
+    }
+
     let processed = 0;
 
     for (let iteration = 0; iteration < limit; iteration += 1) {
       const tasks = await this.boardClient.listTasks();
       this.observeStatuses(tasks);
       await this.closeCompletedEpics(tasks);
+
+      // Re-check after closing epics — a new epic may now be the next priority.
+      if (hasIncompleteEpic(tasks, this.config)) {
+        this.logger.info('Incomplete epic detected mid-reconciliation — delegating to epic reconciliation.');
+        await this.reconcileEpic(reason);
+        break;
+      }
 
       const candidate = pickNextTask(tasks, this.config);
       if (!candidate) {
@@ -397,6 +415,7 @@ export class Orchestrator {
           }
         }
 
+        await this.boardClient.updateCheckboxes(task.id, finalExecution.completedAcs);
         await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.done);
         this.claudeCompletedTaskIds.delete(task.id);
         const completionNotes = buildTaskCompletionNotes(task, finalExecution);
@@ -649,6 +668,7 @@ export class Orchestrator {
           }
         }
 
+        await this.boardClient.updateCheckboxes(task.id, finalExecution.completedAcs);
         await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.done);
         this.claudeCompletedTaskIds.delete(task.id);
         const completionNotes = buildTaskCompletionNotes(task, finalExecution);

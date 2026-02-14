@@ -10,6 +10,92 @@ function isLikelyTaskContract(line) {
   return /^\{.*"status"\s*:\s*"(done|blocked)"/.test(trimmed);
 }
 
+function parseJsonLine(line) {
+  try {
+    return JSON.parse(line.trim());
+  } catch {
+    return null;
+  }
+}
+
+function formatToolProgress(block) {
+  const name = block.name || 'Tool';
+  const input = block.input || {};
+
+  switch (name) {
+    case 'Read':
+      return `Read → ${input.file_path || '(file)'}`;
+    case 'Edit':
+      return `Edit → ${input.file_path || '(file)'}`;
+    case 'Write':
+      return `Write → ${input.file_path || '(file)'}`;
+    case 'NotebookEdit':
+      return `NotebookEdit → ${input.notebook_path || '(notebook)'}`;
+    case 'Bash': {
+      const cmd = input.command || '';
+      return `Bash → ${cmd.length > 80 ? cmd.slice(0, 80) + '...' : cmd}`;
+    }
+    case 'Grep':
+      return `Grep → "${input.pattern || ''}"${input.path ? ' in ' + input.path : ''}`;
+    case 'Glob':
+      return `Glob → ${input.pattern || '(pattern)'}`;
+    case 'Task':
+      return `Task → ${input.description || '(subagent)'}`;
+    case 'WebSearch':
+      return `WebSearch → "${input.query || ''}"`;
+    case 'WebFetch':
+      return `WebFetch → ${input.url || '(url)'}`;
+    default:
+      return name;
+  }
+}
+
+function extractToolUseProgress(event) {
+  if (!event || event.role !== 'assistant') {
+    return null;
+  }
+
+  const content = Array.isArray(event.content) ? event.content : [];
+  const toolBlocks = content.filter((c) => c.type === 'tool_use');
+  if (toolBlocks.length === 0) {
+    return null;
+  }
+
+  return toolBlocks.map(formatToolProgress);
+}
+
+function parseStreamJsonResult(stdout) {
+  const lines = (stdout || '').trim().split('\n').filter(Boolean);
+
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const event = parseJsonLine(lines[i]);
+    if (!event || event.role !== 'assistant') {
+      continue;
+    }
+
+    const content = Array.isArray(event.content) ? event.content : [];
+    for (let j = content.length - 1; j >= 0; j -= 1) {
+      if (content[j].type !== 'text') {
+        continue;
+      }
+
+      const text = (content[j].text || '').trim();
+      const jsonMatch = text.match(/\{[\s\S]*"status"\s*:\s*"(done|blocked)"[\s\S]*\}/);
+      if (!jsonMatch) {
+        continue;
+      }
+
+      try {
+        return JSON.parse(jsonMatch[0]);
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return null;
+}
+
 function parseJsonFromOutput(stdout) {
   const trimmed = (stdout || '').trim();
   if (!trimmed) {
@@ -48,6 +134,10 @@ function buildCommand(config, task, overrideModel) {
 
   if (config.claude.fullAccess && !cmd.includes('--dangerously-skip-permissions')) {
     cmd += ' --dangerously-skip-permissions';
+  }
+
+  if (config.claude.streamOutput) {
+    cmd += ' --output-format stream-json';
   }
 
   return cmd;
@@ -108,6 +198,8 @@ export function runClaudeTask(task, prompt, config, { signal, overrideModel } = 
     let stdout = '';
     let stderr = '';
     let streamLineBuffer = '';
+    let streamJsonDetected = false;
+    const isStreamJsonMode = command.includes('--output-format stream-json');
 
     const timer = setTimeout(() => {
       child.kill('SIGTERM');
@@ -123,6 +215,20 @@ export function runClaudeTask(task, prompt, config, { signal, overrideModel } = 
         streamLineBuffer = lines.pop() || '';
 
         for (const line of lines) {
+          if (isStreamJsonMode) {
+            const event = parseJsonLine(line);
+            if (event) {
+              streamJsonDetected = true;
+              const toolMessages = extractToolUseProgress(event);
+              if (toolMessages) {
+                for (const msg of toolMessages) {
+                  process.stdout.write(`[PM_PROGRESS] ${msg}\n`);
+                }
+              }
+            }
+            continue;
+          }
+
           if (isLikelyTaskContract(line)) {
             continue;
           }
@@ -167,7 +273,7 @@ export function runClaudeTask(task, prompt, config, { signal, overrideModel } = 
         return;
       }
 
-      const parsed = parseJsonFromOutput(stdout) || {};
+      const parsed = (streamJsonDetected ? parseStreamJsonResult(stdout) : parseJsonFromOutput(stdout)) || {};
 
       resolve({
         status: parsed.status || 'done',
@@ -175,6 +281,7 @@ export function runClaudeTask(task, prompt, config, { signal, overrideModel } = 
         notes: parsed.notes || '',
         files: Array.isArray(parsed.files) ? parsed.files : [],
         tests: parsed.tests || '',
+        completedAcs: Array.isArray(parsed.completed_acs) ? parsed.completed_acs : [],
         stdout,
         stderr
       });

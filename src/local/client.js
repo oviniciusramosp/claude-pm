@@ -140,6 +140,40 @@ export class LocalBoardClient {
     return body;
   }
 
+  async updateCheckboxes(taskId, completedAcs) {
+    if (!Array.isArray(completedAcs) || completedAcs.length === 0) {
+      return;
+    }
+
+    const task = await this._findTaskById(taskId);
+    if (!task) {
+      return;
+    }
+
+    let content = await fs.readFile(task._filePath, 'utf8');
+    let updated = false;
+
+    for (const acText of completedAcs) {
+      const trimmed = (acText || '').trim();
+      if (!trimmed) {
+        continue;
+      }
+
+      const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = new RegExp(`^(\\s*-\\s*)\\[ \\](\\s+${escaped})`, 'gm');
+
+      const result = content.replace(pattern, '$1[x]$2');
+      if (result !== content) {
+        content = result;
+        updated = true;
+      }
+    }
+
+    if (updated) {
+      await fs.writeFile(task._filePath, content, 'utf8');
+    }
+  }
+
   async appendMarkdown(taskId, markdown) {
     if (!markdown || !markdown.trim()) {
       return;

@@ -56,7 +56,8 @@ export function buildTaskPrompt(task, markdown, options = {}) {
   basePrompt.push('Requisitos de resposta:');
   basePrompt.push('- Responda APENAS com um JSON valido em uma unica linha.');
   basePrompt.push('- Estrutura obrigatoria:');
-  basePrompt.push('{"status":"done|blocked","summary":"...","notes":"...","files":["..."],"tests":"..."}');
+  basePrompt.push('{"status":"done|blocked","summary":"...","notes":"...","files":["..."],"tests":"...","completed_acs":["..."]}');
+  basePrompt.push('- No campo "completed_acs", liste o texto exato de cada Acceptance Criteria concluido (sem o "- [ ] " inicial). Exemplo: se a AC e "- [ ] Login page renders correctly", inclua "Login page renders correctly".');
   basePrompt.push('- Use "done" apenas quando a implementacao estiver concluida.');
   basePrompt.push('- Se houver bloqueio, use "blocked" e detalhe em notes.');
   basePrompt.push('');
