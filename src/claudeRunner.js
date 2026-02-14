@@ -176,7 +176,7 @@ function buildCommand(config, task, overrideModel) {
   }
 
   if (config.claude.streamOutput) {
-    cmd += ' --output-format stream-json';
+    cmd += ' --verbose --output-format stream-json';
   }
 
   return cmd;

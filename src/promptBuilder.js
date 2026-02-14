@@ -11,7 +11,8 @@ export function buildTaskPrompt(task, markdown, options = {}) {
     extraPrompt = '',
     forceTestCreation = false,
     forceTestRun = false,
-    forceCommit = false
+    forceCommit = false,
+    claudeMdInjected = false
   } = typeof options === 'string' ? { extraPrompt: options } : options;
 
   const agents = task.agents.length > 0 ? task.agents.join(', ') : '(no agents specified)';
@@ -25,40 +26,53 @@ export function buildTaskPrompt(task, markdown, options = {}) {
     `- Type: ${normalizeText(task.type)}`,
     `- Priority: ${normalizeText(task.priority)}`,
     `- Run these agents for this task: ${agents}`,
-    '',
-    '='.repeat(80),
-    '🚨 CRITICAL: ACCEPTANCE CRITERIA TRACKING (MANDATORY)',
-    '='.repeat(80),
-    '',
-    'You MUST track Acceptance Criteria completion in TWO ways:',
-    '',
-    '1. INCREMENTAL TRACKING (during execution):',
-    '   - As you complete EACH Acceptance Criteria individually, emit immediately:',
-    '   - Format: [AC_COMPLETE] <exact AC text without the "- [ ] " prefix>',
-    '   - Example: if AC is "- [ ] Login page renders correctly"',
-    '   - Emit: [AC_COMPLETE] Login page renders correctly',
-    '   - Emit this marker IMMEDIATELY after completing each AC, before moving to the next.',
-    '',
-    '2. FINAL TRACKING (in JSON response):',
-    '   - Your JSON response MUST include a "completed_acs" field',
-    '   - This field is MANDATORY, not optional',
-    '   - List ALL completed Acceptance Criteria exactly as they appear (without "- [ ]")',
-    '   - Example: "completed_acs": ["Login page renders correctly", "Form validates email"]',
-    '',
-    'If you complete ANY Acceptance Criteria but fail to include them in "completed_acs",',
-    'your response will be REJECTED and you will be asked to retry.',
-    '',
-    '='.repeat(80),
-    '',
-    normalizeText(markdown || '(no description)'),
-    '',
-    'Execution Rules:',
-    '- Complete all Acceptance Criteria in the task.',
-    '- Track EACH completed AC using [AC_COMPLETE] markers (see above).',
-    '- On successful completion, create a commit with a clear, objective message.',
-    '- Never include secrets in code, commits, or logs.',
     ''
   ];
+
+  if (!claudeMdInjected) {
+    basePrompt.push(
+      '='.repeat(80),
+      'ACCEPTANCE CRITERIA TRACKING (MANDATORY)',
+      '='.repeat(80),
+      '',
+      'You MUST track Acceptance Criteria completion in TWO ways:',
+      '',
+      '1. INCREMENTAL TRACKING (during execution):',
+      '   - As you complete EACH Acceptance Criteria individually, emit immediately:',
+      '   - Format: [AC_COMPLETE] <exact AC text without the "- [ ] " prefix>',
+      '   - Example: if AC is "- [ ] Login page renders correctly"',
+      '   - Emit: [AC_COMPLETE] Login page renders correctly',
+      '   - Emit this marker IMMEDIATELY after completing each AC, before moving to the next.',
+      '',
+      '2. FINAL TRACKING (in JSON response):',
+      '   - Your JSON response MUST include a "completed_acs" field',
+      '   - This field is MANDATORY, not optional',
+      '   - List ALL completed Acceptance Criteria exactly as they appear (without "- [ ]")',
+      '   - Example: "completed_acs": ["Login page renders correctly", "Form validates email"]',
+      '',
+      'If you complete ANY Acceptance Criteria but fail to include them in "completed_acs",',
+      'your response will be REJECTED and you will be asked to retry.',
+      '',
+      '='.repeat(80),
+      ''
+    );
+  }
+
+  basePrompt.push(
+    normalizeText(markdown || '(no description)'),
+    ''
+  );
+
+  if (!claudeMdInjected) {
+    basePrompt.push(
+      'Execution Rules:',
+      '- Complete all Acceptance Criteria in the task.',
+      '- Track EACH completed AC using [AC_COMPLETE] markers (see above).',
+      '- On successful completion, create a commit with a clear, objective message.',
+      '- Never include secrets in code, commits, or logs.',
+      ''
+    );
+  }
 
   if (forceTestCreation || forceTestRun || forceCommit) {
     basePrompt.push('Mandatory completion rules:');
@@ -78,41 +92,45 @@ export function buildTaskPrompt(task, markdown, options = {}) {
     basePrompt.push('');
   }
 
-  basePrompt.push('='.repeat(80));
-  basePrompt.push('RESPONSE REQUIREMENTS (MANDATORY)');
-  basePrompt.push('='.repeat(80));
-  basePrompt.push('');
-  basePrompt.push('You MUST respond with a valid JSON object in a single line.');
-  basePrompt.push('');
-  basePrompt.push('Required JSON structure:');
-  basePrompt.push('{');
-  basePrompt.push('  "status": "done|blocked",');
-  basePrompt.push('  "summary": "Brief summary of what was done",');
-  basePrompt.push('  "notes": "Additional details or context",');
-  basePrompt.push('  "files": ["path/to/file1.js", "path/to/file2.ts"],');
-  basePrompt.push('  "tests": "Test results summary",');
-  basePrompt.push('  "completed_acs": ["First AC text", "Second AC text", "Third AC text"]');
-  basePrompt.push('}');
-  basePrompt.push('');
-  basePrompt.push('Field requirements:');
-  basePrompt.push('- status: Use "done" only when implementation is complete. Use "blocked" if blocked.');
-  basePrompt.push('- summary: Concise description of what was accomplished.');
-  basePrompt.push('- notes: Any important details, decisions, or context.');
-  basePrompt.push('- files: Array of file paths that were created or modified.');
-  basePrompt.push('- tests: Summary of test results or "N/A" if not applicable.');
-  basePrompt.push('- completed_acs: 🚨 MANDATORY FIELD - Array of completed Acceptance Criteria texts.');
-  basePrompt.push('');
-  basePrompt.push('⚠️  WARNING: If you complete ANY Acceptance Criteria but omit them from "completed_acs",');
-  basePrompt.push('your response will be REJECTED. This field is NOT optional.');
-  basePrompt.push('');
-  basePrompt.push('Example valid response:');
-  basePrompt.push('{"status":"done","summary":"Implemented login page with form validation","notes":"Used React Hook Form for validation, added error messages","files":["src/pages/Login.tsx","src/components/LoginForm.tsx"],"tests":"5 tests passing: form renders, validates email, validates password, submits on valid input, shows error on invalid input","completed_acs":["Login page renders correctly","Form validates email format","Form validates password strength","Error messages are displayed","Submit button is disabled when invalid"]}');
-  basePrompt.push('');
-  basePrompt.push('='.repeat(80));
-  basePrompt.push('');
+  if (!claudeMdInjected) {
+    basePrompt.push(
+      '='.repeat(80),
+      'RESPONSE REQUIREMENTS (MANDATORY)',
+      '='.repeat(80),
+      '',
+      'You MUST respond with a valid JSON object in a single line.',
+      '',
+      'Required JSON structure:',
+      '{',
+      '  "status": "done|blocked",',
+      '  "summary": "Brief summary of what was done",',
+      '  "notes": "Additional details or context",',
+      '  "files": ["path/to/file1.js", "path/to/file2.ts"],',
+      '  "tests": "Test results summary",',
+      '  "completed_acs": ["First AC text", "Second AC text", "Third AC text"]',
+      '}',
+      '',
+      'Field requirements:',
+      '- status: Use "done" only when implementation is complete. Use "blocked" if blocked.',
+      '- summary: Concise description of what was accomplished.',
+      '- notes: Any important details, decisions, or context.',
+      '- files: Array of file paths that were created or modified.',
+      '- tests: Summary of test results or "N/A" if not applicable.',
+      '- completed_acs: MANDATORY FIELD - Array of completed Acceptance Criteria texts.',
+      '',
+      'WARNING: If you complete ANY Acceptance Criteria but omit them from "completed_acs",',
+      'your response will be REJECTED. This field is NOT optional.',
+      '',
+      'Example valid response:',
+      '{"status":"done","summary":"Implemented login page with form validation","notes":"Used React Hook Form for validation, added error messages","files":["src/pages/Login.tsx","src/components/LoginForm.tsx"],"tests":"5 tests passing: form renders, validates email, validates password, submits on valid input, shows error on invalid input","completed_acs":["Login page renders correctly","Form validates email format","Form validates password strength","Error messages are displayed","Submit button is disabled when invalid"]}',
+      '',
+      '='.repeat(80),
+      ''
+    );
+  }
 
   if (extraPrompt && extraPrompt.trim().length > 0) {
-    basePrompt.push('Instrucoes adicionais do operador:');
+    basePrompt.push('Additional operator instructions:');
     basePrompt.push(extraPrompt.trim());
     basePrompt.push('');
   }

@@ -127,13 +127,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
     }
   }, []);
 
-  useEffect(() => {
-    if (!logFeedRef.current) {
-      return;
-    }
 
-    logFeedRef.current.scrollTop = logFeedRef.current.scrollHeight;
-  }, [logs]);
 
   const callApi = useCallback(
     async (path, options = {}) => {
@@ -551,7 +545,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
         setSidebarOpen={setSidebarOpen}
       />
 
-      <main className="flex min-h-screen flex-1 flex-col lg:ml-[280px]">
+      <main className="flex h-screen flex-1 flex-col lg:ml-[280px]">
         <div className="flex items-center gap-3 border-b border-secondary bg-primary/90 px-4 py-3 backdrop-blur-xl lg:hidden">
           <button
             type="button"
@@ -565,7 +559,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
         </div>
 
         <div className={cx(
-          'mx-auto flex w-full min-h-0 flex-1 flex-col px-4 py-6 sm:px-6 lg:px-8',
+          'mx-auto flex w-full min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 sm:px-6 lg:px-8',
           activeTab === NAV_TAB_KEYS.board ? 'max-w-[1600px]' : 'max-w-[1200px]'
         )}>
           {activeTab === NAV_TAB_KEYS.setup ? (

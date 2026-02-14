@@ -4,6 +4,7 @@ import { logger } from './logger.js';
 import { LocalBoardClient } from './local/client.js';
 import { Orchestrator } from './orchestrator.js';
 import { RunStore } from './runStore.js';
+import { syncClaudeMd } from './claudeMdManager.js';
 const app = express();
 
 app.use(express.json({ limit: '2mb' }));
@@ -17,6 +18,14 @@ const orchestrator = new Orchestrator({
   boardClient,
   runStore
 });
+
+if (config.claude.injectClaudeMd) {
+  try {
+    await syncClaudeMd(config, logger);
+  } catch (error) {
+    logger.warn(`Failed to sync CLAUDE.md in target project: ${error.message}`);
+  }
+}
 
 function extractHeaderValue(req, headerName) {
   const header = req.headers[headerName];
@@ -152,6 +161,21 @@ app.post('/settings/runtime', (req, res) => {
       logPrompt: Boolean(config.claude.logPrompt)
     }
   });
+});
+
+app.post('/sync-claude-md', (req, res) => {
+  if (!checkManualToken(req, res)) {
+    return;
+  }
+
+  syncClaudeMd(config, logger)
+    .then((result) => {
+      res.json({ ok: true, ...result });
+    })
+    .catch((error) => {
+      logger.error(`Manual CLAUDE.md sync failed: ${error.message}`);
+      res.status(500).json({ ok: false, message: error.message });
+    });
 });
 
 app.use((error, _req, res, _next) => {

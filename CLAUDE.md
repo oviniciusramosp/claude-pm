@@ -409,6 +409,9 @@ For development with hot-reload:
 npm run panel:dev
 ```
 
+### Panel API Start Command
+When the panel starts the automation API (via the Start button or auto-start), it defaults to `npm start` (stable mode, no file watcher). This prevents `node --watch` from restarting the API when Claude modifies files during task execution, which would kill the running Claude subprocess. To override, set `PANEL_API_START_COMMAND` in `.env`.
+
 ### Panel Features
 - **Sidebar Navigation** - Persistent left sidebar with page navigation, process controls (start/stop API, run queue, status badges), runtime settings access, and theme toggle.
 - **Setup Page** - Form-based configuration wizard with validation and help tooltips for all `.env` values (Claude token, working directory, runtime toggles).
@@ -474,12 +477,14 @@ From the Operations tab:
 - `FORCE_TEST_CREATION` - When true, Claude must create automated tests for each task when applicable (default `false`).
 - `FORCE_TEST_RUN` - When true, Claude must run all tests and ensure they pass before finishing a task (default `false`).
 - `FORCE_COMMIT` - When true, Claude must create a commit before moving the task to Done (default `false`).
+- `INJECT_CLAUDE_MD` - When true, injects a managed section into the target project's CLAUDE.md with automation instructions (default `true`).
 - `CLAUDE_TIMEOUT_MS` - Claude execution timeout (default `4500000` = 75min). Should be higher than `WATCHDOG_INTERVAL_MS * WATCHDOG_MAX_WARNINGS`.
 - `CLAUDE_EXTRA_PROMPT` - Additional prompt text appended to every task.
 - `PORT` - Automation API port (default `3000`).
 - `PANEL_PORT` - Panel server port (default `4100`).
 - `PANEL_AUTO_OPEN` - Auto-open browser on panel start (default `true`).
 - `PANEL_AUTO_START_API` - Auto-start API when panel starts (default `false`).
+- `PANEL_API_START_COMMAND` - Command to start the API from the panel (default `npm start`). Use `npm run dev` only for local development of the automation engine itself.
 - `QUEUE_DEBOUNCE_MS` - Reconciliation debounce (default `1500`).
 - `QUEUE_ORDER` - Task ordering: `alphabetical` (default, A→Z by name) or `priority_then_alphabetical`.
 - `QUEUE_RUN_ON_STARTUP` - Run reconciliation on boot (default `true`).
@@ -579,15 +584,32 @@ If Claude fails mid-task, ACs already completed remain checked — progress is n
 
 As a fallback, the `completed_acs` field in the final JSON contract is also used to mark any remaining checkboxes before moving the task to Done.
 
+### AC Verification Gate
+After Claude finishes a task and all `completed_acs` checkboxes are marked, the orchestrator re-reads the task markdown and counts any remaining unchecked ACs (`- [ ]`). If any unchecked ACs remain, the task is **not moved to Done** — it stays in In Progress and is recorded as failed. This prevents tasks from being marked complete when Claude misses acceptance criteria.
+
+### CLAUDE.md Injection
+When `INJECT_CLAUDE_MD=true` (default), the automation injects a managed section into the **target project's** `CLAUDE.md` (at `CLAUDE_WORKDIR/CLAUDE.md`). This section contains AC tracking instructions, the JSON response format, and general rules. The managed section is delimited by `<!-- PRODUCT-MANAGER:START -->` and `<!-- PRODUCT-MANAGER:END -->` markers and is updated on every API startup. When injection is active, the task prompt skips these instructions to avoid duplication.
+
 ### Board Donut Chart
 Each task card on the Board page displays a donut chart showing `done/total` ACs. The counts come from parsing `- [ ]` (unchecked) and `- [x]` (checked) lines in the task markdown body. The chart turns green when all ACs are complete.
+
+### Epic Auto-Shutdown
+When the orchestrator finishes processing an epic (all children done, epic moved to Done), the automation API process exits automatically after a short delay. This prevents the orchestrator from picking up unrelated standalone tasks after an epic is completed. The panel will show the API as stopped; the user can restart it manually or let auto-start handle the next run.
+
+### Task Code Labels
+Log messages use structured task codes derived from file names:
+- Epic children: `S1.2 - Task Name` (from filename pattern `s1-2-...`)
+- Epics: `E1 - Epic Name` (from folder pattern `E01-...`)
+- Other tasks: just the task name
+
+This makes logs easier to scan when many tasks are processed.
 
 ## Logging Expectations
 Logs are streamed to the panel's Live Log Feed in real time. They are color-coded by level and tagged by source.
 
 Prefer concise, human-readable lines such as:
-- `INFO - Moved to In Progress: "Task Name"`
-- `SUCCESS - Moved to Done: "Task Name"`
+- `INFO - Moved to In Progress: "S1.1 - Task Name"`
+- `SUCCESS - Moved to Done: "S1.1 - Task Name"`
 - `SUCCESS - AC completed: "Login page renders correctly"`
 
 ## Project Structure
@@ -602,6 +624,7 @@ Product Manager/
 │   ├── orchestrator.js     # Queue logic & reconciliation
 │   ├── selectTask.js       # Task picking & epic detection
 │   ├── claudeRunner.js     # Claude subprocess execution
+│   ├── claudeMdManager.js  # Managed CLAUDE.md injection into target project
 │   ├── promptBuilder.js    # Prompt generation
 │   ├── config.js           # Environment config parsing
 │   ├── logger.js           # Colored console output

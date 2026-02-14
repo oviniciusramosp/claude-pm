@@ -62,7 +62,8 @@ export const config = {
     epicReviewEnabled: boolean('EPIC_REVIEW_ENABLED', false),
     forceTestCreation: boolean('FORCE_TEST_CREATION', false),
     forceTestRun: boolean('FORCE_TEST_RUN', false),
-    forceCommit: boolean('FORCE_COMMIT', false)
+    forceCommit: boolean('FORCE_COMMIT', false),
+    injectClaudeMd: boolean('INJECT_CLAUDE_MD', true)
   },
   state: {
     runStorePath: path.resolve(process.cwd(), process.env.RUN_STORE_PATH || '.data/runs.json'),

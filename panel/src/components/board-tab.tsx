@@ -1,7 +1,7 @@
 // panel/src/components/board-tab.tsx
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Columns03, Folder, RefreshCw01, Tool01, Users01 } from '@untitledui/icons';
+import { ChevronDown, Columns03, CpuChip01, Folder, RefreshCw01, Tool01, Users01 } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { cx } from '@/utils/cx';
@@ -96,8 +96,8 @@ function formatModelName(model: string): string | null {
 }
 
 function AcDonut({ done, total }: { done: number; total: number }) {
-  const size = 28;
-  const stroke = 3;
+  const size = 20;
+  const stroke = 2.5;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const progress = total > 0 ? done / total : 0;
@@ -105,33 +105,11 @@ function AcDonut({ done, total }: { done: number; total: number }) {
   const allDone = done === total;
 
   return (
-    <div className="relative flex items-center gap-1.5" title={`${done}/${total} ACs completed`}>
+    <div className="shrink-0" title={`${done}/${total} ACs completed`}>
       <svg width={size} height={size} className="-rotate-90">
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={stroke}
-          className="text-quaternary/40"
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={stroke}
-          strokeDasharray={circumference}
-          strokeDashoffset={dashOffset}
-          strokeLinecap="round"
-          className={allDone ? 'text-utility-success-500' : 'text-utility-brand-500'}
-        />
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={stroke} className="text-quaternary/40" />
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={stroke} strokeDasharray={circumference} strokeDashoffset={dashOffset} strokeLinecap="round" className={allDone ? 'text-utility-success-500' : 'text-utility-brand-500'} />
       </svg>
-      <span className={cx('text-[11px] font-medium tabular-nums', allDone ? 'text-utility-success-700' : 'text-tertiary')}>
-        {done}/{total}
-      </span>
     </div>
   );
 }
@@ -153,55 +131,68 @@ function BoardCard({ task, epic, allTasks, onClick }: { task: BoardTask; epic: b
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
       className={cx(
         'cursor-pointer rounded-xl border bg-primary p-3 shadow-xs transition hover:shadow-md hover:border-brand-solid',
-        epic ? 'border-l-4 border-l-utility-purple-500'
-          : parentEpicInProgress ? 'border-brand-primary/30'
+        epic ? 'border-l-4 border-l-utility-purple-500 border-secondary'
+          : parentEpicInProgress ? 'border-utility-brand-200'
           : 'border-secondary'
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-medium text-primary truncate">
-          {taskCode && <span className="text-tertiary font-mono mr-1.5">{taskCode}</span>}
-          {task.name}
-        </p>
-        {task.acTotal > 0 && (
-          <AcDonut done={task.acDone} total={task.acTotal} />
-        )}
-      </div>
-
-      {(task.priority || task.type || modelLabel) && (
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {task.priority && (
-            <Badge size="sm" color={priorityColor || 'gray'}>
-              {task.priority}
-            </Badge>
+      {/* Row 1: Epic reference + donut chart */}
+      {(parentEpic || task.acTotal > 0) && (
+        <div className="flex items-center gap-2 mb-1.5">
+          {parentEpic && (
+            <div className="flex items-center gap-1 text-xs text-tertiary truncate min-w-0">
+              <Icon icon={Folder} className="size-3 shrink-0" />
+              <span className="truncate">
+                {parentEpicCode && <span className="font-mono mr-1">{parentEpicCode}</span>}
+                {parentEpic.name}
+              </span>
+            </div>
           )}
+          {task.acTotal > 0 && (
+            <div className="ml-auto">
+              <AcDonut done={task.acDone} total={task.acTotal} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Row 2: Title (wraps when needed) */}
+      <p className="text-sm font-medium text-primary">
+        {taskCode && <span className="text-tertiary font-mono mr-1.5">{taskCode}</span>}
+        {task.name}
+      </p>
+
+      {/* Row 3: Type + Priority */}
+      {(task.type || task.priority) && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {task.type && (
             <Badge size="sm" color={typeColor || 'gray'}>
               {task.type}
             </Badge>
           )}
-          {modelLabel && (
-            <Badge size="sm" color="gray">
-              {modelLabel}
+          {task.priority && (
+            <Badge size="sm" color={priorityColor || 'gray'}>
+              {task.priority}
             </Badge>
           )}
         </div>
       )}
 
-      {parentEpic && (
-        <div className="mt-2 flex items-center gap-1 text-xs text-tertiary truncate">
-          <Icon icon={Folder} className="size-3 shrink-0" />
-          <span className="truncate">
-            {parentEpicCode && <span className="font-mono mr-1">{parentEpicCode}</span>}
-            {parentEpic.name}
-          </span>
-        </div>
-      )}
-
-      {task.agents.length > 0 && (
-        <div className="mt-2 flex items-center gap-1 text-xs text-tertiary">
-          <Icon icon={Users01} className="size-3" />
-          <span className="truncate">{task.agents.join(', ')}</span>
+      {/* Row 4: Agents + Model */}
+      {(task.agents.length > 0 || modelLabel) && (
+        <div className="mt-2 flex items-center gap-3 text-xs text-tertiary">
+          {task.agents.length > 0 && (
+            <div className="flex items-center gap-1 min-w-0">
+              <Icon icon={Users01} className="size-3 shrink-0" />
+              <span className="truncate">{task.agents.join(', ')}</span>
+            </div>
+          )}
+          {modelLabel && (
+            <div className="flex items-center gap-1 min-w-0">
+              <Icon icon={CpuChip01} className="size-3 shrink-0" />
+              <span className="truncate">{modelLabel}</span>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -228,7 +219,17 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const [refreshing, setRefreshing] = useState(false);
   const [fixing, setFixing] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null as BoardTask | null);
+  const [expandedEpics, setExpandedEpics] = useState<Set<string>>(new Set());
   const mountedRef = useRef(true);
+
+  const toggleEpic = useCallback((epicId: string) => {
+    setExpandedEpics((prev) => {
+      const next = new Set(prev);
+      if (next.has(epicId)) next.delete(epicId);
+      else next.add(epicId);
+      return next;
+    });
+  }, []);
 
   const fetchBoard = useCallback(
     async (silent = false) => {
@@ -477,9 +478,68 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                       No tasks
                     </div>
                   ) : (
-                    col.tasks.map((task) => (
-                      <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} />
-                    ))
+                    (() => {
+                      const isCollapsible = col.key === 'not_started' || col.key === 'done';
+
+                      if (!isCollapsible) {
+                        return col.tasks.map((task) => (
+                          <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} />
+                        ));
+                      }
+
+                      // Sort by execution order: group by epic root, parent before children
+                      const sorted = [...col.tasks].sort((a, b) => {
+                        const groupA = a.parentId || a.id.split('/')[0];
+                        const groupB = b.parentId || b.id.split('/')[0];
+                        if (groupA !== groupB) return groupA.localeCompare(groupB);
+                        // Epic parent comes before its children
+                        if (!a.parentId && b.parentId) return -1;
+                        if (a.parentId && !b.parentId) return 1;
+                        return a.id.localeCompare(b.id);
+                      });
+
+                      // Group epic children under their parent when both are in the same column
+                      const epicChildMap = new Map<string, BoardTask[]>();
+                      const groupedChildIds = new Set<string>();
+
+                      for (const t of sorted) {
+                        if (t.parentId && sorted.some((p) => p.id === t.parentId)) {
+                          if (!epicChildMap.has(t.parentId)) epicChildMap.set(t.parentId, []);
+                          epicChildMap.get(t.parentId)!.push(t);
+                          groupedChildIds.add(t.id);
+                        }
+                      }
+
+                      return sorted
+                        .filter((t) => !groupedChildIds.has(t.id))
+                        .map((task) => {
+                          const children = epicChildMap.get(task.id);
+                          if (children && children.length > 0) {
+                            const expanded = expandedEpics.has(task.id);
+                            return (
+                              <div key={task.id} className="flex flex-col gap-1.5">
+                                <BoardCard task={task} epic allTasks={tasks} onClick={() => setSelectedTask(task)} />
+                                <button
+                                  type="button"
+                                  onClick={() => toggleEpic(task.id)}
+                                  className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-tertiary hover:text-secondary hover:bg-primary_hover transition"
+                                >
+                                  <ChevronDown className={cx('size-3 transition-transform', !expanded && '-rotate-90')} />
+                                  <span>{children.length} {children.length === 1 ? 'story' : 'stories'}</span>
+                                </button>
+                                {expanded && (
+                                  <div className="ml-2 border-l-2 border-utility-purple-200 pl-2 flex flex-col gap-2">
+                                    {children.map((child) => (
+                                      <BoardCard key={child.id} task={child} epic={false} allTasks={tasks} onClick={() => setSelectedTask(child)} />
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+                          return <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} />;
+                        });
+                    })()
                   )}
                 </div>
               </div>

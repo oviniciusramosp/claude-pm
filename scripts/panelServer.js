@@ -678,7 +678,7 @@ async function ensureApiRunning() {
     return;
   }
 
-  const command = process.env.PANEL_API_START_COMMAND || 'npm run dev';
+  const command = process.env.PANEL_API_START_COMMAND || 'npm start';
   const started = startManagedProcess(state.api, command, 'api', getApiProcessEnvOverrides());
   if (!started && !state.api.process) {
     throw new Error('Failed to start API process');
@@ -861,7 +861,7 @@ async function autoStartApiIfNeeded() {
     return;
   }
 
-  const command = process.env.PANEL_API_START_COMMAND || 'npm run dev';
+  const command = process.env.PANEL_API_START_COMMAND || 'npm start';
   const started = startManagedProcess(state.api, command, 'api', getApiProcessEnvOverrides());
   if (started) {
     pushLog('info', LOG_SOURCE.panel, 'Automation App was started automatically when the panel opened.');
@@ -1192,7 +1192,7 @@ app.post('/api/system/select-directory', async (_req, res) => {
 });
 
 app.post('/api/process/api/start', (req, res) => {
-  const command = process.env.PANEL_API_START_COMMAND || 'npm run dev';
+  const command = process.env.PANEL_API_START_COMMAND || 'npm start';
   const started = startManagedProcess(state.api, command, 'api', getApiProcessEnvOverrides());
 
   if (!started) {
@@ -1214,7 +1214,7 @@ app.post('/api/process/api/stop', (req, res) => {
 });
 
 app.post('/api/process/api/restart', async (_req, res) => {
-  const command = process.env.PANEL_API_START_COMMAND || 'npm run dev';
+  const command = process.env.PANEL_API_START_COMMAND || 'npm start';
 
   try {
     const restarted = await restartManagedProcess(state.api, 'api', command, getApiProcessEnvOverrides());
@@ -1433,6 +1433,7 @@ app.post('/api/board/fix-order', async (_req, res) => {
     const fixedChildren = [];
     let foundFirstIncomplete = false;
 
+    // Pass 1: Fix epic-level ordering (only one epic active at a time).
     for (const epic of sorted) {
       const status = (epic.status || '').trim().toLowerCase();
       const isDone = status === doneStatus.toLowerCase();
@@ -1442,52 +1443,6 @@ app.post('/api/board/fix-order', async (_req, res) => {
 
       if (!foundFirstIncomplete) {
         foundFirstIncomplete = true;
-
-        // For the active epic, also fix out-of-order children.
-        if (isInProgress) {
-          const children = tasks.filter(
-            (t) => t.parentId === epic.id && !isEpicTask(t, tasks, boardConfig)
-          );
-          const sortedChildren = sortCandidates(children, queueOrder);
-
-          // Find the first non-Done child in sorted order.
-          const firstPendingIdx = sortedChildren.findIndex((c) => {
-            const cs = (c.status || '').trim().toLowerCase();
-            return cs !== doneStatus.toLowerCase();
-          });
-
-          if (firstPendingIdx !== -1) {
-            const firstPending = sortedChildren[firstPendingIdx];
-            const firstPendingStatus = (firstPending.status || '').trim().toLowerCase();
-
-            // If the first pending child is Not Started but a later child is In Progress,
-            // the order is wrong. Reset all non-Done children and re-stamp correctly.
-            if (firstPendingStatus === notStartedStatus.toLowerCase()) {
-              const hasLaterInProgress = sortedChildren.slice(firstPendingIdx + 1).some((c) => {
-                const cs = (c.status || '').trim().toLowerCase();
-                return cs === inProgressStatus.toLowerCase();
-              });
-
-              if (hasLaterInProgress) {
-                // Reset all non-Done children: first pending -> In Progress, rest -> Not Started.
-                for (let i = firstPendingIdx; i < sortedChildren.length; i++) {
-                  const child = sortedChildren[i];
-                  const cs = (child.status || '').trim().toLowerCase();
-                  if (cs === doneStatus.toLowerCase()) continue;
-
-                  const targetStatus = i === firstPendingIdx ? inProgressStatus : notStartedStatus;
-                  if (cs !== targetStatus.toLowerCase()) {
-                    await client.updateTaskStatus(child.id, targetStatus);
-                    if (cs === inProgressStatus.toLowerCase()) {
-                      fixedChildren.push(child.name);
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-
         continue;
       }
 
@@ -1508,6 +1463,54 @@ app.post('/api/board/fix-order', async (_req, res) => {
       }
     }
 
+    // Pass 2: Fix children ordering within every non-Done epic.
+    // Re-read tasks after pass 1 may have changed statuses.
+    const freshTasks = fixed.length > 0 ? await client.listTasks() : tasks;
+    const allEpics = freshTasks.filter((t) => isEpicTask(t, freshTasks, boardConfig));
+
+    for (const epic of allEpics) {
+      const epicStatus = (epic.status || '').trim().toLowerCase();
+      if (epicStatus === doneStatus.toLowerCase()) continue;
+
+      const children = freshTasks.filter(
+        (t) => t.parentId === epic.id && !isEpicTask(t, freshTasks, boardConfig)
+      );
+      if (children.length === 0) continue;
+
+      const sortedChildren = sortCandidates(children, queueOrder);
+
+      // Find the first non-Done child in sorted order.
+      const firstPendingIdx = sortedChildren.findIndex((c) => {
+        const cs = (c.status || '').trim().toLowerCase();
+        return cs !== doneStatus.toLowerCase();
+      });
+
+      if (firstPendingIdx === -1) continue; // All children done.
+
+      // Check if a later child is In Progress while this first pending child is not.
+      const hasLaterInProgress = sortedChildren.slice(firstPendingIdx + 1).some((c) => {
+        const cs = (c.status || '').trim().toLowerCase();
+        return cs === inProgressStatus.toLowerCase();
+      });
+
+      if (!hasLaterInProgress) continue;
+
+      // Out-of-order detected. Re-stamp: first pending -> In Progress, rest -> Not Started.
+      for (let i = firstPendingIdx; i < sortedChildren.length; i++) {
+        const child = sortedChildren[i];
+        const cs = (child.status || '').trim().toLowerCase();
+        if (cs === doneStatus.toLowerCase()) continue;
+
+        const targetStatus = i === firstPendingIdx ? inProgressStatus : notStartedStatus;
+        if (cs !== targetStatus.toLowerCase()) {
+          await client.updateTaskStatus(child.id, targetStatus);
+          if (cs === inProgressStatus.toLowerCase()) {
+            fixedChildren.push(child.name);
+          }
+        }
+      }
+    }
+
     const totalFixes = fixed.length + fixedChildren.length;
 
     if (totalFixes > 0) {
@@ -1523,7 +1526,7 @@ app.post('/api/board/fix-order', async (_req, res) => {
       // Restart the API process to interrupt any in-flight work on the wrong task.
       if (state.api.child) {
         pushLog('info', LOG_SOURCE.panel, 'Restarting API to interrupt out-of-order task execution...');
-        const command = process.env.PANEL_API_START_COMMAND || 'npm run dev';
+        const command = process.env.PANEL_API_START_COMMAND || 'npm start';
         try {
           await restartManagedProcess(state.api, 'api', command, getApiProcessEnvOverrides());
           pushLog('success', LOG_SOURCE.panel, 'API restarted. Orchestrator will pick up the correct task.');
