@@ -30,6 +30,7 @@ import { SetupTab } from './components/setup-tab';
 import { OperationsTab } from './components/operations-tab';
 import { SaveConfirmModal } from './components/save-confirm-modal';
 import { RuntimeSettingsModal } from './components/runtime-settings-modal';
+import { ErrorDetailModal } from './components/error-detail-modal';
 
 export function App({ mode = 'light', setMode = () => {} }) {
   const [config, setConfig] = useState(buildInitialConfig);
@@ -44,6 +45,8 @@ export function App({ mode = 'light', setMode = () => {} }) {
   const [revealedFields, setRevealedFields] = useState({});
   const [runtimeSettingsModalOpen, setRuntimeSettingsModalOpen] = useState(false);
   const [chatDraft, setChatDraft] = useState('');
+  const [serviceErrors, setServiceErrors] = useState({ app: null, api: null });
+  const [errorModal, setErrorModal] = useState({ open: false, title: '', message: '' });
   const logFeedRef = useRef(null);
   const didResolveInitialTabRef = useRef(false);
 
@@ -71,6 +74,12 @@ export function App({ mode = 'light', setMode = () => {} }) {
   const saveDisabled = hasBlockingErrors || !allFieldsValidated || changedKeys.length === 0 || Boolean(busy.save);
 
   const apiRunning = status?.api?.status === 'running';
+
+  useEffect(() => {
+    if (apiRunning) {
+      setServiceErrors((prev) => (prev.app ? { ...prev, app: null } : prev));
+    }
+  }, [apiRunning]);
 
   const onThemeToggle = useCallback(() => {
     setMode(isDark ? 'light' : 'dark');
@@ -221,6 +230,12 @@ export function App({ mode = 'light', setMode = () => {} }) {
   const runAction = useCallback(
     async (key, endpoint, successMessage) => {
       setBusy((prev) => ({ ...prev, [key]: true }));
+
+      const isAppAction = key === 'startApi' || key === 'stopApi';
+      if (isAppAction) {
+        setServiceErrors((prev) => ({ ...prev, app: null }));
+      }
+
       try {
         await callApi(endpoint, {
           method: 'POST',
@@ -229,7 +244,13 @@ export function App({ mode = 'light', setMode = () => {} }) {
         showToast(successMessage);
         await refreshStatus();
       } catch (error) {
-        showToast(`Action failed: ${error.message}`, 'danger');
+        const errorMessage = error.message || String(error);
+        showToast(`Action failed: ${errorMessage}`, 'danger');
+
+        if (isAppAction) {
+          setServiceErrors((prev) => ({ ...prev, app: errorMessage }));
+          setErrorModal({ open: true, title: 'App failed to start', message: errorMessage });
+        }
       } finally {
         setBusy((prev) => ({ ...prev, [key]: false }));
       }
@@ -440,6 +461,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
     }
 
     if (status.automationApi.reachable) {
+      setServiceErrors((prev) => (prev.api ? { ...prev, api: null } : prev));
       return {
         label: 'Online',
         color: 'success',
@@ -448,13 +470,18 @@ export function App({ mode = 'light', setMode = () => {} }) {
       };
     }
 
+    if (apiRunning) {
+      const apiErr = status.automationApi.error || 'API is not reachable';
+      setServiceErrors((prev) => (prev.api !== apiErr ? { ...prev, api: apiErr } : prev));
+    }
+
     return {
       label: 'Offline',
       color: 'error',
       icon: X,
       connectionState: 'inactive'
     };
-  }, [status]);
+  }, [status, apiRunning]);
 
   const toggleFieldVisibility = useCallback((fieldKey) => {
     setRevealedFields((prev) => ({
@@ -519,6 +546,18 @@ export function App({ mode = 'light', setMode = () => {} }) {
               onChatDraftKeyDown={onChatDraftKeyDown}
               copyLiveFeedMessage={copyLiveFeedMessage}
               setRuntimeSettingsModalOpen={setRuntimeSettingsModalOpen}
+              appError={serviceErrors.app}
+              apiError={serviceErrors.api}
+              onAppBadgeClick={() => {
+                if (serviceErrors.app) {
+                  setErrorModal({ open: true, title: 'App error', message: serviceErrors.app });
+                }
+              }}
+              onApiBadgeClick={() => {
+                if (serviceErrors.api) {
+                  setErrorModal({ open: true, title: 'API error', message: serviceErrors.api });
+                }
+              }}
             />
           </Tabs.Panel>
         </Tabs>
@@ -538,6 +577,13 @@ export function App({ mode = 'light', setMode = () => {} }) {
         runtimeSettings={runtimeSettings}
         busy={busy}
         updateRuntimeSetting={updateRuntimeSetting}
+      />
+
+      <ErrorDetailModal
+        open={errorModal.open}
+        onClose={() => setErrorModal({ open: false, title: '', message: '' })}
+        title={errorModal.title}
+        errorMessage={errorModal.message}
       />
 
       <ToastNotification toast={toast} />

@@ -22,6 +22,7 @@ import {
   normalizeLogLevel,
   logLevelMeta,
   logSourceMeta,
+  resolveLogSourceKey,
   logToneClasses,
   formatLiveFeedMessage,
   formatFeedTimestamp
@@ -91,7 +92,11 @@ export function OperationsTab({
   sendClaudeChatMessage,
   onChatDraftKeyDown,
   copyLiveFeedMessage,
-  setRuntimeSettingsModalOpen
+  setRuntimeSettingsModalOpen,
+  appError,
+  apiError,
+  onAppBadgeClick,
+  onApiBadgeClick
 }: {
   apiRunning: boolean;
   apiHealthStatus: { label: string; color: string; connectionState: string };
@@ -105,6 +110,10 @@ export function OperationsTab({
   onChatDraftKeyDown: (event: React.KeyboardEvent) => void;
   copyLiveFeedMessage: (message: string) => void;
   setRuntimeSettingsModalOpen: (open: boolean) => void;
+  appError: string | null;
+  apiError: string | null;
+  onAppBadgeClick: () => void;
+  onApiBadgeClick: () => void;
 }) {
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[390px_minmax(0,1fr)]">
@@ -152,12 +161,20 @@ export function OperationsTab({
                 </Button>
               )}
 
-              <StatusBadge color={apiRunning ? 'success' : 'error'} connectionState={apiRunning ? 'active' : 'inactive'}>
-                {apiRunning ? 'Running' : 'Stopped'}
+              <StatusBadge
+                color={appError ? 'error' : apiRunning ? 'success' : 'gray'}
+                connectionState={apiRunning ? 'active' : 'inactive'}
+                onClick={appError ? onAppBadgeClick : undefined}
+              >
+                App
               </StatusBadge>
 
-              <StatusBadge color={apiHealthStatus.color} connectionState={apiHealthStatus.connectionState}>
-                API {apiHealthStatus.label}
+              <StatusBadge
+                color={apiError ? 'error' : apiHealthStatus.connectionState === 'active' ? 'success' : 'gray'}
+                connectionState={apiHealthStatus.connectionState === 'active' ? 'active' : 'inactive'}
+                onClick={apiError ? onApiBadgeClick : undefined}
+              >
+                API
               </StatusBadge>
             </div>
           </div>
@@ -227,7 +244,7 @@ export function OperationsTab({
 
                   <div
                     className={cx(
-                      'max-w-[min(86%,760px)] rounded-2xl px-3.5 py-2.5 shadow-xs',
+                      'group/msg max-w-[min(86%,760px)] rounded-2xl px-3.5 py-2.5 shadow-xs',
                       isOutgoing ? 'rounded-br-md' : 'rounded-bl-md',
                       logToneClasses(level, sourceMeta.side, sourceMeta.directClaude),
                       sourceMeta.directClaude ? 'ring-1 ring-brand/45' : ''
@@ -254,7 +271,7 @@ export function OperationsTab({
                       <p className="m-0 whitespace-pre-wrap break-words text-sm leading-5 text-current">{displayMessage}</p>
                     )}
 
-                    <div className="group/msg mt-2 flex items-center justify-between gap-2 text-[11px] text-tertiary">
+                    <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-tertiary">
                       <div className="inline-flex items-center gap-1">
                         <Icon icon={levelMeta.icon} className="size-3" />
                         <span>{levelMeta.label}</span>
