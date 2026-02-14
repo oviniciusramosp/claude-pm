@@ -167,6 +167,23 @@ export class Orchestrator {
       const task = candidate.task;
       const source = candidate.source;
 
+      if (this.claudeCompletedTaskIds.has(task.id)) {
+        this.logger.warn(`Task "${task.name}" was already completed by Claude but is still on the board. Retrying Notion status update.`);
+        try {
+          await this.notionClient.updateTaskStatus(task.id, this.config.notion.statuses.done);
+          this.claudeCompletedTaskIds.delete(task.id);
+          this.logger.success(`Notion status update recovered for: "${task.name}"`);
+        } catch (retryError) {
+          this.logger.error(`Notion status update retry failed for "${task.name}": ${retryError.message}`);
+          const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
+          if (shouldHalt) {
+            this.halted = true;
+          }
+          break;
+        }
+        continue;
+      }
+
       if (source === 'not_started') {
         await this.notionClient.updateTaskStatus(task.id, this.config.notion.statuses.inProgress);
         await this.runStore.markStarted(task);
@@ -219,6 +236,7 @@ export class Orchestrator {
         }
 
         this.watchdog.recordSuccess(task.id);
+        this.claudeCompletedTaskIds.set(task.id, Date.now());
 
         let finalExecution = execution;
         const shouldReview = this.config.claude.opusReviewEnabled && !isOpusModel(task.model);
@@ -256,6 +274,7 @@ export class Orchestrator {
         }
 
         await this.notionClient.updateTaskStatus(task.id, this.config.notion.statuses.done);
+        this.claudeCompletedTaskIds.delete(task.id);
         const completionNotes = buildTaskCompletionNotes(task, finalExecution);
         await this.notionClient.appendMarkdown(task.id, completionNotes);
         await this.runStore.markDone(task, finalExecution);
@@ -336,6 +355,23 @@ export class Orchestrator {
       const task = childCandidate.task;
       const source = childCandidate.source;
 
+      if (this.claudeCompletedTaskIds.has(task.id)) {
+        this.logger.warn(`Task "${task.name}" was already completed by Claude but is still on the board. Retrying Notion status update.`);
+        try {
+          await this.notionClient.updateTaskStatus(task.id, this.config.notion.statuses.done);
+          this.claudeCompletedTaskIds.delete(task.id);
+          this.logger.success(`Notion status update recovered for: "${task.name}"`);
+        } catch (retryError) {
+          this.logger.error(`Notion status update retry failed for "${task.name}": ${retryError.message}`);
+          const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
+          if (shouldHalt) {
+            this.halted = true;
+          }
+          break;
+        }
+        continue;
+      }
+
       if (source === 'not_started') {
         await this.notionClient.updateTaskStatus(task.id, this.config.notion.statuses.inProgress);
         await this.runStore.markStarted(task);
@@ -388,6 +424,7 @@ export class Orchestrator {
         }
 
         this.watchdog.recordSuccess(task.id);
+        this.claudeCompletedTaskIds.set(task.id, Date.now());
 
         let finalExecution = execution;
         const shouldReview = this.config.claude.opusReviewEnabled && !isOpusModel(task.model);
@@ -425,6 +462,7 @@ export class Orchestrator {
         }
 
         await this.notionClient.updateTaskStatus(task.id, this.config.notion.statuses.done);
+        this.claudeCompletedTaskIds.delete(task.id);
         const completionNotes = buildTaskCompletionNotes(task, finalExecution);
         await this.notionClient.appendMarkdown(task.id, completionNotes);
         await this.runStore.markDone(task, finalExecution);
