@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Clock, X } from '@untitledui/icons';
-import { Tabs } from '@/components/application/tabs/tabs';
+import { Check, Clock, Menu01, X } from '@untitledui/icons';
 import { cx } from '@/utils/cx';
 
 import {
@@ -25,9 +24,9 @@ import {
 } from './utils/config-helpers';
 
 import { ToastNotification } from './components/toast-notification';
-import { PanelHeader } from './components/panel-header';
+import { SidebarNav } from './components/sidebar-nav';
 import { SetupTab } from './components/setup-tab';
-import { OperationsTab } from './components/operations-tab';
+import { FeedTab } from './components/feed-tab';
 import { SaveConfirmModal } from './components/save-confirm-modal';
 import { RuntimeSettingsModal } from './components/runtime-settings-modal';
 import { ErrorDetailModal } from './components/error-detail-modal';
@@ -47,6 +46,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
   const [chatDraft, setChatDraft] = useState('');
   const [serviceErrors, setServiceErrors] = useState({ app: null, api: null });
   const [errorModal, setErrorModal] = useState({ open: false, title: '', message: '' });
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const logFeedRef = useRef(null);
   const didResolveInitialTabRef = useRef(false);
 
@@ -163,7 +163,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
     setConfig(nextConfig);
     setSavedConfig(nextConfig);
     if (!didResolveInitialTabRef.current) {
-      setActiveTab(isSetupConfigurationComplete(nextConfig) ? NAV_TAB_KEYS.operations : NAV_TAB_KEYS.setup);
+      setActiveTab(isSetupConfigurationComplete(nextConfig) ? NAV_TAB_KEYS.feed : NAV_TAB_KEYS.setup);
       didResolveInitialTabRef.current = true;
     }
   }, [callApi]);

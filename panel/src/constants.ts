@@ -141,8 +141,13 @@ export const LABEL_BY_KEY = Object.fromEntries([...TEXT_FIELD_CONFIG, ...TOGGLE_
 
 export const NAV_TAB_KEYS = {
   setup: 'setup',
-  operations: 'operations'
+  feed: 'feed'
 } as const;
+
+export const SIDEBAR_NAV_ITEMS = [
+  { key: NAV_TAB_KEYS.setup, label: 'Setup', icon: Settings01 },
+  { key: NAV_TAB_KEYS.feed, label: 'Feed', icon: TerminalBrowser }
+] as const;
 
 export const CLAUDE_CHAT_MAX_CHARS = 12000;
 export const CLAUDE_CODE_AVATAR_URL = 'https://upload.wikimedia.org/wikipedia/commons/b/b0/Claude_AI_symbol.svg';
