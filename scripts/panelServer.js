@@ -5,8 +5,7 @@ import readline from 'node:readline';
 import process from 'node:process';
 import dotenv from 'dotenv';
 import express from 'express';
-import { Client as NotionClient } from '@notionhq/client';
-import { mapNotionPageToTask } from '../src/notion/mapper.js';
+import { LocalBoardClient } from '../src/local/client.js';
 
 dotenv.config();
 
@@ -597,6 +596,36 @@ function getApiProcessEnvOverrides() {
   };
 }
 
+async function ensureApiRunning() {
+  const baseUrl = getApiBaseUrl();
+  const health = await probeApiHealth(baseUrl);
+  if (health.ok) {
+    return;
+  }
+
+  const command = process.env.PANEL_API_START_COMMAND || 'npm run dev';
+  const started = startManagedProcess(state.api, command, 'api', getApiProcessEnvOverrides());
+  if (!started && !state.api.process) {
+    throw new Error('Failed to start API process');
+  }
+
+  if (started) {
+    pushLog('info', LOG_SOURCE.panel, 'API started automatically before running automation.');
+  }
+
+  const maxAttempts = 30;
+  const intervalMs = 500;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    const probe = await probeApiHealth(baseUrl);
+    if (probe.ok) {
+      return;
+    }
+  }
+
+  throw new Error('API process started but did not become healthy within 15s');
+}
+
 function getAutomationHeaders() {
   const headers = {
     'Content-Type': 'application/json'
@@ -1044,8 +1073,6 @@ app.get('/api/config', async (_req, res) => {
 
   res.json({
     values: {
-      NOTION_API_TOKEN: env.NOTION_API_TOKEN || '',
-      NOTION_DATABASE_ID: env.NOTION_DATABASE_ID || '',
       CLAUDE_CODE_OAUTH_TOKEN: env.CLAUDE_CODE_OAUTH_TOKEN || '',
       CLAUDE_COMMAND: FIXED_CLAUDE_COMMAND,
       CLAUDE_WORKDIR: env.CLAUDE_WORKDIR || '.',
@@ -1132,6 +1159,7 @@ app.post('/api/process/api/restart', async (_req, res) => {
 app.post('/api/automation/run', async (_req, res) => {
   const baseUrl = getApiBaseUrl();
   try {
+    await ensureApiRunning();
     const response = await fetch(`${baseUrl}/run`, {
       method: 'POST',
       headers: getAutomationHeaders()
@@ -1155,6 +1183,7 @@ app.post('/api/automation/run', async (_req, res) => {
 app.post('/api/automation/run-task', async (_req, res) => {
   const baseUrl = getApiBaseUrl();
   try {
+    await ensureApiRunning();
     const response = await fetch(`${baseUrl}/run-task`, {
       method: 'POST',
       headers: getAutomationHeaders()
@@ -1178,6 +1207,7 @@ app.post('/api/automation/run-task', async (_req, res) => {
 app.post('/api/automation/run-epic', async (_req, res) => {
   const baseUrl = getApiBaseUrl();
   try {
+    await ensureApiRunning();
     const response = await fetch(`${baseUrl}/run-epic`, {
       method: 'POST',
       headers: getAutomationHeaders()
@@ -1201,6 +1231,7 @@ app.post('/api/automation/run-epic', async (_req, res) => {
 app.post('/api/automation/resume', async (_req, res) => {
   const baseUrl = getApiBaseUrl();
   try {
+    await ensureApiRunning();
     const response = await fetch(`${baseUrl}/resume`, {
       method: 'POST',
       headers: getAutomationHeaders()
@@ -1223,115 +1254,39 @@ app.post('/api/automation/resume', async (_req, res) => {
 
 app.get('/api/board', async (_req, res) => {
   const env = await readEnvPairs();
-  const token = (env.NOTION_API_TOKEN || '').trim();
-  const databaseId = (env.NOTION_DATABASE_ID || '').trim();
+  const boardDir = path.resolve(cwd, env.BOARD_DIR || 'Board');
 
-  if (!token) {
-    res.status(400).json({
-      ok: false,
-      code: 'MISSING_TOKEN',
-      message: 'Notion API Token is not configured. Go to Setup to add it.',
-      details: { hint: 'Add NOTION_API_TOKEN to .env or set it via the Setup page.' }
-    });
-    return;
-  }
-
-  if (!databaseId) {
-    res.status(400).json({
-      ok: false,
-      code: 'MISSING_DATABASE_ID',
-      message: 'Notion Database ID is not configured.',
-      details: { hint: 'Add NOTION_DATABASE_ID to .env or enter it below.' }
-    });
-    return;
-  }
-
-  const mapperConfig = {
-    notion: {
-      properties: {
-        name: env.NOTION_PROP_NAME || 'Name',
-        status: env.NOTION_PROP_STATUS || 'Status',
-        agent: env.NOTION_PROP_AGENT || 'Agent',
-        priority: env.NOTION_PROP_PRIORITY || 'Priority',
-        type: env.NOTION_PROP_TYPE || 'Type',
-        parentItem: env.NOTION_PROP_PARENT_ITEM || env.NOTION_PROP_EPIC || 'Parent item',
-        model: env.NOTION_PROP_MODEL || 'Model'
+  const boardConfig = {
+    board: {
+      dir: boardDir,
+      statuses: {
+        notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+        inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+        done: env.BOARD_STATUS_DONE || 'Done'
       },
-      typeValues: { epic: env.NOTION_TYPE_EPIC || 'Epic' }
+      typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
     }
   };
 
   try {
-    const client = new NotionClient({ auth: token, notionVersion: '2022-06-28' });
-    const pages = [];
-    let cursor = undefined;
-
-    do {
-      const response = await client.databases.query({
-        database_id: databaseId,
-        start_cursor: cursor,
-        page_size: 100
-      });
-      pages.push(...response.results);
-      cursor = response.has_more ? response.next_cursor : undefined;
-    } while (cursor);
-
-    const tasks = pages
-      .map((page) => mapNotionPageToTask(page, mapperConfig))
-      .filter((task) => task !== null);
-
+    const client = new LocalBoardClient(boardConfig);
+    await client.initialize();
+    const tasks = await client.listTasks();
     res.json({ ok: true, tasks });
   } catch (error) {
     const msg = error.message || String(error);
-    const notionStatus = error.status || null;
-    const notionCode = error.code || null;
-    const httpStatus = (notionStatus >= 400 && notionStatus < 600) ? notionStatus : 500;
-    const errorId = `board-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-    const baseDetails = {
-      errorId,
-      databaseId,
-      notionStatus,
-      notionCode,
-      raw: msg,
-      stack: error.stack ? error.stack.split('\n').slice(0, 6).join('\n') : undefined,
-      timestamp: new Date().toISOString()
-    };
-
-    if (msg.includes('Could not find database') || msg.includes('object not found')) {
-      res.status(400).json({
-        ok: false,
-        code: 'INVALID_DATABASE_ID',
-        message: 'Database not found. Check your Database ID.',
-        details: { ...baseDetails, hint: 'Verify the NOTION_DATABASE_ID value matches the ID in your Notion database URL.' }
-      });
-      return;
-    }
-
-    if (msg.includes('API token is invalid') || msg.includes('Unauthorized') || notionStatus === 401) {
-      res.status(401).json({
-        ok: false,
-        code: 'INVALID_TOKEN',
-        message: 'Notion API Token is invalid or expired. Update it in Setup.',
-        details: { ...baseDetails, hint: 'Go to https://www.notion.so/my-integrations and regenerate the token.' }
-      });
-      return;
-    }
-
-    if (msg.includes('does not have access') || notionStatus === 403) {
-      res.status(403).json({
-        ok: false,
-        code: 'NO_ACCESS',
-        message: 'The Notion integration does not have access to this database.',
-        details: { ...baseDetails, hint: 'Open the database in Notion, click "..." → "Connections" and add your integration.' }
-      });
-      return;
-    }
-
-    res.status(httpStatus).json({
+    res.status(500).json({
       ok: false,
-      code: 'NOTION_ERROR',
-      message: `Notion API error: ${msg}`,
-      details: { ...baseDetails, hint: 'Check the Notion API status page or try again later.' }
+      code: 'BOARD_ERROR',
+      message: `Board read error: ${msg}`,
+      details: {
+        errorId: `board-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        boardDir,
+        raw: msg,
+        stack: error.stack ? error.stack.split('\n').slice(0, 6).join('\n') : undefined,
+        timestamp: new Date().toISOString(),
+        hint: 'Make sure the Board directory exists and is readable.'
+      }
     });
   }
 });
