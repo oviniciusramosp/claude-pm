@@ -1,7 +1,9 @@
 // panel/src/components/operations-tab.tsx
 
-import type { RefObject } from 'react';
+import React, { type RefObject, useState } from 'react';
 import {
+  ChevronDown,
+  ChevronRight,
   Copy01,
   Flash,
   PlayCircle,
@@ -28,6 +30,54 @@ import { Icon } from './icon';
 import { StatusBadge } from './status-badge';
 import { SourceAvatar } from './source-avatar';
 import type { LogEntry } from '../types';
+
+function ExpandablePrompt({
+  title,
+  content,
+  onCopy
+}: {
+  title: string;
+  content: string;
+  onCopy: (text: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const lineCount = content ? content.split('\n').length : 0;
+
+  return (
+    <div className="space-y-1.5">
+      <button
+        type="button"
+        className="m-0 flex w-full cursor-pointer items-center gap-1.5 border-none bg-transparent p-0 text-left text-sm font-medium leading-5 text-current hover:opacity-80"
+        onClick={() => setExpanded((prev) => !prev)}
+        aria-expanded={expanded}
+      >
+        <Icon icon={expanded ? ChevronDown : ChevronRight} className="size-3.5 shrink-0" />
+        <span>{title}</span>
+        {!expanded && lineCount > 0 ? (
+          <span className="ml-1 text-[11px] font-normal text-tertiary">
+            ({lineCount} {lineCount === 1 ? 'line' : 'lines'})
+          </span>
+        ) : null}
+      </button>
+
+      {expanded ? (
+        <div className="relative">
+          <pre className="m-0 max-h-[400px] overflow-auto rounded-lg bg-primary/50 p-3 text-xs leading-relaxed text-current">
+            {content}
+          </pre>
+          <Button
+            size="sm"
+            color="tertiary"
+            className="absolute right-1.5 top-1.5 h-6 w-6 shrink-0 [&_svg]:!size-3"
+            aria-label="Copy prompt"
+            iconLeading={Copy01}
+            onPress={() => onCopy(content)}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export function OperationsTab({
   apiRunning,
@@ -194,25 +244,35 @@ export function OperationsTab({
                       ) : null}
                     </div>
 
-                    <p className="m-0 whitespace-pre-wrap break-words text-sm leading-5 text-current">{displayMessage}</p>
+                    {line.isPrompt ? (
+                      <ExpandablePrompt
+                        title={line.promptTitle || 'Prompt sent to Claude Code'}
+                        content={displayMessage}
+                        onCopy={copyLiveFeedMessage}
+                      />
+                    ) : (
+                      <p className="m-0 whitespace-pre-wrap break-words text-sm leading-5 text-current">{displayMessage}</p>
+                    )}
 
-                    <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-tertiary">
+                    <div className="group/msg mt-2 flex items-center justify-between gap-2 text-[11px] text-tertiary">
                       <div className="inline-flex items-center gap-1">
                         <Icon icon={levelMeta.icon} className="size-3" />
                         <span>{levelMeta.label}</span>
                         <span className="mx-0.5 text-quaternary">&bull;</span>
                         <span style={{ fontVariantNumeric: 'tabular-nums' }}>{timestamp}</span>
                       </div>
-                      <Button
-                        size="sm"
-                        color="tertiary"
-                        className="h-7 w-7 shrink-0"
-                        aria-label="Copy message"
-                        iconLeading={Copy01}
-                        onPress={() => {
-                          copyLiveFeedMessage(displayMessage);
-                        }}
-                      />
+                      {!line.isPrompt ? (
+                        <Button
+                          size="sm"
+                          color="tertiary"
+                          className="h-5 w-5 shrink-0 opacity-0 transition-opacity group-hover/msg:opacity-100 [&_svg]:!size-3.5"
+                          aria-label="Copy message"
+                          iconLeading={Copy01}
+                          onPress={() => {
+                            copyLiveFeedMessage(displayMessage);
+                          }}
+                        />
+                      ) : null}
                     </div>
                   </div>
 

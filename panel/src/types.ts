@@ -41,6 +41,8 @@ export interface LogEntry {
   level?: string;
   source?: string;
   message?: string;
+  isPrompt?: boolean;
+  promptTitle?: string;
 }
 
 export interface ToastState {

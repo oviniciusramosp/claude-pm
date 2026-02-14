@@ -71,13 +71,14 @@ const app = express();
 app.use(express.json({ limit: '1mb' }));
 app.use('/panel', express.static(panelDistPath));
 
-function pushLog(level, source, message) {
+function pushLog(level, source, message, extra) {
   const entry = {
     id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     ts: new Date().toISOString(),
     level,
     source,
-    message
+    message,
+    ...extra
   };
 
   logHistory.push(entry);
@@ -278,13 +279,15 @@ function createProcessLogForwarder({ fallbackLevel = 'info', onLog }) {
       return;
     }
 
-    const promptMessage = activePromptBlock.lines.length > 0
-      ? `${activePromptBlock.title}\n\n${activePromptBlock.lines.join('\n')}`
-      : activePromptBlock.title;
+    const promptContent = activePromptBlock.lines.length > 0
+      ? activePromptBlock.lines.join('\n')
+      : '';
 
     safeOnLog({
       level: 'info',
-      message: promptMessage
+      message: promptContent || activePromptBlock.title,
+      isPrompt: true,
+      promptTitle: activePromptBlock.title
     });
 
     activePromptBlock = null;
@@ -368,7 +371,8 @@ function startManagedProcess(target, command, source, envOverrides = {}) {
         return;
       }
 
-      pushLog(parsed.level, resolveProcessLogSource(source, parsed), parsed.message);
+      const extra = parsed.isPrompt ? { isPrompt: true, promptTitle: parsed.promptTitle } : undefined;
+      pushLog(parsed.level, resolveProcessLogSource(source, parsed), parsed.message, extra);
     }
   });
 
@@ -379,7 +383,8 @@ function startManagedProcess(target, command, source, envOverrides = {}) {
         return;
       }
 
-      pushLog(parsed.level, resolveProcessLogSource(source, parsed), parsed.message);
+      const extra = parsed.isPrompt ? { isPrompt: true, promptTitle: parsed.promptTitle } : undefined;
+      pushLog(parsed.level, resolveProcessLogSource(source, parsed), parsed.message, extra);
     }
   });
 
