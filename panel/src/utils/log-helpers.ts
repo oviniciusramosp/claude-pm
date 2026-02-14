@@ -177,11 +177,72 @@ export function formatReconciliationReason(reasonRaw: string): string {
   return labels.join(', ');
 }
 
+export function formatClaudeTaskContract(message: string): string | null {
+  const text = message.trim();
+  if (!text.startsWith('{') || !text.endsWith('}')) {
+    return null;
+  }
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return null;
+  }
+
+  const status = String(parsed.status || '').toLowerCase();
+  if (!['done', 'blocked'].includes(status)) {
+    return null;
+  }
+
+  const lines: string[] = [];
+
+  if (status === 'done') {
+    lines.push('Task completed');
+  } else {
+    lines.push('Task blocked');
+  }
+
+  if (typeof parsed.summary === 'string' && parsed.summary.trim()) {
+    lines.push('');
+    lines.push(parsed.summary.trim());
+  }
+
+  if (typeof parsed.notes === 'string' && parsed.notes.trim()) {
+    lines.push('');
+    lines.push(`Notes: ${parsed.notes.trim()}`);
+  }
+
+  if (Array.isArray(parsed.files) && parsed.files.length > 0) {
+    lines.push('');
+    lines.push(`Files (${parsed.files.length}):`);
+    for (const file of parsed.files) {
+      lines.push(`  - ${file}`);
+    }
+  }
+
+  if (typeof parsed.tests === 'string' && parsed.tests.trim()) {
+    lines.push('');
+    lines.push(`Tests: ${parsed.tests.trim()}`);
+  }
+
+  return lines.join('\n');
+}
+
 export function formatLiveFeedMessage(entry: LogEntry): string {
   const rawMessage = String(entry?.message || '');
   const trimmed = rawMessage.trim();
   if (!trimmed) {
     return rawMessage;
+  }
+
+  const contractFormatted = formatClaudeTaskContract(trimmed);
+  if (contractFormatted) {
+    return contractFormatted;
   }
 
   const periodicEnabledMatch = trimmed.match(/^Periodic reconciliation enabled \(QUEUE_POLL_INTERVAL_MS=(\d+)\)$/i);
