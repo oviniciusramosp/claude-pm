@@ -100,7 +100,7 @@ From the Operations tab:
 - `PORT` - Automation API port (default `3000`).
 - `PANEL_PORT` - Panel server port (default `4100`).
 - `PANEL_AUTO_OPEN` - Auto-open browser on panel start (default `true`).
-- `PANEL_AUTO_START_API` - Auto-start API when panel starts (default `true`).
+- `PANEL_AUTO_START_API` - Auto-start API when panel starts (default `false`).
 - `QUEUE_DEBOUNCE_MS` - Reconciliation debounce (default `1500`).
 - `QUEUE_ORDER` - Task ordering: `created` or `priority_then_created`.
 - `QUEUE_RUN_ON_STARTUP` - Run reconciliation on boot (default `true`).
@@ -157,7 +157,7 @@ Every commit message must follow the Conventional Commits format:
 **Examples:**
 ```
 feat(panel): add real-time task progress indicator
-fix(orchestrator): prevent duplicate task execution on rapid webhooks
+fix(orchestrator): prevent duplicate task execution on rapid triggers
 refactor(notion): extract markdown converter to separate module
 chore: bump dependencies to latest versions
 ```
@@ -201,12 +201,10 @@ Product Manager/
 │   ├── config.js           # Environment config parsing
 │   ├── logger.js           # Colored console output
 │   ├── runStore.js         # Run history (JSON store)
-│   ├── security.js         # Webhook signature validation
 │   └── notion/             # Notion API integration
 │       ├── client.js       # API wrapper
 │       ├── mapper.js       # Page-to-task conversion
-│       ├── markdown.js     # Blocks-to-markdown
-│       └── webhookSummary.js
+│       └── markdown.js     # Blocks-to-markdown
 ├── panel/                  # Visual control panel (React)
 │   ├── vite.config.mjs     # Vite build config
 │   ├── index.html          # HTML entry point

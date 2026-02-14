@@ -26,7 +26,7 @@ function envEnabled(value, fallback = false) {
 }
 
 const panelAutoOpen = envEnabled(process.env.PANEL_AUTO_OPEN, true);
-const panelAutoStartApi = envEnabled(process.env.PANEL_AUTO_START_API, true);
+const panelAutoStartApi = envEnabled(process.env.PANEL_AUTO_START_API, false);
 
 const state = {
   api: {

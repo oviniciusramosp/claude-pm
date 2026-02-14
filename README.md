@@ -14,7 +14,7 @@ A Node.js service that orchestrates a Notion Kanban board and executes cards aut
 - When execution finishes successfully (`status=done`), it moves the card to `Done`.
 - When all children of an `Epic` are in `Done`, it automatically moves the `Epic` to `Done`.
 - Appends an automation summary with estimated duration to the Epic card.
-- Receives Notion webhooks to trigger reconciliation, with optional fallback polling.
+- Periodically reconciles the board to pick up new tasks (polling every 60s by default).
 
 ## Requirements
 
@@ -46,7 +46,6 @@ cp .env.example .env
 - `CLAUDE_LOG_PROMPT=true` to print the exact prompt sent to Claude
 - `CLAUDE_FULL_ACCESS=true` to skip Claude permission prompts during task execution
 - (Optional) property/status names if they differ in your Notion
-- (Optional) `NOTION_WEBHOOK_SECRET`
 
 4. Start the service:
 
@@ -98,8 +97,6 @@ From the panel you can:
 - Open the Notion database directly from the `Notion Database ID` field
 - Pick `CLAUDE_WORKDIR` with a native folder picker
 - Start/stop the automation app (`npm run dev`)
-- Start/stop tunnel (ngrok by default)
-- Copy webhook URL
 - Trigger manual run
 - Send one-shot chat messages to Claude from the panel at any time
 - Toggle `Show Claude Live Output` and `Log Prompt Sent to Claude` at runtime (without editing `.env`)
@@ -107,7 +104,7 @@ From the panel you can:
 - Save config with optional app restart confirmation (to apply changes immediately)
 
 Panel behavior note:
-- Starting the automation app from the panel forces `QUEUE_RUN_ON_STARTUP=false`, so queue execution starts when you click `Run Queue Now`, when a webhook arrives, or by periodic fallback (`QUEUE_POLL_INTERVAL_MS`).
+- Starting the automation app from the panel forces `QUEUE_RUN_ON_STARTUP=false`, so queue execution starts when you click `Run Queue Now` or by periodic polling (`QUEUE_POLL_INTERVAL_MS`).
 
 Panel implementation note:
 - The panel is built with `@base-ui/react` + Tailwind CSS, uses `Ionicons`, and is compiled with Vite into `panel/dist`.
@@ -117,76 +114,6 @@ Panel implementation note:
 - `GET /health`
 - `POST /run` (manual trigger)
   - If `MANUAL_RUN_TOKEN` is configured: `Authorization: Bearer <token>`
-- `POST /webhooks/notion`
-
-## Notion Webhook
-
-Configure the webhook in Notion to call `POST /webhooks/notion`.
-
-- When `NOTION_WEBHOOK_SECRET` is configured, the `x-notion-signature` header signature is validated.
-- If Notion sends a `verification_token`, the service logs it to simplify setup.
-
-### Team Tunnel Standard
-
-- Primary tunnel provider: `ngrok` (recommended for team consistency and webhook reliability).
-- Fallback provider: `localtunnel` (quick temporary testing when ngrok is unavailable).
-- Token policy:
-  - `ngrok` authtoken is per-user credential.
-  - Keep it in global ngrok config, not in project `.env`.
-  - Do not commit or share personal authtokens in repository files.
-
-Install and configure ngrok once per machine:
-
-```bash
-brew install ngrok/ngrok/ngrok
-ngrok config add-authtoken <YOUR_NGROK_TOKEN>
-```
-
-Start tunnel (team standard):
-
-```bash
-npm run tunnel
-```
-
-Fallback tunnel:
-
-```bash
-npm run tunnel:localtunnel
-```
-
-### Webhook Quick Setup (Local)
-
-1. Start the app:
-
-```bash
-npm run dev
-```
-
-2. Expose your local server (team standard with ngrok):
-
-```bash
-npm run tunnel
-```
-
-3. In Notion webhook settings, use:
-
-```text
-https://<YOUR_NGROK_DOMAIN>/webhooks/notion
-```
-
-If using localtunnel fallback, replace `<YOUR_NGROK_DOMAIN>` with the `loca.lt` URL.
-
-4. If the app logs a verification token, copy it into `.env`:
-
-```bash
-NOTION_WEBHOOK_SECRET=<verification_token>
-```
-
-5. Restart the app:
-
-```bash
-npm run dev
-```
 
 ## Claude Response Contract
 
@@ -239,12 +166,12 @@ npm run claude:manual -- "Summarize current pending tasks"
 
 - The Notion API does not reliably expose the board's visual order. The "first card" is approximated by creation order (`QUEUE_ORDER=created`) or priority+creation (`priority_then_created`).
 - `QUEUE_RUN_ON_STARTUP=true` triggers one reconciliation cycle right after API boot. The panel overrides this to `false` when it starts/restarts the app.
-- `QUEUE_POLL_INTERVAL_MS=60000` enables periodic fallback reconciliation every 60s (set `0` to disable).
+- `QUEUE_POLL_INTERVAL_MS=60000` enables periodic reconciliation every 60s (set `0` to disable).
 - The service is designed to run as a single process. For high availability, add a distributed lock.
 - Epic durations are based on local timestamps stored in `.data/runs.json`.
 - The automation identifies Epic children through sub-task relation (`Parent item`) and also falls back to `page.parent.page_id`.
 - `npm run dev` and `npm start` suppress only Node warning `DEP0040` to keep logs clean on Node v23+.
-- The terminal logs now show webhook reception, status transitions, and (optionally) full prompts sent to Claude (`CLAUDE_LOG_PROMPT=true`).
+- The terminal logs show status transitions and (optionally) full prompts sent to Claude (`CLAUDE_LOG_PROMPT=true`).
 
 ## Tests
 
