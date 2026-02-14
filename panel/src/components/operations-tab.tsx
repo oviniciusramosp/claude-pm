@@ -259,19 +259,6 @@ export function OperationsTab({
                       sourceMeta.directClaude ? 'ring-1 ring-brand/45' : ''
                     )}
                   >
-                    {!isGroupContinuation ? (
-                      <div className="mb-1 inline-flex items-center gap-2 text-[11px] font-medium">
-                        <span className={cx(sourceMeta.directClaude ? 'text-brand-primary' : 'text-tertiary')}>
-                          {sourceMeta.label}
-                        </span>
-                        {sourceMeta.directClaude ? (
-                          <span className="rounded-full bg-primary/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-primary">
-                            Direct
-                          </span>
-                        ) : null}
-                      </div>
-                    ) : null}
-
                     {line.isPrompt ? (
                       <ExpandablePrompt
                         title={line.promptTitle || 'Prompt sent to Claude Code'}
