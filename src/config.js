@@ -64,7 +64,7 @@ export const config = {
   queue: {
     debounceMs: number('QUEUE_DEBOUNCE_MS', 1500),
     maxTasksPerRun: number('MAX_TASKS_PER_RUN', 50),
-    order: process.env.QUEUE_ORDER || 'created',
+    order: process.env.QUEUE_ORDER || 'alphabetical',
     runOnStartup: boolean('QUEUE_RUN_ON_STARTUP', true),
     pollIntervalMs: number('QUEUE_POLL_INTERVAL_MS', 60 * 1000)
   },

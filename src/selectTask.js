@@ -23,17 +23,17 @@ function sortCandidates(tasks, order) {
   const copied = [...tasks];
 
   copied.sort((a, b) => {
-    if (order === 'priority_then_created') {
+    if (order === 'priority_then_alphabetical') {
       const priorityDiff = parsePriority(a.priority) - parsePriority(b.priority);
       if (priorityDiff !== 0) {
         return priorityDiff;
       }
     }
 
-    const createdA = new Date(a.createdTime || 0).getTime();
-    const createdB = new Date(b.createdTime || 0).getTime();
+    const nameA = normalize(a.name);
+    const nameB = normalize(b.name);
 
-    return createdA - createdB;
+    return nameA.localeCompare(nameB);
   });
 
   return copied;
