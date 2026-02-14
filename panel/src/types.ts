@@ -9,7 +9,7 @@ export interface TextFieldConfig {
   help?: {
     title: string;
     summary: string;
-    steps: string[];
+    steps: React.ReactNode[];
   };
   password?: boolean;
   folderPicker?: boolean;
@@ -20,6 +20,7 @@ export interface ToggleConfig {
   label: string;
   icon: React.FC<{ className?: string }>;
   description: string;
+  warning?: string;
 }
 
 export interface SetupSection {
@@ -70,4 +71,18 @@ export interface LogSourceMeta {
 export interface LogLevelMeta {
   label: string;
   icon: React.FC<{ className?: string }>;
+}
+
+export interface BoardTask {
+  id: string;
+  name: string;
+  status: string;
+  agents: string[];
+  priority: string;
+  type: string;
+  model: string;
+  parentId: string | null;
+  url: string;
+  createdTime: string;
+  lastEditedTime: string;
 }

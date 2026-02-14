@@ -1,9 +1,10 @@
-// panel/src/constants.ts
+// panel/src/constants.tsx
 
 import {
   Activity,
   AlertCircle,
   CheckCircle,
+  Columns03,
   Database01,
   File03,
   Folder,
@@ -30,10 +31,11 @@ export const TEXT_FIELD_CONFIG: TextFieldConfig[] = [
       title: 'How to get Notion API Token',
       summary: 'Create a Notion integration and copy its internal token.',
       steps: [
-        'Open Notion and go to Settings & members > Connections.',
-        'Create or open an internal integration.',
+        <>Go to <a href="https://www.notion.so/profile/integrations" target="_blank" rel="noopener noreferrer" className="underline text-brand-primary hover:text-brand-primary_hover">My Integrations</a> on Notion.</>,
+        'Create a new internal integration (or open an existing one).',
+        <>The integration needs <strong>Read content</strong>, <strong>Update content</strong>, and <strong>Insert content</strong> capabilities.</>,
         'Copy the integration token and paste it here.',
-        'Share your target database with this integration and grant edit access.'
+        <>Open your target database in Notion, click <strong>...</strong> &gt; <strong>Connect to</strong>, and select your integration. This grants it access to read and write pages in that database.</>
       ]
     },
     password: true
@@ -64,7 +66,11 @@ export const TEXT_FIELD_CONFIG: TextFieldConfig[] = [
     help: {
       title: 'How to get Claude OAuth Token',
       summary: 'Generate a token from Claude CLI on your machine.',
-      steps: ['Run: /opt/homebrew/bin/claude setup-token', 'Copy the generated token.', 'Paste the token in this field.']
+      steps: [
+        <>Run <code className="cursor-pointer select-all rounded bg-quaternary px-1.5 py-0.5 font-mono text-xs text-secondary" onClick={() => navigator.clipboard.writeText('/opt/homebrew/bin/claude setup-token')} title="Click to copy">/opt/homebrew/bin/claude setup-token</code> in your terminal.</>,
+        'Copy the generated token.',
+        'Paste the token in this field.'
+      ]
     },
     password: true
   },
@@ -92,7 +98,8 @@ export const TOGGLE_CONFIG: ToggleConfig[] = [
     key: 'CLAUDE_FULL_ACCESS',
     label: 'Allow Claude Full Access',
     icon: LockUnlocked01,
-    description: 'Lets Claude run task commands without extra permission prompts.'
+    description: 'Lets Claude run task commands without extra permission prompts.',
+    warning: 'This grants Claude unrestricted access to execute commands, modify files, and install packages in the working directory without asking for confirmation. Only enable this if you trust the tasks in your queue and understand the risks.'
   },
   {
     key: 'CLAUDE_STREAM_OUTPUT',
@@ -141,12 +148,14 @@ export const LABEL_BY_KEY = Object.fromEntries([...TEXT_FIELD_CONFIG, ...TOGGLE_
 
 export const NAV_TAB_KEYS = {
   setup: 'setup',
-  feed: 'feed'
+  feed: 'feed',
+  board: 'board'
 } as const;
 
 export const SIDEBAR_NAV_ITEMS = [
   { key: NAV_TAB_KEYS.setup, label: 'Setup', icon: Settings01 },
-  { key: NAV_TAB_KEYS.feed, label: 'Feed', icon: TerminalBrowser }
+  { key: NAV_TAB_KEYS.feed, label: 'Feed', icon: TerminalBrowser },
+  { key: NAV_TAB_KEYS.board, label: 'Board', icon: Columns03 }
 ] as const;
 
 export const CLAUDE_CHAT_MAX_CHARS = 12000;
@@ -218,6 +227,28 @@ export const TOAST_TONE_CLASSES: Record<string, string> = {
 };
 
 export const PROCESS_ACTION_BUTTON_CLASS = 'w-24 justify-center';
+
+export const BOARD_COLUMNS = [
+  { key: 'not_started', label: 'Not Started', statusMatch: 'not started' },
+  { key: 'in_progress', label: 'In Progress', statusMatch: 'in progress' },
+  { key: 'done', label: 'Done', statusMatch: 'done' }
+] as const;
+
+export const BOARD_PRIORITY_COLORS: Record<string, string> = {
+  P0: 'error',
+  P1: 'warning',
+  P2: 'blue',
+  P3: 'gray'
+};
+
+export const BOARD_TYPE_COLORS: Record<string, string> = {
+  Epic: 'purple',
+  UserStory: 'brand',
+  Defect: 'error',
+  Discovery: 'indigo'
+};
+
+export const BOARD_POLL_INTERVAL_MS = 30_000;
 
 export const FEED_TIMESTAMP_FORMATTER = new Intl.DateTimeFormat('pt-BR', {
   day: '2-digit',

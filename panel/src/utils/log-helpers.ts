@@ -3,7 +3,7 @@
 import { InfoCircle } from '@untitledui/icons';
 import { LOG_LEVEL_META, LOG_SOURCE_META, FEED_TIMESTAMP_FORMATTER } from '../constants';
 import { normalizeText } from './config-helpers';
-import type { LogEntry, LogLevelMeta, LogSourceMeta, TextFieldConfig } from '../types';
+import type { LogEntry, LogLevelMeta, LogSourceMeta } from '../types';
 
 export function normalizeLogLevel(level: unknown): string {
   const normalized = String(level || '').toLowerCase();
@@ -224,17 +224,4 @@ export function formatFeedTimestamp(value: unknown): string {
   }
 
   return FEED_TIMESTAMP_FORMATTER.format(parsedDate);
-}
-
-export function helpTooltipContent(helperText: string | undefined, help: TextFieldConfig['help']): string | null {
-  if (!helperText && !help) {
-    return null;
-  }
-
-  if (!help) {
-    return helperText || null;
-  }
-
-  const steps = (help.steps || []).join(' ');
-  return `${help.title}. ${help.summary}${steps ? ` ${steps}` : ''}`;
 }
