@@ -1,6 +1,7 @@
 // panel/src/components/status-badge.tsx
 
 import type { FC, ReactNode } from 'react';
+import { CloudOff } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { cx } from '@/utils/cx';
 import { Icon } from './icon';
@@ -20,7 +21,17 @@ export function StatusBadge({
   onClick?: () => void;
 }) {
   const isConnection = Boolean(connectionState);
-  const pulse = connectionState === 'active';
+  const isActive = connectionState === 'active';
+
+  function renderLeading() {
+    if (!isConnection) {
+      return icon ? <Icon icon={icon} className="size-3.5 stroke-[2.5] text-current" /> : null;
+    }
+    if (isActive) {
+      return <ConnectionDot pulse />;
+    }
+    return <Icon icon={CloudOff} className="size-3 stroke-[2.5] text-current" />;
+  }
 
   return (
     <Badge
@@ -30,7 +41,7 @@ export function StatusBadge({
       className={cx('inline-flex items-center gap-1', onClick ? 'cursor-pointer hover:opacity-80' : '')}
       {...(onClick ? { onClick } : {})}
     >
-      {isConnection ? <ConnectionDot pulse={pulse} /> : icon ? <Icon icon={icon} className="size-3.5 stroke-[2.5] text-current" /> : null}
+      {renderLeading()}
       <span>{children}</span>
     </Badge>
   );
