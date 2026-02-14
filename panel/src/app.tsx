@@ -23,13 +23,16 @@ import {
   resolveApiBaseUrl
 } from './utils/config-helpers';
 
+import { normalizeLogLevel } from './utils/log-helpers';
 import { ToastNotification } from './components/toast-notification';
 import { SidebarNav } from './components/sidebar-nav';
 import { SetupTab } from './components/setup-tab';
 import { FeedTab } from './components/feed-tab';
+import { BoardTab } from './components/board-tab';
 import { SaveConfirmModal } from './components/save-confirm-modal';
 import { RuntimeSettingsModal } from './components/runtime-settings-modal';
 import { ErrorDetailModal } from './components/error-detail-modal';
+import { DebugErrorsModal } from './components/debug-errors-modal';
 
 export function App({ mode = 'light', setMode = () => {} }) {
   const [config, setConfig] = useState(buildInitialConfig);
@@ -47,6 +50,9 @@ export function App({ mode = 'light', setMode = () => {} }) {
   const [serviceErrors, setServiceErrors] = useState({ app: null, api: null });
   const [errorModal, setErrorModal] = useState({ open: false, title: '', message: '' });
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [collectedErrors, setCollectedErrors] = useState([]);
+  const [debugModalOpen, setDebugModalOpen] = useState(false);
+  const [boardRefreshTrigger, setBoardRefreshTrigger] = useState(0);
   const logFeedRef = useRef(null);
   const didResolveInitialTabRef = useRef(false);
 
@@ -75,6 +81,13 @@ export function App({ mode = 'light', setMode = () => {} }) {
 
   const apiRunning = status?.api?.status === 'running';
 
+  const notionTokenPresent = Boolean(savedConfig.NOTION_API_TOKEN?.trim());
+  const disabledTabs = useMemo(() => {
+    const disabled = new Set<string>();
+    if (!notionTokenPresent) disabled.add(NAV_TAB_KEYS.board);
+    return disabled;
+  }, [notionTokenPresent]);
+
   useEffect(() => {
     if (apiRunning) {
       setServiceErrors((prev) => (prev.app ? { ...prev, app: null } : prev));
@@ -88,6 +101,16 @@ export function App({ mode = 'light', setMode = () => {} }) {
   const showToast = useCallback((message: string, color: 'success' | 'warning' | 'danger' | 'neutral' = 'success') => {
     const id = `toast-${Date.now()}-${Math.random()}`;
     setToasts((prev) => [...prev, { id, message, color }]);
+
+    if (color === 'danger') {
+      setCollectedErrors((prev) => [...prev, {
+        id,
+        ts: new Date().toISOString(),
+        level: 'error',
+        source: 'panel',
+        message
+      }]);
+    }
   }, []);
 
   const dismissToast = useCallback((id: string) => {
@@ -102,6 +125,10 @@ export function App({ mode = 'light', setMode = () => {} }) {
       }
       return next;
     });
+
+    if (normalizeLogLevel(entry?.level) === 'error') {
+      setCollectedErrors((prev) => [...prev, entry]);
+    }
   }, []);
 
   useEffect(() => {
@@ -200,6 +227,18 @@ export function App({ mode = 'light', setMode = () => {} }) {
         const parsed = JSON.parse(event.data);
         appendLog(parsed);
         refreshStatus().catch(() => {});
+
+        const msg = String(parsed.message || '');
+        if (
+          msg.startsWith('Moved to In Progress:') ||
+          msg.startsWith('Moved to Done:') ||
+          msg.startsWith('Returned to Not Started') ||
+          msg.startsWith('Epic moved to Done') ||
+          msg.startsWith('Resuming In Progress task:') ||
+          msg.includes('Reconciliation finished')
+        ) {
+          setBoardRefreshTrigger((prev) => prev + 1);
+        }
       } catch {
         // Ignore malformed event.
       }
@@ -278,17 +317,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
     }
   }, [callApi, chatDraft, showToast]);
 
-  const onChatDraftKeyDown = useCallback(
-    async (event) => {
-      if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) {
-        return;
-      }
 
-      event.preventDefault();
-      await sendClaudeChatMessage();
-    },
-    [sendClaudeChatMessage]
-  );
 
   const copyLiveFeedMessage = useCallback(
     async (message) => {
@@ -519,6 +548,9 @@ export function App({ mode = 'light', setMode = () => {} }) {
           }
         }}
         setRuntimeSettingsModalOpen={setRuntimeSettingsModalOpen}
+        disabledTabs={disabledTabs}
+        errorCount={collectedErrors.length}
+        onDebugClick={() => setDebugModalOpen(true)}
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
       />
@@ -536,7 +568,10 @@ export function App({ mode = 'light', setMode = () => {} }) {
           <span className="text-sm font-semibold text-primary">PM Automation Panel</span>
         </div>
 
-        <div className="mx-auto w-full max-w-[1200px] flex-1 px-4 py-6 sm:px-6 lg:px-8">
+        <div className={cx(
+          'mx-auto w-full flex-1 px-4 py-6 sm:px-6 lg:px-8',
+          activeTab === NAV_TAB_KEYS.board ? 'max-w-[1600px]' : 'max-w-[1200px]'
+        )}>
           {activeTab === NAV_TAB_KEYS.setup ? (
             <SetupTab
               config={config}
@@ -553,6 +588,12 @@ export function App({ mode = 'light', setMode = () => {} }) {
               changedKeys={changedKeys}
               onSaveClick={onSaveClick}
             />
+          ) : activeTab === NAV_TAB_KEYS.board ? (
+            <BoardTab
+              callApi={callApi}
+              showToast={showToast}
+              refreshTrigger={boardRefreshTrigger}
+            />
           ) : (
             <FeedTab
               logs={logs}
@@ -560,7 +601,6 @@ export function App({ mode = 'light', setMode = () => {} }) {
               chatDraft={chatDraft}
               setChatDraft={setChatDraft}
               sendClaudeChatMessage={sendClaudeChatMessage}
-              onChatDraftKeyDown={onChatDraftKeyDown}
               copyLiveFeedMessage={copyLiveFeedMessage}
               busy={busy}
             />
@@ -589,6 +629,25 @@ export function App({ mode = 'light', setMode = () => {} }) {
         onClose={() => setErrorModal({ open: false, title: '', message: '' })}
         title={errorModal.title}
         errorMessage={errorModal.message}
+      />
+
+      <DebugErrorsModal
+        open={debugModalOpen}
+        onClose={() => setDebugModalOpen(false)}
+        errors={collectedErrors}
+        onClear={() => { setCollectedErrors([]); }}
+        onCopy={async () => {
+          if (collectedErrors.length === 0) return;
+          const text = collectedErrors
+            .map((e) => `[${e.ts || ''}] [${String(e.source || 'unknown').toUpperCase()}] ${e.message || ''}`)
+            .join('\n');
+          try {
+            await navigator.clipboard.writeText(text);
+            showToast('Errors copied to clipboard.');
+          } catch (err) {
+            showToast('Failed to copy errors.', 'danger');
+          }
+        }}
       />
 
       <ToastNotification

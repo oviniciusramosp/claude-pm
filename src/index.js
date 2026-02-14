@@ -117,6 +117,20 @@ app.post('/settings/runtime', (req, res) => {
   });
 });
 
+app.get('/board', async (req, res) => {
+  if (!checkManualToken(req, res)) {
+    return;
+  }
+
+  try {
+    const tasks = await notionClient.listTasks();
+    res.json({ ok: true, tasks });
+  } catch (error) {
+    logger.error(`Board fetch failed: ${error.message}`);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.use((error, _req, res, _next) => {
   logger.error(`Unhandled HTTP error: ${error.message}`);
   res.status(500).json({ error: 'Erro interno' });

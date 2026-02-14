@@ -3,7 +3,6 @@
 import React, { type RefObject, useState } from 'react';
 import { ChevronDown, ChevronRight, Copy01, Send01, TerminalBrowser } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
-import { Input } from '@/components/base/input/input';
 import { cx } from '@/utils/cx';
 import {
   normalizeLogLevel,
@@ -72,7 +71,6 @@ export function FeedTab({
   chatDraft,
   setChatDraft,
   sendClaudeChatMessage,
-  onChatDraftKeyDown,
   copyLiveFeedMessage,
   busy
 }: {
@@ -81,7 +79,6 @@ export function FeedTab({
   chatDraft: string;
   setChatDraft: (value: string) => void;
   sendClaudeChatMessage: () => void;
-  onChatDraftKeyDown: (event: React.KeyboardEvent) => void;
   copyLiveFeedMessage: (message: string) => void;
   busy: Record<string, any>;
 }) {
@@ -187,21 +184,46 @@ export function FeedTab({
         ) : null}
       </div>
 
-      <div className="flex items-stretch gap-2">
-        <div className="min-w-0 flex-1">
-          <Input
-            size="md"
-            aria-label="Chat prompt"
-            placeholder="Ask Claude about this project..."
-            value={chatDraft}
-            isDisabled={Boolean(busy.chat)}
-            onChange={(value) => setChatDraft(value || '')}
-            onKeyDown={onChatDraftKeyDown}
-          />
-        </div>
-        <Button size="md" color="primary" iconLeading={Send01} className="h-[42px] shrink-0" isLoading={Boolean(busy.chat)} onPress={sendClaudeChatMessage}>
-          Send
-        </Button>
+      <div
+        className={cx(
+          'flex items-end gap-2 rounded-lg bg-primary p-1.5 shadow-xs ring-1 ring-primary ring-inset transition-shadow duration-100 ease-linear',
+          'has-[:focus]:ring-2 has-[:focus]:ring-brand',
+          Boolean(busy.chat) && 'bg-disabled_subtle ring-disabled'
+        )}
+      >
+        <textarea
+          aria-label="Chat prompt"
+          placeholder="Ask Claude about this project..."
+          value={chatDraft}
+          disabled={Boolean(busy.chat)}
+          rows={1}
+          onChange={(e) => {
+            setChatDraft(e.target.value);
+            const el = e.target;
+            el.style.height = 'auto';
+            el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              sendClaudeChatMessage();
+            }
+          }}
+          className={cx(
+            'min-w-0 flex-1 resize-none bg-transparent py-1 pl-2 text-md text-primary outline-hidden placeholder:text-placeholder',
+            Boolean(busy.chat) && 'cursor-not-allowed text-disabled'
+          )}
+        />
+        <Button
+          size="sm"
+          color="primary"
+          iconLeading={Send01}
+          className="shrink-0 rounded-md p-2! [&_svg]:!size-4"
+          isLoading={Boolean(busy.chat)}
+          isDisabled={!chatDraft.trim() || Boolean(busy.chat)}
+          onPress={sendClaudeChatMessage}
+          aria-label="Send"
+        />
       </div>
     </section>
   );

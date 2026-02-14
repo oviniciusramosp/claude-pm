@@ -5,6 +5,8 @@ import readline from 'node:readline';
 import process from 'node:process';
 import dotenv from 'dotenv';
 import express from 'express';
+import { Client as NotionClient } from '@notionhq/client';
+import { mapNotionPageToTask } from '../src/notion/mapper.js';
 
 dotenv.config();
 
@@ -1145,22 +1147,76 @@ app.post('/api/automation/run', async (_req, res) => {
   }
 });
 
-app.get('/api/automation/board', async (_req, res) => {
-  const baseUrl = getApiBaseUrl();
-  try {
-    const response = await fetch(`${baseUrl}/board`, {
-      headers: getAutomationHeaders()
-    });
+app.get('/api/board', async (_req, res) => {
+  const env = await readEnvPairs();
+  const token = (env.NOTION_API_TOKEN || '').trim();
+  const databaseId = (env.NOTION_DATABASE_ID || '').trim();
 
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      res.status(response.status).json({ ok: false, message: payload?.error || payload?.message || 'Failed to fetch board' });
+  if (!token) {
+    res.status(400).json({ ok: false, code: 'MISSING_TOKEN', message: 'Notion API Token is not configured. Go to Setup to add it.' });
+    return;
+  }
+
+  if (!databaseId) {
+    res.status(400).json({ ok: false, code: 'MISSING_DATABASE_ID', message: 'Notion Database ID is not configured.' });
+    return;
+  }
+
+  const mapperConfig = {
+    notion: {
+      properties: {
+        name: env.NOTION_PROP_NAME || 'Name',
+        status: env.NOTION_PROP_STATUS || 'Status',
+        agent: env.NOTION_PROP_AGENT || 'Agent',
+        priority: env.NOTION_PROP_PRIORITY || 'Priority',
+        type: env.NOTION_PROP_TYPE || 'Type',
+        parentItem: env.NOTION_PROP_PARENT_ITEM || env.NOTION_PROP_EPIC || 'Parent item',
+        model: env.NOTION_PROP_MODEL || 'Model'
+      },
+      typeValues: { epic: env.NOTION_TYPE_EPIC || 'Epic' }
+    }
+  };
+
+  try {
+    const client = new NotionClient({ auth: token, notionVersion: '2022-06-28' });
+    const pages = [];
+    let cursor = undefined;
+
+    do {
+      const response = await client.databases.query({
+        database_id: databaseId,
+        start_cursor: cursor,
+        page_size: 100
+      });
+      pages.push(...response.results);
+      cursor = response.has_more ? response.next_cursor : undefined;
+    } while (cursor);
+
+    const tasks = pages
+      .map((page) => mapNotionPageToTask(page, mapperConfig))
+      .filter((task) => task !== null);
+
+    res.json({ ok: true, tasks });
+  } catch (error) {
+    const msg = error.message || String(error);
+    const status = error.status || 500;
+
+    if (msg.includes('Could not find database') || msg.includes('object not found')) {
+      res.status(400).json({ ok: false, code: 'INVALID_DATABASE_ID', message: `Database not found. Check your Database ID. (${msg})` });
       return;
     }
 
-    res.json(payload);
-  } catch (error) {
-    res.status(500).json({ ok: false, message: error.message });
+    if (msg.includes('API token is invalid') || msg.includes('Unauthorized') || status === 401) {
+      res.status(401).json({ ok: false, code: 'INVALID_TOKEN', message: `Notion API Token is invalid or expired. Update it in Setup. (${msg})` });
+      return;
+    }
+
+    if (msg.includes('does not have access') || status === 403) {
+      res.status(403).json({ ok: false, code: 'NO_ACCESS', message: `The Notion integration does not have access to this database. Share the database with your integration. (${msg})` });
+      return;
+    }
+
+    res.status(status >= 400 && status < 600 ? status : 500).json({ ok: false, code: 'NOTION_ERROR', message: `Notion API error: ${msg}` });
   }
 });
 

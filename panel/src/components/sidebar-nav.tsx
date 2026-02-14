@@ -1,6 +1,6 @@
 // panel/src/components/sidebar-nav.tsx
 
-import { Asterisk02, Flash, Moon01, PlayCircle, Settings01, StopCircle, Sun } from '@untitledui/icons';
+import { AlertOctagon, Asterisk02, Flash, Moon01, PlayCircle, Settings01, StopCircle, Sun } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { cx } from '@/utils/cx';
 import { SIDEBAR_NAV_ITEMS } from '../constants';
@@ -21,6 +21,9 @@ export function SidebarNav({
   onAppBadgeClick,
   onApiBadgeClick,
   setRuntimeSettingsModalOpen,
+  disabledTabs,
+  errorCount,
+  onDebugClick,
   sidebarOpen,
   setSidebarOpen
 }: {
@@ -37,6 +40,9 @@ export function SidebarNav({
   onAppBadgeClick: () => void;
   onApiBadgeClick: () => void;
   setRuntimeSettingsModalOpen: (open: boolean) => void;
+  disabledTabs?: Set<string>;
+  errorCount: number;
+  onDebugClick: () => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
 }) {
@@ -61,18 +67,23 @@ export function SidebarNav({
       <nav className="space-y-1 px-3" aria-label="Main navigation">
         {SIDEBAR_NAV_ITEMS.map((item) => {
           const isActive = activeTab === item.key;
+          const isDisabled = disabledTabs?.has(item.key);
           return (
             <button
               key={item.key}
               type="button"
+              disabled={isDisabled}
               aria-current={isActive ? 'page' : undefined}
+              title={isDisabled ? 'Notion API Token required' : undefined}
               className={cx(
                 'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition',
-                isActive
-                  ? 'bg-active text-secondary shadow-xs'
-                  : 'text-tertiary hover:bg-primary_hover hover:text-secondary'
+                isDisabled
+                  ? 'cursor-not-allowed text-disabled opacity-50'
+                  : isActive
+                    ? 'bg-active text-secondary shadow-xs'
+                    : 'text-tertiary hover:bg-primary_hover hover:text-secondary'
               )}
-              onClick={() => setActiveTab(item.key)}
+              onClick={() => { if (!isDisabled) setActiveTab(item.key); }}
             >
               <Icon icon={item.icon} className="size-5" />
               <span>{item.label}</span>
@@ -155,8 +166,24 @@ export function SidebarNav({
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Footer — Theme Toggle */}
-      <div className="border-t border-secondary px-3 py-4">
+      {/* Footer */}
+      <div className="px-3 pb-4">
+        <button
+          type="button"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-tertiary transition hover:bg-primary_hover hover:text-secondary"
+          onClick={onDebugClick}
+        >
+          <Icon icon={AlertOctagon} className="size-5" />
+          <span>Debug Errors</span>
+          {errorCount > 0 ? (
+            <span className="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-utility-error-600 text-[11px] font-semibold text-white">
+              {errorCount > 99 ? '99+' : errorCount}
+            </span>
+          ) : null}
+        </button>
+
+        <div className="mx-3 my-1 border-t border-secondary" />
+
         <button
           type="button"
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-tertiary transition hover:bg-primary_hover hover:text-secondary"
