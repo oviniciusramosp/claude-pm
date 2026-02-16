@@ -7,6 +7,7 @@ import {
   Beaker01,
   CheckCircle,
   Columns03,
+  CpuChip02,
   File03,
   Folder,
   GitCommit,
@@ -56,6 +57,23 @@ export const TEXT_FIELD_CONFIG: TextFieldConfig[] = [
       ]
     },
     folderPicker: true
+  },
+  {
+    key: 'CLAUDE_MODEL_OVERRIDE',
+    label: 'Claude Model Override',
+    icon: CpuChip02,
+    placeholder: '',
+    description: 'Override the default Claude model for all tasks.',
+    help: {
+      title: 'Claude Model Selection',
+      summary: 'Choose which Claude model to use for task execution.',
+      steps: [
+        'Leave empty to use the model specified in each task.',
+        'Or select a model to override all task models.',
+        'Opus 4.6 is most capable but slower, Haiku 4.5 is fastest.'
+      ]
+    },
+    selectOptions: CLAUDE_MODELS
   }
 ];
 
@@ -121,7 +139,7 @@ export const SETUP_SECTIONS: SetupSection[] = [
     key: 'claude',
     title: 'Claude Runner',
     description: 'Authentication, command, and workspace configuration.',
-    textKeys: ['CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_WORKDIR'],
+    textKeys: ['CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_WORKDIR', 'CLAUDE_MODEL_OVERRIDE'],
     toggleKeys: ['CLAUDE_FULL_ACCESS']
   },
   {

@@ -23,6 +23,7 @@ export function buildInitialConfig(): Record<string, string | boolean> {
   return {
     CLAUDE_CODE_OAUTH_TOKEN: '',
     CLAUDE_WORKDIR: '.',
+    CLAUDE_MODEL_OVERRIDE: '',
     CLAUDE_FULL_ACCESS: true,
     CLAUDE_STREAM_OUTPUT: true,
     CLAUDE_LOG_PROMPT: true,
@@ -101,6 +102,14 @@ export function validateFieldValue(key: string, rawValue: unknown): ValidationRe
     }
 
     return { level: 'success', message: 'Working directory looks valid.' };
+  }
+
+  if (key === 'CLAUDE_MODEL_OVERRIDE') {
+    if (!value) {
+      return { level: 'success', message: 'Will use model specified in each task.' };
+    }
+
+    return { level: 'success', message: 'Model override active.' };
   }
 
   return { level: 'neutral', message: '' };

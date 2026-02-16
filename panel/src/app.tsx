@@ -40,7 +40,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
   const [activeTab, setActiveTab] = useState(NAV_TAB_KEYS.setup);
   const [status, setStatus] = useState(null);
   const [logs, setLogs] = useState([]);
-  const [runtimeSettings, setRuntimeSettings] = useState({ streamOutput: false, logPrompt: true, modelOverride: '' });
+  const [runtimeSettings, setRuntimeSettings] = useState({ streamOutput: false, logPrompt: true });
   const [toasts, setToasts] = useState([]);
   const [busy, setBusy] = useState({});
   const [saveConfirm, setSaveConfirm] = useState({ open: false, changedKeys: [] });
@@ -397,8 +397,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
           body: JSON.stringify({
             claude: {
               streamOutput: next.streamOutput,
-              logPrompt: next.logPrompt,
-              modelOverride: next.modelOverride
+              logPrompt: next.logPrompt
             }
           })
         });
@@ -414,38 +413,6 @@ export function App({ mode = 'light', setMode = () => {} }) {
     [callApi, runtimeSettings, showToast]
   );
 
-  const updateModelOverride = useCallback(
-    async (model) => {
-      const busyKey = 'runtime_modelOverride';
-      setBusy((prev) => ({ ...prev, [busyKey]: true }));
-
-      try {
-        const next = {
-          ...runtimeSettings,
-          modelOverride: model
-        };
-
-        await callApi('/api/automation/runtime', {
-          method: 'POST',
-          body: JSON.stringify({
-            claude: {
-              streamOutput: next.streamOutput,
-              logPrompt: next.logPrompt,
-              modelOverride: next.modelOverride
-            }
-          })
-        });
-
-        setRuntimeSettings(next);
-        showToast('Claude model setting updated.', 'success');
-      } catch (error) {
-        showToast(`Could not update model setting: ${error.message}`, 'danger');
-      } finally {
-        setBusy((prev) => ({ ...prev, [busyKey]: false }));
-      }
-    },
-    [callApi, runtimeSettings, showToast]
-  );
 
   const persistConfig = useCallback(
     async ({ restartApi }) => {
@@ -672,7 +639,6 @@ export function App({ mode = 'light', setMode = () => {} }) {
         runtimeSettings={runtimeSettings}
         busy={busy}
         updateRuntimeSetting={updateRuntimeSetting}
-        updateModelOverride={updateModelOverride}
       />
 
       <ErrorDetailModal

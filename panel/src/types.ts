@@ -13,6 +13,7 @@ export interface TextFieldConfig {
   };
   password?: boolean;
   folderPicker?: boolean;
+  selectOptions?: readonly { value: string; label: string; description: string }[];
 }
 
 export interface ToggleConfig {
@@ -57,7 +58,6 @@ export type ToastState = Toast[];
 export interface RuntimeSettings {
   streamOutput: boolean;
   logPrompt: boolean;
-  modelOverride: string;
 }
 
 export interface LogSourceMeta {

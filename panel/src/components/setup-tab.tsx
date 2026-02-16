@@ -54,7 +54,7 @@ export function SetupTab({
   let stepNumber = 0;
 
   return (
-    <section className="rounded-2xl border border-secondary bg-primary p-5 shadow-sm">
+    <section className="rounded-xl border border-secondary bg-primary p-5 shadow-sm">
       <div className="space-y-2">
         <h2 className="m-0 inline-flex items-center gap-2 text-xl font-semibold text-primary">
           <Icon icon={Settings01} className="size-5" />
@@ -91,7 +91,7 @@ export function SetupTab({
                   const hasInlineActions = isSecretField || field.folderPicker;
 
                   return (
-                    <div key={field.key} className="rounded-xl border border-secondary bg-secondary p-5">
+                    <div key={field.key} className="rounded-lg border border-secondary bg-secondary p-4">
                       <div className="flex items-start gap-3">
                         <Badge type="pill-color" color="brand" size="sm" className="mt-0.5 shrink-0">
                           {stepNumber}
@@ -116,21 +116,38 @@ export function SetupTab({
                       <div className="mt-4 ml-9">
                         <div className="flex items-stretch gap-2">
                           <div className="relative min-w-0 flex-1">
-                            <Input
-                              size="md"
-                              aria-label={field.label}
-                              type={isSecretField && !isFieldVisible ? 'password' : 'text'}
-                              placeholder={field.placeholder}
-                              wrapperClassName="h-11"
-                              inputClassName={hasInlineValidationIcon ? 'pr-9' : undefined}
-                              tooltipClassName={validation.level === 'error' ? 'hidden' : undefined}
-                              value={config[field.key] || ''}
-                              isInvalid={validation.level === 'error'}
-                              onChange={(value) => {
-                                const nextValue = value || '';
-                                setConfig((prev) => ({ ...prev, [field.key]: nextValue }));
-                              }}
-                            />
+                            {field.selectOptions ? (
+                              <select
+                                aria-label={field.label}
+                                value={config[field.key] || ''}
+                                onChange={(e) => {
+                                  setConfig((prev) => ({ ...prev, [field.key]: e.target.value }));
+                                }}
+                                className="w-full h-11 rounded-sm border border-secondary bg-primary px-3 py-2 text-sm text-primary transition hover:border-secondary_hover focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+                              >
+                                {field.selectOptions.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <Input
+                                size="md"
+                                aria-label={field.label}
+                                type={isSecretField && !isFieldVisible ? 'password' : 'text'}
+                                placeholder={field.placeholder}
+                                wrapperClassName="h-11"
+                                inputClassName={hasInlineValidationIcon ? 'pr-9' : undefined}
+                                tooltipClassName={validation.level === 'error' ? 'hidden' : undefined}
+                                value={config[field.key] || ''}
+                                isInvalid={validation.level === 'error'}
+                                onChange={(value) => {
+                                  const nextValue = value || '';
+                                  setConfig((prev) => ({ ...prev, [field.key]: nextValue }));
+                                }}
+                              />
+                            )}
                             {hasInlineValidationIcon ? (
                               <Tooltip
                                 title={validation.level === 'success' ? 'Valid' : validation.level === 'warning' ? 'Warning' : 'Error'}
@@ -189,6 +206,11 @@ export function SetupTab({
                           ) : null}
                         </div>
 
+                        {field.selectOptions && config[field.key] ? (
+                          <p className="m-0 mt-2 text-xs text-tertiary">
+                            {field.selectOptions.find((opt) => opt.value === config[field.key])?.description}
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                   );
@@ -205,7 +227,7 @@ export function SetupTab({
                   }
 
                   return (
-                    <div key={toggle.key} className="rounded-xl border border-secondary bg-secondary p-4">
+                    <div key={toggle.key} className="rounded-lg border border-secondary bg-secondary p-4">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0 space-y-1">
                           <p className="m-0 inline-flex items-center gap-2 text-sm font-medium text-secondary">
@@ -226,7 +248,7 @@ export function SetupTab({
                       </div>
 
                       {toggle.warning ? (
-                        <div className="mt-3 flex items-start gap-2 rounded-lg bg-utility-warning-50 p-3 text-sm text-warning-primary">
+                        <div className="mt-3 flex items-start gap-2 rounded-sm bg-utility-warning-50 p-3 text-sm text-warning-primary">
                           <AlertCircle className="mt-0.5 size-4 shrink-0" />
                           <p className="m-0">{toggle.warning}</p>
                         </div>
