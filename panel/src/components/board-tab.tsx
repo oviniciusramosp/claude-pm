@@ -137,63 +137,60 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, isFixing, isAnyFixing
           : 'border-secondary'
       )}
     >
-      {/* Fix button (hover only) or loading spinner */}
-      {onFix && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (!isAnyFixing) {
-              onFix(task.id);
-            }
-          }}
-          disabled={isAnyFixing}
-          className={cx(
-            'absolute top-2 right-2 transition-opacity rounded-md p-1.5 shadow-sm z-10',
-            isAnyFixing
-              ? 'bg-utility-gray-100 border border-utility-gray-200 cursor-not-allowed opacity-60'
-              : 'bg-utility-brand-50 hover:bg-utility-brand-100 border border-utility-brand-200',
-            isFixing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-          )}
-          title={
-            isAnyFixing
-              ? (isFixing ? 'Fixing this task...' : 'Another task is being fixed')
-              : 'Fix ACs with Claude'
-          }
-          aria-label="Fix acceptance criteria"
-        >
-          {isFixing ? (
-            <RefreshCw01 className="size-3.5 text-utility-brand-600 animate-spin" />
-          ) : (
-            <Tool01 className={cx('size-3.5', isAnyFixing ? 'text-utility-gray-400' : 'text-utility-brand-600')} />
-          )}
-        </button>
-      )}
-      {/* Row 1: Epic reference + donut chart */}
-      {(parentEpic || task.acTotal > 0) && (
+      {/* Row 1: Epic reference (only for child tasks) */}
+      {parentEpic && (
         <div className="flex items-center gap-2 mb-2">
-          {parentEpic && (
-            <div className="flex items-center gap-1 text-xs text-tertiary truncate min-w-0">
-              <Icon icon={Folder} className="size-3 shrink-0" />
-              <span className="truncate">
-                {parentEpicCode && <span className="font-mono mr-1">{parentEpicCode}</span>}
-                {parentEpic.name}
-              </span>
-            </div>
-          )}
-          {task.acTotal > 0 && (
-            <div className="ml-auto">
-              <AcDonut done={task.acDone} total={task.acTotal} />
-            </div>
-          )}
+          <div className="flex items-center gap-1 text-xs text-tertiary truncate min-w-0">
+            <Icon icon={Folder} className="size-3 shrink-0" />
+            <span className="truncate">
+              {parentEpicCode && <span className="font-mono mr-1">{parentEpicCode}</span>}
+              {parentEpic.name}
+            </span>
+          </div>
         </div>
       )}
 
-      {/* Row 2: Title (wraps when needed) */}
-      <p className="text-sm font-medium text-primary">
-        {taskCode && <span className="text-tertiary font-mono mr-2">{taskCode}</span>}
-        {task.name}
-      </p>
+      {/* Row 2: Title + Fix button + AC chart */}
+      <div className="flex items-start gap-2">
+        <p className="text-sm font-medium text-primary flex-1 min-w-0">
+          {taskCode && <span className="text-tertiary font-mono mr-2">{taskCode}</span>}
+          {task.name}
+        </p>
+        <div className="flex items-center gap-2 shrink-0">
+          {task.acTotal > 0 && <AcDonut done={task.acDone} total={task.acTotal} />}
+          {onFix && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isAnyFixing) {
+                  onFix(task.id);
+                }
+              }}
+              disabled={isAnyFixing}
+              className={cx(
+                'transition-opacity rounded-md p-1.5 shadow-sm',
+                isAnyFixing
+                  ? 'bg-utility-gray-100 border border-utility-gray-200 cursor-not-allowed opacity-60'
+                  : 'bg-utility-brand-50 hover:bg-utility-brand-100 border border-utility-brand-200',
+                isFixing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              )}
+              title={
+                isAnyFixing
+                  ? (isFixing ? 'Fixing this task...' : 'Another task is being fixed')
+                  : 'Fix ACs with Claude'
+              }
+              aria-label="Fix acceptance criteria"
+            >
+              {isFixing ? (
+                <RefreshCw01 className="size-3.5 text-utility-brand-600 animate-spin" />
+              ) : (
+                <Tool01 className={cx('size-3.5', isAnyFixing ? 'text-utility-gray-400' : 'text-utility-brand-600')} />
+              )}
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Row 3: Type + Priority */}
       {(task.type || task.priority) && (
