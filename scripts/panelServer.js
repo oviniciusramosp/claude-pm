@@ -777,21 +777,23 @@ function summarizeCommandOutput(stderr, stdout) {
   return `${line.slice(0, 320)}...`;
 }
 
-function buildClaudePromptCommand() {
-  if (!envEnabled(process.env.CLAUDE_FULL_ACCESS, false)) {
-    return FIXED_CLAUDE_COMMAND;
+function buildClaudePromptCommand(model) {
+  let command = FIXED_CLAUDE_COMMAND;
+
+  if (envEnabled(process.env.CLAUDE_FULL_ACCESS, false) && !command.includes('--dangerously-skip-permissions')) {
+    command = `${command} --dangerously-skip-permissions`;
   }
 
-  if (FIXED_CLAUDE_COMMAND.includes('--dangerously-skip-permissions')) {
-    return FIXED_CLAUDE_COMMAND;
+  if (model && model.trim()) {
+    command = `${command} --model ${model.trim()}`;
   }
 
-  return `${FIXED_CLAUDE_COMMAND} --dangerously-skip-permissions`;
+  return command;
 }
 
-function runClaudePrompt(prompt) {
+function runClaudePrompt(prompt, model) {
   return new Promise((resolve, reject) => {
-    const command = buildClaudePromptCommand();
+    const command = buildClaudePromptCommand(model);
     const workdir = path.resolve(cwd, process.env.CLAUDE_WORKDIR || '.');
     const timeoutMs = resolveClaudeTimeoutMs();
     const commandEnv = {
@@ -1571,6 +1573,8 @@ app.post('/api/board/fix-order', async (_req, res) => {
 
 app.post('/api/claude/chat', async (req, res) => {
   const message = String(req.body?.message || '').trim();
+  const model = req.body?.model || '';
+
   if (!message) {
     res.status(400).json({ ok: false, message: 'Message is required.' });
     return;
@@ -1590,7 +1594,7 @@ app.post('/api/claude/chat', async (req, res) => {
   pushLog('info', LOG_SOURCE.chatUser, truncateText(message));
 
   try {
-    const { reply, workdir } = await runClaudePrompt(message);
+    const { reply, workdir } = await runClaudePrompt(message, model);
     const normalizedReply = reply || '(Claude returned empty output)';
     pushLog('success', LOG_SOURCE.chatClaude, truncateText(normalizedReply));
     res.json({

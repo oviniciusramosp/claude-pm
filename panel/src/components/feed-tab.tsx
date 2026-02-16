@@ -18,6 +18,7 @@ import {
   extractModelFromMessage,
   formatModelLabel
 } from '../utils/log-helpers';
+import { CLAUDE_MODELS } from '../constants';
 import { Icon } from './icon';
 import { SourceAvatar } from './source-avatar';
 import type { LogEntry, OrchestratorState, TaskContractData } from '../types';
@@ -35,14 +36,14 @@ function ExpandablePrompt({
   const lineCount = content ? content.split('\n').length : 0;
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       <button
         type="button"
-        className="m-0 flex w-full cursor-pointer items-center gap-1.5 border-none bg-transparent p-0 text-left text-sm font-medium leading-5 text-current hover:opacity-80"
+        className="m-0 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left text-sm font-medium leading-5 text-current hover:opacity-80"
         onClick={() => setExpanded((prev) => !prev)}
         aria-expanded={expanded}
       >
-        <Icon icon={expanded ? ChevronDown : ChevronRight} className="size-3.5 shrink-0" />
+        <Icon icon={expanded ? ChevronDown : ChevronRight} className="size-4 shrink-0" />
         <span>{title}</span>
         {!expanded && lineCount > 0 ? (
           <span className="ml-1 text-[11px] font-normal text-tertiary">
@@ -53,13 +54,13 @@ function ExpandablePrompt({
 
       {expanded ? (
         <div className="relative">
-          <pre className="m-0 max-h-[400px] overflow-auto rounded-lg bg-primary/50 p-3 text-xs leading-relaxed text-current">
+          <pre className="m-0 max-h-[400px] overflow-auto rounded-sm bg-primary/50 p-3 text-xs leading-relaxed text-current">
             {content}
           </pre>
           <Button
             size="sm"
             color="tertiary"
-            className="absolute right-1.5 top-1.5 h-6 w-6 shrink-0 [&_svg]:!size-3"
+            className="absolute right-2 top-2 h-6 w-6 shrink-0 [&_svg]:!size-3"
             aria-label="Copy prompt"
             iconLeading={Copy01}
             onPress={() => onCopy(content)}
@@ -108,14 +109,14 @@ function ExpandableTaskResult({
   }
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       <button
         type="button"
-        className="m-0 flex w-full cursor-pointer items-center gap-1.5 border-none bg-transparent p-0 text-left text-sm font-medium leading-5 text-current hover:opacity-80"
+        className="m-0 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left text-sm font-medium leading-5 text-current hover:opacity-80"
         onClick={() => setExpanded((prev) => !prev)}
         aria-expanded={expanded}
       >
-        <Icon icon={expanded ? ChevronDown : ChevronRight} className="size-3.5 shrink-0" />
+        <Icon icon={expanded ? ChevronDown : ChevronRight} className="size-4 shrink-0" />
         <span>{statusLabel}{badge}</span>
         {!expanded ? (
           <span className="ml-1 text-[11px] font-normal text-tertiary">
@@ -126,7 +127,7 @@ function ExpandableTaskResult({
 
       {expanded ? (
         <div className="relative">
-          <div className="max-h-[400px] space-y-2 overflow-auto rounded-lg bg-primary/50 p-3 text-xs leading-relaxed text-current">
+          <div className="max-h-[400px] space-y-2 overflow-auto rounded-sm bg-primary/50 p-3 text-xs leading-relaxed text-current">
             {contract.summary ? (
               <p className="m-0">{contract.summary}</p>
             ) : null}
@@ -150,7 +151,7 @@ function ExpandableTaskResult({
           <Button
             size="sm"
             color="tertiary"
-            className="absolute right-1.5 top-1.5 h-6 w-6 shrink-0 [&_svg]:!size-3"
+            className="absolute right-2 top-2 h-6 w-6 shrink-0 [&_svg]:!size-3"
             aria-label="Copy result"
             iconLeading={Copy01}
             onPress={() => onCopy(copyText)}
@@ -166,6 +167,8 @@ export function FeedTab({
   logFeedRef,
   chatDraft,
   setChatDraft,
+  selectedModel,
+  setSelectedModel,
   sendClaudeChatMessage,
   copyLiveFeedMessage,
   busy,
@@ -175,6 +178,8 @@ export function FeedTab({
   logFeedRef: RefObject<HTMLDivElement | null>;
   chatDraft: string;
   setChatDraft: (value: string) => void;
+  selectedModel: string;
+  setSelectedModel: (value: string) => void;
   sendClaudeChatMessage: () => void;
   copyLiveFeedMessage: (message: string) => void;
   busy: Record<string, any>;
@@ -191,7 +196,7 @@ export function FeedTab({
   }, [logs, logFeedRef]);
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col gap-4 rounded-2xl border border-secondary bg-primary p-4 shadow-sm">
+    <section className="flex min-h-0 flex-1 flex-col gap-4 rounded-xl border border-secondary bg-primary p-4 shadow-sm">
       <div className="space-y-1">
         <h2 className="m-0 inline-flex items-center gap-2 text-xl font-semibold text-primary">
           <Icon icon={TerminalBrowser} className="size-5" />
@@ -202,7 +207,7 @@ export function FeedTab({
 
       <div
         ref={logFeedRef}
-        className="min-h-0 flex-1 space-y-2 overflow-auto rounded-2xl border border-secondary bg-secondary p-3"
+        className="min-h-0 flex-1 space-y-2 overflow-auto rounded-lg border border-secondary bg-secondary p-3"
       >
         {logs.map((line, index) => {
           const timestamp = formatFeedTimestamp(line.ts);
@@ -242,8 +247,8 @@ export function FeedTab({
 
                 <div
                   className={cx(
-                    'group/msg max-w-[min(86%,760px)] rounded-2xl px-3.5 py-2.5 shadow-xs',
-                    isOutgoing ? 'rounded-br-md' : 'rounded-bl-md',
+                    'group/msg max-w-[min(86%,760px)] rounded-xl px-4 py-3 shadow-xs',
+                    isOutgoing ? 'rounded-br-sm' : 'rounded-bl-sm',
                     logToneClasses(level, sourceMeta.side, sourceMeta.directClaude, specialBubble),
                     specialBubble === 'in-progress'
                       ? 'ring-1 ring-blue-400/50'
@@ -268,7 +273,7 @@ export function FeedTab({
                   )}
 
                   {modelLabel ? (
-                    <div className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-black/5 px-1.5 py-0.5 text-[11px] text-current/70 dark:bg-white/10">
+                    <div className="mt-2 inline-flex items-center gap-1 rounded-sm bg-black/5 px-2 py-0.5 text-[11px] text-current/70 dark:bg-white/10">
                       <Icon icon={CpuChip01} className="size-3 shrink-0" />
                       <span>{modelLabel}</span>
                     </div>
@@ -307,13 +312,13 @@ export function FeedTab({
         })}
 
         {logs.length === 0 ? (
-          <div className="rounded-2xl bg-primary p-3 text-sm text-tertiary shadow-xs">
+          <div className="rounded-xl bg-primary p-3 text-sm text-tertiary shadow-xs">
             No logs yet. Start App or click <strong>Run Queue Now</strong> to see messages here.
           </div>
         ) : null}
 
         {claudeWorking ? (
-          <div className="sticky bottom-0 flex items-center gap-3 rounded-2xl border border-brand/30 bg-utility-brand-50 px-4 py-3 shadow-sm dark:bg-utility-brand-50/10">
+          <div className="sticky bottom-0 flex items-center gap-3 rounded-xl border border-brand/30 bg-utility-brand-50 px-4 py-3 shadow-sm dark:bg-utility-brand-50/10">
             <svg className="size-4 shrink-0 animate-spin text-brand-primary" viewBox="0 0 24 24" fill="none">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -325,46 +330,72 @@ export function FeedTab({
         ) : null}
       </div>
 
-      <div
-        className={cx(
-          'flex items-end gap-2 rounded-lg bg-primary p-1.5 shadow-xs ring-1 ring-primary ring-inset transition-shadow duration-100 ease-linear',
-          'has-[:focus]:ring-2 has-[:focus]:ring-brand',
-          Boolean(busy.chat) && 'bg-disabled_subtle ring-disabled'
-        )}
-      >
-        <textarea
-          aria-label="Chat prompt"
-          placeholder="Ask Claude about this project..."
-          value={chatDraft}
-          disabled={Boolean(busy.chat)}
-          rows={1}
-          onChange={(e) => {
-            setChatDraft(e.target.value);
-            const el = e.target;
-            el.style.height = 'auto';
-            el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              sendClaudeChatMessage();
-            }
-          }}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Icon icon={CpuChip01} className="size-4 text-tertiary" />
+          <label htmlFor="model-select" className="text-xs font-medium text-secondary">
+            Model
+          </label>
+          <select
+            id="model-select"
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            disabled={Boolean(busy.chat)}
+            className={cx(
+              'flex-1 rounded-sm border border-secondary bg-primary px-2 py-1 text-xs text-primary outline-hidden transition-shadow',
+              'focus:ring-2 focus:ring-brand',
+              Boolean(busy.chat) && 'cursor-not-allowed bg-disabled_subtle text-disabled'
+            )}
+          >
+            {CLAUDE_MODELS.map((model) => (
+              <option key={model.value} value={model.value}>
+                {model.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div
           className={cx(
-            'min-w-0 flex-1 resize-none bg-transparent py-1 pl-2 text-md text-primary outline-hidden placeholder:text-placeholder',
-            Boolean(busy.chat) && 'cursor-not-allowed text-disabled'
+            'flex items-end gap-2 rounded-lg bg-primary p-2 shadow-xs ring-1 ring-primary ring-inset transition-shadow duration-100 ease-linear',
+            'has-[:focus]:ring-2 has-[:focus]:ring-brand',
+            Boolean(busy.chat) && 'bg-disabled_subtle ring-disabled'
           )}
-        />
-        <Button
-          size="sm"
-          color="primary"
-          iconLeading={Send01}
-          className="shrink-0 rounded-md p-2! [&_svg]:!size-4"
-          isLoading={Boolean(busy.chat)}
-          isDisabled={!chatDraft.trim() || Boolean(busy.chat)}
-          onPress={sendClaudeChatMessage}
-          aria-label="Send"
-        />
+        >
+          <textarea
+            aria-label="Chat prompt"
+            placeholder="Ask Claude about this project..."
+            value={chatDraft}
+            disabled={Boolean(busy.chat)}
+            rows={1}
+            onChange={(e) => {
+              setChatDraft(e.target.value);
+              const el = e.target;
+              el.style.height = 'auto';
+              el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                sendClaudeChatMessage();
+              }
+            }}
+            className={cx(
+              'min-w-0 flex-1 resize-none bg-transparent py-1 pl-2 text-md text-primary outline-hidden placeholder:text-placeholder',
+              Boolean(busy.chat) && 'cursor-not-allowed text-disabled'
+            )}
+          />
+          <Button
+            size="sm"
+            color="primary"
+            iconLeading={Send01}
+            className="shrink-0 rounded-xs p-2! [&_svg]:!size-4"
+            isLoading={Boolean(busy.chat)}
+            isDisabled={!chatDraft.trim() || Boolean(busy.chat)}
+            onPress={sendClaudeChatMessage}
+            aria-label="Send"
+          />
+        </div>
       </div>
     </section>
   );

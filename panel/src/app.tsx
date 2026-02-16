@@ -47,6 +47,13 @@ export function App({ mode = 'light', setMode = () => {} }) {
   const [revealedFields, setRevealedFields] = useState({});
   const [runtimeSettingsModalOpen, setRuntimeSettingsModalOpen] = useState(false);
   const [chatDraft, setChatDraft] = useState('');
+  const [selectedModel, setSelectedModel] = useState(() => {
+    try {
+      return localStorage.getItem('claudeSelectedModel') || '';
+    } catch {
+      return '';
+    }
+  });
   const [serviceErrors, setServiceErrors] = useState({ app: null, api: null });
   const [errorModal, setErrorModal] = useState({ open: false, title: '', message: '' });
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -90,6 +97,14 @@ export function App({ mode = 'light', setMode = () => {} }) {
       setServiceErrors((prev) => (prev.app ? { ...prev, app: null } : prev));
     }
   }, [apiRunning]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('claudeSelectedModel', selectedModel);
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, [selectedModel]);
 
   const onThemeToggle = useCallback(() => {
     setMode(isDark ? 'light' : 'dark');
@@ -315,7 +330,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
     try {
       await callApi('/api/claude/chat', {
         method: 'POST',
-        body: JSON.stringify({ message })
+        body: JSON.stringify({ message, model: selectedModel || undefined })
       });
       setChatDraft('');
     } catch (error) {
@@ -323,7 +338,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
     } finally {
       setBusy((prev) => ({ ...prev, chat: false }));
     }
-  }, [callApi, chatDraft, showToast]);
+  }, [callApi, chatDraft, selectedModel, showToast]);
 
 
 
@@ -616,6 +631,8 @@ export function App({ mode = 'light', setMode = () => {} }) {
               logFeedRef={logFeedRef}
               chatDraft={chatDraft}
               setChatDraft={setChatDraft}
+              selectedModel={selectedModel}
+              setSelectedModel={setSelectedModel}
               sendClaudeChatMessage={sendClaudeChatMessage}
               copyLiveFeedMessage={copyLiveFeedMessage}
               busy={busy}
