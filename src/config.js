@@ -85,6 +85,12 @@ export const config = {
     maxConsecutiveFailures: number('WATCHDOG_MAX_CONSECUTIVE_FAILURES', 3),
     maxGlobalConsecutiveFailures: number('GLOBAL_MAX_CONSECUTIVE_FAILURES', 5)
   },
+  autoRecovery: {
+    enabled: boolean('AUTO_RECOVERY_ENABLED', true),
+    maxRetries: number('AUTO_RECOVERY_MAX_RETRIES', 2),
+    timeoutMs: number('AUTO_RECOVERY_TIMEOUT_MS', 5 * 60 * 1000),
+    model: process.env.AUTO_RECOVERY_MODEL || 'auto'
+  },
   manualRun: {
     token: process.env.MANUAL_RUN_TOKEN || ''
   }

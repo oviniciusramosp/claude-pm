@@ -5,6 +5,7 @@ import { runClaudeTask } from './claudeRunner.js';
 import { buildEpicReviewPrompt, buildEpicSummary, buildRetryPrompt, buildReviewPrompt, buildTaskCompletionNotes, buildTaskPrompt, formatDuration } from './promptBuilder.js';
 import { allEpicChildrenAreDone, hasIncompleteEpic, isEpicTask, pickNextEpic, pickNextEpicChild, pickNextTask, sortCandidates } from './selectTask.js';
 import { Watchdog } from './watchdog.js';
+import { autoRecovery } from './autoRecovery.js';
 
 function normalize(value) {
   if (value === null || value === undefined) {
@@ -356,6 +357,35 @@ export class Orchestrator {
         if (normalize(execution.status) !== 'done') {
           this.logger.info(`Claude finished: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`);
           this.logger.info(buildContractJson(execution));
+
+          // Try auto-recovery before marking as failed
+          if (autoRecovery.canRecover(task.id)) {
+            this.logger.warn(`Task failed: "${taskLabel(task)}" (status: ${execution.status || 'unknown'})`);
+
+            const recovery = await autoRecovery.tryRecover(task.id, {
+              message: `Task returned status: ${execution.status || 'unknown'}`,
+              timedOut: false,
+            }, {
+              task: {
+                id: task.id,
+                name: task.name,
+                content: markdown,
+                acceptanceCriteria: task.acceptanceCriteria || [],
+              },
+              logs: execution.stdout || '',
+              workdir: this.config.claude.workdir,
+              exitCode: execution.exitCode,
+            });
+
+            if (recovery.recovered) {
+              this.logger.success(`Auto-recovery succeeded, retrying task: "${taskLabel(task)}"`);
+              // Don't break - let the loop retry this task
+              continue;
+            }
+
+            this.logger.error(`Auto-recovery exhausted for "${taskLabel(task)}" after ${recovery.attempt} attempt(s)`);
+          }
+
           await this.runStore.markFailed(task, `Claude retornou status=${execution.status || 'desconhecido'}`);
           this.logger.warn(`Task blocked by Claude: "${taskLabel(task)}" (status: ${execution.status || 'unknown'})`);
 
@@ -494,6 +524,7 @@ export class Orchestrator {
 
         await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.done);
         this.claudeCompletedTaskIds.delete(task.id);
+        autoRecovery.reset(task.id); // Reset recovery counter on success
         const completionNotes = buildTaskCompletionNotes(task, finalExecution);
         await this.boardClient.appendMarkdown(task.id, completionNotes);
         await this.runStore.markDone(task, finalExecution);
@@ -792,6 +823,7 @@ export class Orchestrator {
 
         await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.done);
         this.claudeCompletedTaskIds.delete(task.id);
+        autoRecovery.reset(task.id); // Reset recovery counter on success
         const completionNotes = buildTaskCompletionNotes(task, finalExecution);
         await this.boardClient.appendMarkdown(task.id, completionNotes);
         await this.runStore.markDone(task, finalExecution);
@@ -1007,6 +1039,7 @@ export class Orchestrator {
       this.logger.info(`Updated ${epicResult.children.length} children to Done status in frontmatter`);
 
       await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.done);
+      autoRecovery.resetEpic(task.id); // Reset epic recovery counter on success
 
       const summaryMarkdown = buildEpicSummary(task, summary);
       await this.boardClient.appendMarkdown(task.id, summaryMarkdown);

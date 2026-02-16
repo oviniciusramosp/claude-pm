@@ -11,21 +11,18 @@ Core flow:
 5. Periodically reconcile the board to pick up new tasks.
 
 ## Board Structure
-Tasks live as `.md` files with YAML frontmatter inside the `Board/` directory. Status is determined by which folder a file lives in.
+Tasks live as `.md` files with YAML frontmatter inside the `Board/` directory. **Status is determined by the `status` field in the frontmatter**, not by folder location.
 
 **IMPORTANT**: The `Board/` directory MUST be located inside the `CLAUDE_WORKDIR` project directory (not in the Product Manager directory). This ensures Claude can read and update the same `.md` files that the orchestrator manages.
 
 ```
 <CLAUDE_WORKDIR>/
 └── Board/
-    ├── Not Started/
-    │   ├── my-standalone-task.md
-    │   └── Epic-1/
-    │       ├── epic.md
-    │       ├── us-001-login.md
-    │       └── us-002-signup.md
-    ├── In Progress/
-    └── Done/
+    ├── my-standalone-task.md
+    └── Epic-1/
+        ├── epic.md
+        ├── us-001-login.md
+        └── us-002-signup.md
 ```
 
 ### Task file format
@@ -34,6 +31,7 @@ Tasks live as `.md` files with YAML frontmatter inside the `Board/` directory. S
 name: Implement login page
 priority: P1
 type: UserStory
+status: Not Started
 model: claude-sonnet-4-5-20250929
 agents: frontend, design
 ---
@@ -43,11 +41,10 @@ Acceptance criteria and instructions for Claude go here.
 ```
 
 ### Rules
-- **Standalone task** = `.md` file directly in a status folder.
+- **Standalone task** = `.md` file directly in the `Board/` directory.
 - **Epic** = subfolder containing `epic.md` + child `.md` files.
-- **Moving a standalone task** = `fs.rename()` the file to the target status folder.
-- **Moving an epic** = `fs.rename()` the entire folder.
-- **Epic children status** = tracked via `status` field in frontmatter (children don't move on disk).
+- **Task status** = tracked via `status` field in frontmatter for ALL tasks (standalone and epic children).
+- **Changing task status** = updating the `status` field in frontmatter (e.g., `"Not Started"` → `"In Progress"` → `"Done"`).
 - **Task ID** = filename without extension (e.g. `my-standalone-task`, `Epic-1/us-001-login`).
 
 ## Task and Epic Format Guide
@@ -70,11 +67,11 @@ All task files must start with YAML frontmatter between `---` delimiters.
 |-------|------|-------------|---------|
 | `model` | string | Claude model to use | `"claude-opus-4-6"`, `"claude-sonnet-4-5-20250929"` |
 | `agents` | string or array | Agents to run | `"frontend, design"` or `["frontend", "design"]` |
-| `status` | string | Epic child status only | `"Not Started"`, `"In Progress"`, `"Done"` |
+| `status` | string | Task status (required) | `"Not Started"`, `"In Progress"`, `"Done"` |
 
 **Important**:
-- The `status` field is ONLY used for Epic children (to track their progress within an Epic).
-- Standalone tasks DO NOT use the `status` field — their status is determined by which folder they're in.
+- The `status` field is **REQUIRED** for all tasks (standalone and epic children).
+- If `status` is not specified, it defaults to `"Not Started"`.
 - The `model` field is optional. If not specified, the default model from config is used.
 
 ### Acceptance Criteria Format
@@ -114,9 +111,9 @@ Acceptance Criteria MUST be defined as markdown checkboxes in the task body.
 
 ### Standalone Task Format
 
-A standalone task is a single `.md` file placed directly in a status folder.
+A standalone task is a single `.md` file placed directly in the `Board/` directory.
 
-**File location**: `Board/Not Started/my-task-name.md`
+**File location**: `Board/my-task-name.md`
 
 **Complete example**:
 ```markdown
@@ -124,6 +121,7 @@ A standalone task is a single `.md` file placed directly in a status folder.
 name: Implement login page
 priority: P1
 type: UserStory
+status: Not Started
 model: claude-sonnet-4-5-20250929
 agents: frontend, design
 ---
@@ -175,7 +173,7 @@ An Epic is a folder containing multiple related tasks. The folder must contain a
 
 **File structure**:
 ```
-Board/Not Started/Epic-Auth/
+Board/Epic-Auth/
 ├── epic.md              # Epic definition
 ├── us-001-login.md      # Child task 1
 ├── us-002-signup.md     # Child task 2
@@ -188,6 +186,7 @@ Board/Not Started/Epic-Auth/
 name: Authentication System
 priority: P0
 type: Epic
+status: Not Started
 agents: frontend, backend
 ---
 
@@ -266,11 +265,12 @@ status: Not Started
 ```
 
 **Important Epic Rules**:
-1. Epic children MUST have a `status` field in frontmatter (standalone tasks must NOT)
-2. Epic children do NOT move between folders — they stay in the Epic folder
-3. The Epic folder itself moves between status folders
-4. Child `status` values: `"Not Started"`, `"In Progress"`, `"Done"`
-5. The Epic is only moved to Done when ALL children have `status: Done`
+1. ALL tasks (standalone and epic children) MUST have a `status` field in frontmatter
+2. Epic children stay in the Epic folder (they don't move on disk)
+3. The Epic folder itself stays in the `Board/` directory (doesn't move on disk)
+4. Status changes are made by updating the `status` field in frontmatter
+5. Child `status` values: `"Not Started"`, `"In Progress"`, `"Done"`
+6. The Epic status is only changed to `Done` when ALL children have `status: Done`
 
 ### Naming Conventions
 
@@ -297,15 +297,15 @@ status: Not Started
 The system generates Task IDs automatically from file paths:
 
 **Standalone task**:
-- File: `Board/Not Started/implement-login.md`
+- File: `Board/implement-login.md`
 - Task ID: `implement-login`
 
 **Epic**:
-- File: `Board/Not Started/Epic-Auth/epic.md`
+- File: `Board/Epic-Auth/epic.md`
 - Task ID: `Epic-Auth`
 
 **Epic child**:
-- File: `Board/Not Started/Epic-Auth/us-001-login.md`
+- File: `Board/Epic-Auth/us-001-login.md`
 - Task ID: `Epic-Auth/us-001-login`
 
 The Task ID is used in logs, run history, and Execution Notes.
@@ -437,12 +437,12 @@ The Setup tab guides the user through configuring:
 After saving, the panel can restart the API service automatically.
 
 ### Board Setup
-Create your `Board/` directory **inside the target project directory** (CLAUDE_WORKDIR) with the three status folders:
+Create your `Board/` directory **inside the target project directory** (CLAUDE_WORKDIR):
 ```bash
 cd <CLAUDE_WORKDIR>
-mkdir -p Board/Not\ Started Board/In\ Progress Board/Done
+mkdir -p Board
 ```
-Then add `.md` files with YAML frontmatter to `Board/Not Started/` to create tasks.
+Then add `.md` files with YAML frontmatter (including the `status` field) to `Board/` to create tasks.
 
 **Why this matters**: Claude executes tasks in the project directory and updates the task `.md` files there. The orchestrator must read/write the same files to see AC completions and progress updates in real time.
 
@@ -715,10 +715,11 @@ Prefer concise, human-readable lines such as:
 ## Project Structure
 ```
 Product Manager/
-├── Board/                  # Local file-based task board
-│   ├── Not Started/        # Tasks waiting to be picked up
-│   ├── In Progress/        # Tasks currently being worked on
-│   └── Done/               # Completed tasks
+├── Board/                  # Local file-based task board (status tracked in frontmatter)
+│   ├── my-task.md          # Standalone task
+│   └── Epic-1/             # Epic folder
+│       ├── epic.md         # Epic definition
+│       └── child-task.md   # Epic child task
 ├── src/                    # Automation engine
 │   ├── index.js            # Express server & endpoints
 │   ├── orchestrator.js     # Queue logic & reconciliation
