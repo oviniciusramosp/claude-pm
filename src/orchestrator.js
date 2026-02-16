@@ -998,6 +998,12 @@ export class Orchestrator {
         }
       }
 
+      // Update all children to status: Done in frontmatter before moving the Epic folder
+      for (const child of epicResult.children) {
+        await this.boardClient.updateTaskStatus(child.id, this.config.board.statuses.done);
+      }
+      this.logger.info(`Updated ${epicResult.children.length} children to Done status in frontmatter`);
+
       await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.done);
 
       const summaryMarkdown = buildEpicSummary(task, summary);
