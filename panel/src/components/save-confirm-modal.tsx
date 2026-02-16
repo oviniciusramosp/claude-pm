@@ -28,13 +28,13 @@ export function SaveConfirmModal({
     >
       <Modal className="sm:max-w-xl">
         <Dialog>
-          <div className="w-full rounded-2xl border border-secondary bg-primary p-6 shadow-2xl">
+          <div className="w-full rounded-xl border border-secondary bg-primary p-6 shadow-2xl">
             <div className="space-y-2">
               <h3 className="m-0 text-lg font-semibold text-primary">Apply changes now?</h3>
               <p className="m-0 text-sm text-tertiary">The automation app is running. Restart to apply new settings immediately.</p>
             </div>
 
-            <div className="mt-4 rounded-xl border border-secondary bg-secondary p-3 text-sm text-secondary">
+            <div className="mt-4 rounded-lg border border-secondary bg-secondary p-3 text-sm text-secondary">
               Changed settings: {saveConfirm.changedKeys.map((key) => LABEL_BY_KEY[key] || key).join(', ')}
             </div>
 

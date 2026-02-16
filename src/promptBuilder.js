@@ -1,3 +1,5 @@
+import { parseAcs, formatAcsForPrompt } from './acParser.js';
+
 function normalizeText(value) {
   if (!value || String(value).trim().length === 0) {
     return '(not provided)';
@@ -29,29 +31,34 @@ export function buildTaskPrompt(task, markdown, options = {}) {
     ''
   ];
 
+  // Parse ACs from the markdown and build numbered reference table
+  const acList = parseAcs(markdown || '');
+  const acTable = formatAcsForPrompt(acList);
+
+  if (acTable) {
+    basePrompt.push(acTable);
+  }
+
   if (!claudeMdInjected) {
     basePrompt.push(
       '='.repeat(80),
       'ACCEPTANCE CRITERIA TRACKING (MANDATORY)',
       '='.repeat(80),
       '',
-      'You MUST track Acceptance Criteria completion in TWO ways:',
+      'You MUST track Acceptance Criteria completion during execution:',
       '',
-      '1. INCREMENTAL TRACKING (during execution):',
-      '   - As you complete EACH Acceptance Criteria individually, emit immediately:',
-      '   - Format: [AC_COMPLETE] <exact AC text without the "- [ ] " prefix>',
-      '   - Example: if AC is "- [ ] Login page renders correctly"',
-      '   - Emit: [AC_COMPLETE] Login page renders correctly',
-      '   - Emit this marker IMMEDIATELY after completing each AC, before moving to the next.',
+      'As you complete EACH Acceptance Criteria, emit a JSON marker IMMEDIATELY on its own line:',
       '',
-      '2. FINAL TRACKING (in JSON response):',
-      '   - Your JSON response MUST include a "completed_acs" field',
-      '   - This field is MANDATORY, not optional',
-      '   - List ALL completed Acceptance Criteria exactly as they appear (without "- [ ]")',
-      '   - Example: "completed_acs": ["Login page renders correctly", "Form validates email"]',
+      '{"ac_complete": <number>}',
       '',
-      'If you complete ANY Acceptance Criteria but fail to include them in "completed_acs",',
-      'your response will be REJECTED and you will be asked to retry.',
+      'Example: After completing AC-3, emit exactly:',
+      '{"ac_complete": 3}',
+      '',
+      'Rules:',
+      '- Use the AC number from the reference table above.',
+      '- Each marker MUST be a standalone JSON object on its own line.',
+      '- Emit this marker IMMEDIATELY after completing each AC, before moving to the next.',
+      '- Do NOT include ac_complete markers inside the final response JSON.',
       '',
       '='.repeat(80),
       ''
@@ -67,7 +74,7 @@ export function buildTaskPrompt(task, markdown, options = {}) {
     basePrompt.push(
       'Execution Rules:',
       '- Complete all Acceptance Criteria in the task.',
-      '- Track EACH completed AC using [AC_COMPLETE] markers (see above).',
+      '- Track EACH completed AC using {"ac_complete": <number>} JSON markers (see above).',
       '- On successful completion, create a commit with a clear, objective message.',
       '- Never include secrets in code, commits, or logs.',
       ''
@@ -98,7 +105,7 @@ export function buildTaskPrompt(task, markdown, options = {}) {
       'RESPONSE REQUIREMENTS (MANDATORY)',
       '='.repeat(80),
       '',
-      'You MUST respond with a valid JSON object in a single line.',
+      'After completing all work, you MUST respond with a final JSON object in a single line.',
       '',
       'Required JSON structure:',
       '{',
@@ -106,8 +113,7 @@ export function buildTaskPrompt(task, markdown, options = {}) {
       '  "summary": "Brief summary of what was done",',
       '  "notes": "Additional details or context",',
       '  "files": ["path/to/file1.js", "path/to/file2.ts"],',
-      '  "tests": "Test results summary",',
-      '  "completed_acs": ["First AC text", "Second AC text", "Third AC text"]',
+      '  "tests": "Test results summary"',
       '}',
       '',
       'Field requirements:',
@@ -116,13 +122,12 @@ export function buildTaskPrompt(task, markdown, options = {}) {
       '- notes: Any important details, decisions, or context.',
       '- files: Array of file paths that were created or modified.',
       '- tests: Summary of test results or "N/A" if not applicable.',
-      '- completed_acs: MANDATORY FIELD - Array of completed Acceptance Criteria texts.',
       '',
-      'WARNING: If you complete ANY Acceptance Criteria but omit them from "completed_acs",',
-      'your response will be REJECTED. This field is NOT optional.',
+      'IMPORTANT: The final JSON must contain a "status" field. Do NOT include "ac_complete" in this JSON.',
+      'If you are blocked at any point, emit the final JSON immediately with status "blocked".',
       '',
       'Example valid response:',
-      '{"status":"done","summary":"Implemented login page with form validation","notes":"Used React Hook Form for validation, added error messages","files":["src/pages/Login.tsx","src/components/LoginForm.tsx"],"tests":"5 tests passing: form renders, validates email, validates password, submits on valid input, shows error on invalid input","completed_acs":["Login page renders correctly","Form validates email format","Form validates password strength","Error messages are displayed","Submit button is disabled when invalid"]}',
+      '{"status":"done","summary":"Implemented login page with form validation","notes":"Used React Hook Form for validation","files":["src/pages/Login.tsx","src/components/LoginForm.tsx"],"tests":"5 tests passing"}',
       '',
       '='.repeat(80),
       ''

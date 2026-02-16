@@ -34,7 +34,7 @@ const getTabStyles = ({ isFocusVisible, isSelected, isHovered }: AriaTabRenderPr
         isFocusVisible && "outline-2 -outline-offset-2",
     ),
     "button-minimal": cx(
-        "rounded-lg outline-focus-ring",
+        "rounded-sm outline-focus-ring",
         isHovered && "text-secondary",
         isFocusVisible && "outline-2 -outline-offset-2",
         isSelected && "bg-primary_alt text-secondary shadow-xs ring-1 ring-primary ring-inset",
@@ -57,16 +57,16 @@ const sizes = {
         "button-gray": "text-sm font-semibold py-2 px-3",
         "button-border": "text-sm font-semibold py-2 px-3",
         "button-minimal": "text-sm font-semibold py-2 px-3",
-        underline: "text-sm font-semibold px-1 pb-2.5 pt-0",
-        line: "text-sm font-semibold pl-2.5 pr-3 py-0.5",
+        underline: "text-sm font-semibold px-1 pb-3 pt-0",
+        line: "text-sm font-semibold pl-3 pr-3 py-1",
     },
     md: {
-        "button-brand": "text-md font-semibold py-2.5 px-3",
-        "button-gray": "text-md font-semibold py-2.5 px-3",
-        "button-border": "text-md font-semibold py-2.5 px-3",
-        "button-minimal": "text-md font-semibold py-2.5 px-3",
-        underline: "text-md font-semibold px-1 pb-2.5 pt-0",
-        line: "text-md font-semibold pr-3.5 pl-3 py-1",
+        "button-brand": "text-md font-semibold py-3 px-3",
+        "button-gray": "text-md font-semibold py-3 px-3",
+        "button-border": "text-md font-semibold py-3 px-3",
+        "button-minimal": "text-md font-semibold py-3 px-3",
+        underline: "text-md font-semibold px-1 pb-3 pt-0",
+        line: "text-md font-semibold pr-4 pl-3 py-1",
     },
 };
 
@@ -74,8 +74,8 @@ const sizes = {
 const getHorizontalStyles = ({ size, fullWidth }: { size?: "sm" | "md"; fullWidth?: boolean }) => ({
     "button-brand": "gap-1",
     "button-gray": "gap-1",
-    "button-border": cx("gap-1 rounded-[10px] bg-secondary_alt p-1 ring-1 ring-secondary ring-inset", size === "md" && "rounded-xl p-1.5"),
-    "button-minimal": "gap-0.5 rounded-lg bg-secondary_alt ring-1 ring-inset ring-secondary",
+    "button-border": cx("gap-1 rounded-lg bg-secondary_alt p-1 ring-1 ring-secondary ring-inset", size === "md" && "rounded-xl p-2"),
+    "button-minimal": "gap-1 rounded-sm bg-secondary_alt ring-1 ring-inset ring-secondary",
     underline: cx("gap-3", fullWidth && "w-full gap-4"),
     line: "gap-2",
 });
@@ -182,7 +182,7 @@ export const Tab = (props: TabComponentProps) => {
             {...otherProps}
             className={(prop) =>
                 cx(
-                    "z-10 flex h-max cursor-pointer items-center justify-center gap-2 rounded-md whitespace-nowrap text-quaternary transition duration-100 ease-linear",
+                    "z-10 flex h-max cursor-pointer items-center justify-center gap-2 rounded-sm whitespace-nowrap text-quaternary transition duration-100 ease-linear",
                     "group-orientation-vertical:justify-start",
                     fullWidth && "w-full flex-1",
                     sizes[size][type],

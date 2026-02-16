@@ -174,6 +174,43 @@ export class LocalBoardClient {
     }
   }
 
+  async updateCheckboxesByIndex(taskId, completedIndices) {
+    if (!Array.isArray(completedIndices) || completedIndices.length === 0) {
+      return;
+    }
+
+    const task = await this._findTaskById(taskId);
+    if (!task) {
+      return;
+    }
+
+    let content = await fs.readFile(task._filePath, 'utf8');
+    const checkboxRegex = /^(\s*-\s*)\[([ xX])\](\s+.+)$/gm;
+    let match;
+    let currentIndex = 0;
+    const replacements = [];
+
+    while ((match = checkboxRegex.exec(content)) !== null) {
+      currentIndex++;
+      const isUnchecked = match[2] === ' ';
+      if (isUnchecked && completedIndices.includes(currentIndex)) {
+        replacements.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          replacement: `${match[1]}[x]${match[3]}`
+        });
+      }
+    }
+
+    if (replacements.length > 0) {
+      for (let i = replacements.length - 1; i >= 0; i--) {
+        const r = replacements[i];
+        content = content.slice(0, r.start) + r.replacement + content.slice(r.end);
+      }
+      await fs.writeFile(task._filePath, content, 'utf8');
+    }
+  }
+
   async appendMarkdown(taskId, markdown) {
     if (!markdown || !markdown.trim()) {
       return;

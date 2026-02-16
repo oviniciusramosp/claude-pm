@@ -24,7 +24,7 @@ export function DebugErrorsModal({
     <ModalOverlay isOpen={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }} isDismissable>
       <Modal className="sm:max-w-2xl">
         <Dialog>
-          <div className="w-full rounded-2xl border border-secondary bg-primary p-6 shadow-2xl">
+          <div className="w-full rounded-xl border border-secondary bg-primary p-6 shadow-2xl">
             <div className="flex items-start gap-3">
               <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-utility-error-50 text-utility-error-600">
                 <Icon icon={AlertTriangle} className="size-5" />
@@ -39,16 +39,16 @@ export function DebugErrorsModal({
               </div>
             </div>
 
-            <div className="mt-4 max-h-[400px] space-y-2 overflow-auto rounded-xl border border-secondary bg-secondary p-3">
+            <div className="mt-4 max-h-[400px] space-y-2 overflow-auto rounded-lg border border-secondary bg-secondary p-3">
               {errors.length === 0 ? (
                 <p className="m-0 py-6 text-center text-sm text-quaternary">No errors to display.</p>
               ) : (
                 errors.map((entry, index) => (
                   <div
                     key={entry.id || `err-${index}`}
-                    className="rounded-lg border border-secondary bg-primary p-3"
+                    className="rounded-sm border border-secondary bg-primary p-3"
                   >
-                    <div className="mb-1.5 flex items-center gap-2 text-[11px] text-tertiary">
+                    <div className="mb-2 flex items-center gap-2 text-[11px] text-tertiary">
                       <span className="font-medium uppercase text-utility-error-600">
                         {String(entry.source || 'unknown').toUpperCase()}
                       </span>

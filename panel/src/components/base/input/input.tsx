@@ -67,12 +67,12 @@ export const InputBase = ({
             root: cx("px-3 py-2", hasTrailingIcon && "pr-9", hasLeadingIcon && "pl-10"),
             iconLeading: "left-3",
             iconTrailing: "right-3",
-            shortcut: "pr-2.5",
+            shortcut: "pr-3",
         },
         md: {
-            root: cx("px-3.5 py-2.5", hasTrailingIcon && "pr-9.5", hasLeadingIcon && "pl-10.5"),
-            iconLeading: "left-3.5",
-            iconTrailing: "right-3.5",
+            root: cx("px-4 py-3", hasTrailingIcon && "pr-10", hasLeadingIcon && "pl-11"),
+            iconLeading: "left-4",
+            iconTrailing: "right-4",
             shortcut: "pr-3",
         },
     });
@@ -83,7 +83,7 @@ export const InputBase = ({
             ref={groupRef}
             className={({ isFocusWithin, isDisabled, isInvalid }) =>
                 cx(
-                    "relative flex w-full flex-row place-content-center place-items-center rounded-lg bg-primary shadow-xs ring-1 ring-primary transition-shadow duration-100 ease-linear ring-inset",
+                    "relative flex w-full flex-row place-content-center place-items-center rounded-sm bg-primary shadow-xs ring-1 ring-primary transition-shadow duration-100 ease-linear ring-inset",
 
                     isFocusWithin && !isDisabled && "ring-2 ring-brand",
 
@@ -123,7 +123,7 @@ export const InputBase = ({
                 ref={ref}
                 placeholder={placeholder}
                 className={cx(
-                    "m-0 w-full bg-transparent text-md text-primary ring-0 outline-hidden placeholder:text-placeholder autofill:rounded-lg autofill:text-primary",
+                    "m-0 w-full bg-transparent text-md text-primary ring-0 outline-hidden placeholder:text-placeholder autofill:rounded-sm autofill:text-primary",
                     isDisabled && "cursor-not-allowed text-disabled",
                     sizes[inputSize].root,
                     context?.inputClassName,
@@ -207,7 +207,7 @@ export const TextField = ({ className, ...props }: TextFieldProps) => {
                 {...props}
                 data-input-wrapper
                 className={(state) =>
-                    cx("group flex h-max w-full flex-col items-start justify-start gap-1.5", typeof className === "function" ? className(state) : className)
+                    cx("group flex h-max w-full flex-col items-start justify-start gap-2", typeof className === "function" ? className(state) : className)
                 }
             />
         </TextFieldContext.Provider>

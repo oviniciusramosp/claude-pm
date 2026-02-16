@@ -62,7 +62,7 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl }: TaskDetailM
     <ModalOverlay isOpen={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }} isDismissable>
       <Modal className="sm:max-w-2xl">
         <Dialog>
-          <div className="w-full rounded-2xl border border-secondary bg-primary shadow-2xl">
+          <div className="w-full rounded-xl border border-secondary bg-primary shadow-2xl">
             {/* Header */}
             <div className="flex items-start justify-between gap-3 border-b border-secondary px-6 py-4">
               <div className="min-w-0 flex-1">
@@ -73,7 +73,7 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl }: TaskDetailM
                   </h3>
                 </div>
                 {task && (task.priority || task.type || task.status) && (
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
                     {task.priority && (
                       <Badge size="sm" color={(priorityColor || 'gray') as any}>
                         {task.priority}
@@ -92,16 +92,16 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl }: TaskDetailM
                   </div>
                 )}
                 {task && (task.model || task.agents.length > 0) && (
-                  <div className="mt-2.5 flex flex-col gap-1.5">
+                  <div className="mt-3 flex flex-col gap-2">
                     {task.model && (
-                      <div className="flex items-center gap-1.5 text-xs text-tertiary">
-                        <Icon icon={CpuChip01} className="size-3.5 shrink-0" />
+                      <div className="flex items-center gap-2 text-xs text-tertiary">
+                        <Icon icon={CpuChip01} className="size-4 shrink-0" />
                         <span>{task.model}</span>
                       </div>
                     )}
                     {task.agents.length > 0 && (
-                      <div className="flex items-center gap-1.5 text-xs text-tertiary">
-                        <Icon icon={Users01} className="size-3.5 shrink-0" />
+                      <div className="flex items-center gap-2 text-xs text-tertiary">
+                        <Icon icon={Users01} className="size-4 shrink-0" />
                         <span>{task.agents.join(', ')}</span>
                       </div>
                     )}
@@ -110,7 +110,7 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl }: TaskDetailM
               </div>
               <button
                 type="button"
-                className="shrink-0 rounded-lg p-1.5 text-tertiary transition hover:bg-primary_hover hover:text-secondary"
+                className="shrink-0 rounded-sm p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary"
                 onClick={onClose}
                 aria-label="Close"
               >
@@ -127,7 +127,7 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl }: TaskDetailM
               )}
 
               {error && (
-                <div className="rounded-xl border border-dashed border-error-primary bg-utility-error-50 p-4 text-center text-sm text-error-primary">
+                <div className="rounded-lg border border-dashed border-error-primary bg-utility-error-50 p-4 text-center text-sm text-error-primary">
                   {error}
                 </div>
               )}

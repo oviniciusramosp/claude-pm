@@ -388,9 +388,13 @@ export function runClaudeTask(task, prompt, config, { signal, onAcComplete, over
 
               if (onAcComplete) {
                 const acs = extractAcCompletions(event);
+                if (acs.length > 0) {
+                  process.stdout.write(`[DEBUG] Extracted ${acs.length} ACs from event\n`);
+                }
                 for (const ac of acs) {
                   const label = ac.type === 'numbered' ? `AC-${ac.index}` : ac.text;
                   process.stdout.write(`[PM_AC_COMPLETE] ${label}\n`);
+                  process.stdout.write(`[DEBUG] Calling onAcComplete with: ${JSON.stringify(ac)}\n`);
                   onAcComplete(ac);
                 }
               }

@@ -25,7 +25,7 @@ export function ToastNotification({ toasts, onDismiss }: ToastContainerProps) {
           role="status"
           aria-live="polite"
           className={cx(
-            'rounded-xl border px-4 py-3 text-sm shadow-lg flex items-center justify-between gap-3 pointer-events-auto',
+            'rounded-lg border px-4 py-3 text-sm shadow-lg flex items-center justify-between gap-3 pointer-events-auto',
             TOAST_TONE_CLASSES[toast.color] || TOAST_TONE_CLASSES.neutral
           )}
           style={{

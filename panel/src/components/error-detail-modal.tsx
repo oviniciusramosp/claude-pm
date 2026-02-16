@@ -20,7 +20,7 @@ export function ErrorDetailModal({
     <ModalOverlay isOpen={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }} isDismissable>
       <Modal className="sm:max-w-lg">
         <Dialog>
-          <div className="w-full rounded-2xl border border-secondary bg-primary p-6 shadow-2xl">
+          <div className="w-full rounded-xl border border-secondary bg-primary p-6 shadow-2xl">
             <div className="flex items-start gap-3">
               <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-utility-error-50 text-utility-error-600">
                 <Icon icon={AlertTriangle} className="size-5" />
@@ -31,7 +31,7 @@ export function ErrorDetailModal({
               </div>
             </div>
 
-            <pre className="mt-4 max-h-[300px] overflow-auto rounded-xl border border-secondary bg-secondary p-3 text-sm leading-relaxed text-secondary">
+            <pre className="mt-4 max-h-[300px] overflow-auto rounded-lg border border-secondary bg-secondary p-3 text-sm leading-relaxed text-secondary">
               {errorMessage}
             </pre>
 

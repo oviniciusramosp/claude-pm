@@ -130,7 +130,7 @@ function BoardCard({ task, epic, allTasks, onClick }: { task: BoardTask; epic: b
       onClick={onClick}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
       className={cx(
-        'cursor-pointer rounded-xl border bg-primary p-3 shadow-xs transition hover:shadow-md hover:border-brand-solid',
+        'cursor-pointer rounded-lg border bg-primary p-3 shadow-xs transition hover:shadow-md hover:border-brand-solid',
         epic ? 'border-l-4 border-l-utility-purple-500 border-secondary'
           : parentEpicInProgress ? 'border-utility-brand-200'
           : 'border-secondary'
@@ -138,7 +138,7 @@ function BoardCard({ task, epic, allTasks, onClick }: { task: BoardTask; epic: b
     >
       {/* Row 1: Epic reference + donut chart */}
       {(parentEpic || task.acTotal > 0) && (
-        <div className="flex items-center gap-2 mb-1.5">
+        <div className="flex items-center gap-2 mb-2">
           {parentEpic && (
             <div className="flex items-center gap-1 text-xs text-tertiary truncate min-w-0">
               <Icon icon={Folder} className="size-3 shrink-0" />
@@ -158,13 +158,13 @@ function BoardCard({ task, epic, allTasks, onClick }: { task: BoardTask; epic: b
 
       {/* Row 2: Title (wraps when needed) */}
       <p className="text-sm font-medium text-primary">
-        {taskCode && <span className="text-tertiary font-mono mr-1.5">{taskCode}</span>}
+        {taskCode && <span className="text-tertiary font-mono mr-2">{taskCode}</span>}
         {task.name}
       </p>
 
       {/* Row 3: Type + Priority */}
       {(task.type || task.priority) && (
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           {task.type && (
             <Badge size="sm" color={typeColor || 'gray'}>
               {task.type}
@@ -201,9 +201,9 @@ function BoardCard({ task, epic, allTasks, onClick }: { task: BoardTask; epic: b
 
 function SkeletonCard() {
   return (
-    <div className="animate-pulse rounded-xl border border-secondary bg-primary p-3">
+    <div className="animate-pulse rounded-lg border border-secondary bg-primary p-3">
       <div className="h-4 w-3/4 rounded bg-quaternary" />
-      <div className="mt-2 flex gap-1.5">
+      <div className="mt-2 flex gap-2">
         <div className="h-5 w-8 rounded-full bg-quaternary" />
         <div className="h-5 w-16 rounded-full bg-quaternary" />
       </div>
@@ -409,7 +409,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
           )}
           <button
             type="button"
-            className="rounded-lg p-1.5 text-tertiary transition hover:bg-primary_hover hover:text-secondary disabled:opacity-50"
+            className="rounded-sm p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary disabled:opacity-50"
             onClick={fixBoardOrder}
             disabled={fixing}
             aria-label="Fix board order"
@@ -419,7 +419,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
           </button>
           <button
             type="button"
-            className="rounded-lg p-1.5 text-tertiary transition hover:bg-primary_hover hover:text-secondary disabled:opacity-50"
+            className="rounded-sm p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary disabled:opacity-50"
             onClick={() => fetchBoard()}
             disabled={refreshing}
             aria-label="Refresh board"
@@ -431,7 +431,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
 
       {/* Error state */}
       {showErrorBanner && (
-        <div className="rounded-xl border border-dashed border-error-primary bg-utility-error-50 p-8 text-center">
+        <div className="rounded-lg border border-dashed border-error-primary bg-utility-error-50 p-8 text-center">
           <p className="text-sm font-medium text-error-primary">{boardError.message}</p>
           <div className="mt-3 flex items-center justify-center gap-2">
             <Button size="sm" color="secondary" onPress={() => fetchBoard()}>
@@ -450,13 +450,13 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
           {columns.map((col) => (
             <div
               key={col.key}
-              className="flex flex-col rounded-xl border border-secondary bg-primary shadow-xs overflow-hidden"
+              className="flex flex-col rounded-lg border border-secondary bg-primary shadow-xs overflow-hidden"
             >
               {/* Column header - fixed */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-secondary shrink-0">
                 <span
                   className={cx(
-                    'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold',
+                    'inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold',
                     COLUMN_HEADER_COLORS[col.key]
                   )}
                 >
@@ -474,7 +474,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                       <SkeletonCard />
                     </>
                   ) : col.tasks.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-secondary p-4 text-center text-sm text-quaternary">
+                    <div className="rounded-lg border border-dashed border-secondary p-4 text-center text-sm text-quaternary">
                       No tasks
                     </div>
                   ) : (
@@ -517,12 +517,12 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                           if (children && children.length > 0) {
                             const expanded = expandedEpics.has(task.id);
                             return (
-                              <div key={task.id} className="flex flex-col gap-1.5">
+                              <div key={task.id} className="flex flex-col gap-2">
                                 <BoardCard task={task} epic allTasks={tasks} onClick={() => setSelectedTask(task)} />
                                 <button
                                   type="button"
                                   onClick={() => toggleEpic(task.id)}
-                                  className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-tertiary hover:text-secondary hover:bg-primary_hover transition"
+                                  className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-secondary hover:bg-primary_hover transition"
                                 >
                                   <ChevronDown className={cx('size-3 transition-transform', !expanded && '-rotate-90')} />
                                   <span>{children.length} {children.length === 1 ? 'story' : 'stories'}</span>
