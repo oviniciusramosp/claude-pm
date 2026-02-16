@@ -115,7 +115,7 @@ function AcDonut({ done, total }: { done: number; total: number }) {
   );
 }
 
-function BoardCard({ task, epic, allTasks, onClick, onFix, isFixing }: { task: BoardTask; epic: boolean; allTasks: BoardTask[]; onClick: () => void; onFix?: (taskId: string) => void; isFixing?: boolean }) {
+function BoardCard({ task, epic, allTasks, onClick, onFix, isFixing, isAnyFixing }: { task: BoardTask; epic: boolean; allTasks: BoardTask[]; onClick: () => void; onFix?: (taskId: string) => void; isFixing?: boolean; isAnyFixing?: boolean }) {
   const priorityColor = BOARD_PRIORITY_COLORS[task.priority] as any;
   const typeColor = BOARD_TYPE_COLORS[task.type] as any;
   const taskCode = extractTaskCode(task);
@@ -143,22 +143,29 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, isFixing }: { task: B
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            if (!isFixing) {
+            if (!isAnyFixing) {
               onFix(task.id);
             }
           }}
-          disabled={isFixing}
+          disabled={isAnyFixing}
           className={cx(
-            'absolute top-2 right-2 transition-opacity rounded-md p-1.5 bg-utility-brand-50 hover:bg-utility-brand-100 border border-utility-brand-200 shadow-sm z-10',
+            'absolute top-2 right-2 transition-opacity rounded-md p-1.5 shadow-sm z-10',
+            isAnyFixing
+              ? 'bg-utility-gray-100 border border-utility-gray-200 cursor-not-allowed opacity-60'
+              : 'bg-utility-brand-50 hover:bg-utility-brand-100 border border-utility-brand-200',
             isFixing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
           )}
-          title={isFixing ? 'Fixing ACs...' : 'Fix ACs with Claude'}
+          title={
+            isAnyFixing
+              ? (isFixing ? 'Fixing this task...' : 'Another task is being fixed')
+              : 'Fix ACs with Claude'
+          }
           aria-label="Fix acceptance criteria"
         >
           {isFixing ? (
             <RefreshCw01 className="size-3.5 text-utility-brand-600 animate-spin" />
           ) : (
-            <Tool01 className="size-3.5 text-utility-brand-600" />
+            <Tool01 className={cx('size-3.5', isAnyFixing ? 'text-utility-gray-400' : 'text-utility-brand-600')} />
           )}
         </button>
       )}
@@ -536,7 +543,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
 
                       if (!isCollapsible) {
                         return col.tasks.map((task) => (
-                          <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} isFixing={fixingTaskId === task.id} />
+                          <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} isFixing={fixingTaskId === task.id} isAnyFixing={fixingTaskId !== null} />
                         ));
                       }
 
@@ -571,7 +578,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                             const expanded = expandedEpics.has(task.id);
                             return (
                               <div key={task.id} className="flex flex-col gap-2">
-                                <BoardCard task={task} epic allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} isFixing={fixingTaskId === task.id} />
+                                <BoardCard task={task} epic allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} isFixing={fixingTaskId === task.id} isAnyFixing={fixingTaskId !== null} />
                                 <button
                                   type="button"
                                   onClick={() => toggleEpic(task.id)}
@@ -583,14 +590,14 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                 {expanded && (
                                   <div className="ml-2 border-l-2 border-utility-purple-200 pl-2 flex flex-col gap-2">
                                     {children.map((child) => (
-                                      <BoardCard key={child.id} task={child} epic={false} allTasks={tasks} onClick={() => setSelectedTask(child)} onFix={handleFixTask} isFixing={fixingTaskId === child.id} />
+                                      <BoardCard key={child.id} task={child} epic={false} allTasks={tasks} onClick={() => setSelectedTask(child)} onFix={handleFixTask} isFixing={fixingTaskId === child.id} isAnyFixing={fixingTaskId !== null} />
                                     ))}
                                   </div>
                                 )}
                               </div>
                             );
                           }
-                          return <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} isFixing={fixingTaskId === task.id} />;
+                          return <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} isFixing={fixingTaskId === task.id} isAnyFixing={fixingTaskId !== null} />;
                         });
                     })()
                   )}
