@@ -143,3 +143,17 @@ export interface GitCommit {
   } | null;
   taskId: string | null;
 }
+
+export interface ValidationReportData {
+  valid: boolean;
+  summary: {
+    totalTasks: number;
+    totalEpics: number;
+  };
+  errors: Array<{ message: string; suggestion?: string }>;
+  warnings: Array<{ message: string }>;
+  hasMoreErrors: boolean;
+  hasMoreWarnings: boolean;
+  totalErrors: number;
+  totalWarnings: number;
+}

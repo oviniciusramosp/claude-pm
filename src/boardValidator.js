@@ -392,4 +392,29 @@ export class BoardValidator {
 
     return lines.join('\n');
   }
+
+  /**
+   * Format validation results as a structured JSON for the Feed
+   */
+  formatForFeed(validationResult) {
+    return JSON.stringify({
+      type: 'validation_report',
+      valid: validationResult.valid,
+      summary: {
+        totalTasks: validationResult.info.totalTasks,
+        totalEpics: validationResult.info.totalEpics
+      },
+      errors: validationResult.errors.slice(0, 10).map(e => ({
+        message: e.message,
+        suggestion: e.suggestion
+      })),
+      warnings: validationResult.warnings.slice(0, 5).map(w => ({
+        message: w.message
+      })),
+      hasMoreErrors: validationResult.errors.length > 10,
+      hasMoreWarnings: validationResult.warnings.length > 5,
+      totalErrors: validationResult.errors.length,
+      totalWarnings: validationResult.warnings.length
+    });
+  }
 }

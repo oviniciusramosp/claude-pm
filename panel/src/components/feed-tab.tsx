@@ -16,11 +16,12 @@ import {
   parseClaudeTaskContract,
   formatClaudeTaskContract,
   extractModelFromMessage,
-  formatModelLabel
+  formatModelLabel,
+  parseValidationReport
 } from '../utils/log-helpers';
 import { Icon } from './icon';
 import { SourceAvatar } from './source-avatar';
-import type { LogEntry, OrchestratorState, TaskContractData } from '../types';
+import type { LogEntry, OrchestratorState, TaskContractData, ValidationReportData } from '../types';
 
 function ExpandablePrompt({
   title,
@@ -161,6 +162,125 @@ function ExpandableTaskResult({
   );
 }
 
+function ExpandableValidationReport({
+  report,
+  onCopy
+}: {
+  report: ValidationReportData;
+  onCopy: (text: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const statusLabel = report.valid ? '✅ Board structure is valid' : '❌ Board structure has errors';
+  const badge = !report.valid
+    ? ` — ${report.totalErrors} error${report.totalErrors === 1 ? '' : 's'}${report.totalWarnings > 0 ? `, ${report.totalWarnings} warning${report.totalWarnings === 1 ? '' : 's'}` : ''}`
+    : '';
+
+  const hasDetails = !report.valid && (report.errors.length > 0 || report.warnings.length > 0);
+
+  const copyText = `${statusLabel}
+
+📊 Summary:
+  - Total tasks: ${report.summary.totalTasks}
+  - Total epics: ${report.summary.totalEpics}
+
+${report.errors.length > 0 ? `🚨 Errors (${report.totalErrors}):
+${report.errors.map(e => `  - ${e.message}${e.suggestion ? `\n    💡 ${e.suggestion}` : ''}`).join('\n')}
+${report.hasMoreErrors ? `  ... and ${report.totalErrors - report.errors.length} more\n` : ''}` : ''}
+${report.warnings.length > 0 ? `⚠️  Warnings (${report.totalWarnings}):
+${report.warnings.map(w => `  - ${w.message}`).join('\n')}
+${report.hasMoreWarnings ? `  ... and ${report.totalWarnings - report.warnings.length} more` : ''}` : ''}`.trim();
+
+  if (!hasDetails) {
+    return (
+      <div className="space-y-2">
+        <p className="m-0 text-sm font-medium leading-5 text-current">{statusLabel}</p>
+        <p className="m-0 text-xs text-current/75">
+          📊 {report.summary.totalTasks} task{report.summary.totalTasks === 1 ? '' : 's'}, {report.summary.totalEpics} epic{report.summary.totalEpics === 1 ? '' : 's'}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <button
+        type="button"
+        className="m-0 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left text-sm font-medium leading-5 text-current hover:opacity-80"
+        onClick={() => setExpanded((prev) => !prev)}
+        aria-expanded={expanded}
+      >
+        <Icon icon={expanded ? ChevronDown : ChevronRight} className="size-4 shrink-0" />
+        <span>{statusLabel}{badge}</span>
+        {!expanded ? (
+          <span className="ml-1 text-[11px] font-normal text-tertiary">
+            (click to expand)
+          </span>
+        ) : null}
+      </button>
+
+      {expanded ? (
+        <div className="relative">
+          <div className="max-h-[400px] space-y-3 overflow-auto rounded-sm bg-primary/50 p-3 text-xs leading-relaxed text-current">
+            <div>
+              <p className="m-0 font-medium">📊 Summary:</p>
+              <ul className="m-0 mt-1 list-none pl-4">
+                <li>Total tasks: {report.summary.totalTasks}</li>
+                <li>Total epics: {report.summary.totalEpics}</li>
+              </ul>
+            </div>
+
+            {report.errors.length > 0 ? (
+              <div>
+                <p className="m-0 font-medium">🚨 Errors ({report.totalErrors}):</p>
+                <ul className="m-0 mt-1 list-none space-y-1 pl-4">
+                  {report.errors.map((error, i) => (
+                    <li key={i} className="space-y-0.5">
+                      <div className="opacity-90">{error.message}</div>
+                      {error.suggestion ? (
+                        <div className="opacity-75 pl-2">💡 {error.suggestion}</div>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+                {report.hasMoreErrors ? (
+                  <p className="m-0 mt-1 pl-4 opacity-75">
+                    ... and {report.totalErrors - report.errors.length} more
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {report.warnings.length > 0 ? (
+              <div>
+                <p className="m-0 font-medium">⚠️  Warnings ({report.totalWarnings}):</p>
+                <ul className="m-0 mt-1 list-none space-y-1 pl-4">
+                  {report.warnings.map((warning, i) => (
+                    <li key={i} className="opacity-90">{warning.message}</li>
+                  ))}
+                </ul>
+                {report.hasMoreWarnings ? (
+                  <p className="m-0 mt-1 pl-4 opacity-75">
+                    ... and {report.totalWarnings - report.warnings.length} more
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          <Button
+            size="sm"
+            color="tertiary"
+            className="absolute right-2 top-2 h-6 w-6 shrink-0 [&_svg]:!size-3"
+            aria-label="Copy report"
+            iconLeading={Copy01}
+            onPress={() => onCopy(copyText)}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function FeedTab({
   logs,
   logFeedRef,
@@ -229,6 +349,7 @@ export function FeedTab({
           const levelMeta = logLevelMeta(level);
           const sourceMeta = logSourceMeta(line);
           const taskContract = parseClaudeTaskContract(line.message);
+          const validationReport = parseValidationReport(line.message);
           const displayMessage = formatLiveFeedMessage(line);
           const modelRaw = extractModelFromMessage(line.message);
           const modelLabel = modelRaw ? formatModelLabel(modelRaw) : null;
@@ -266,18 +387,27 @@ export function FeedTab({
                   className={cx(
                     'group/msg max-w-[min(86%,760px)] rounded-xl px-4 py-3 shadow-xs',
                     isOutgoing ? 'rounded-br-sm' : 'rounded-bl-sm',
-                    logToneClasses(level, sourceMeta.side, sourceMeta.directClaude, specialBubble),
-                    specialBubble === 'in-progress'
-                      ? 'ring-1 ring-blue-400/50'
-                      : specialBubble === 'epic-done'
-                        ? 'ring-1 ring-purple-400/50'
-                        : sourceMeta.directClaude ? 'ring-1 ring-brand/45' : ''
+                    logToneClasses(level, sourceMeta.side, sourceMeta.directClaude, specialBubble, validationReport?.valid ?? true),
+                    specialBubble === 'validation-report'
+                      ? validationReport?.valid
+                        ? 'ring-1 ring-green-400/50'
+                        : 'ring-1 ring-yellow-400/50'
+                      : specialBubble === 'in-progress'
+                        ? 'ring-1 ring-blue-400/50'
+                        : specialBubble === 'epic-done'
+                          ? 'ring-1 ring-purple-400/50'
+                          : sourceMeta.directClaude ? 'ring-1 ring-brand/45' : ''
                   )}
                 >
                   {line.isPrompt ? (
                     <ExpandablePrompt
                       title={line.promptTitle || 'Prompt sent to Claude Code'}
                       content={displayMessage}
+                      onCopy={copyLiveFeedMessage}
+                    />
+                  ) : validationReport ? (
+                    <ExpandableValidationReport
+                      report={validationReport}
                       onCopy={copyLiveFeedMessage}
                     />
                   ) : taskContract ? (

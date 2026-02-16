@@ -99,10 +99,13 @@ export function logSourceMeta(entry: LogEntry | string): LogSourceMeta {
   };
 }
 
-export type SpecialBubbleType = 'in-progress' | 'epic-done' | null;
+export type SpecialBubbleType = 'in-progress' | 'epic-done' | 'validation-report' | null;
 
 export function detectSpecialBubble(message: string): SpecialBubbleType {
   const text = (message || '').trim();
+  if (/^\[VALIDATION_REPORT\]/i.test(text)) {
+    return 'validation-report';
+  }
   if (/^Moved to In Progress:/i.test(text)) {
     return 'in-progress';
   }
@@ -112,7 +115,13 @@ export function detectSpecialBubble(message: string): SpecialBubbleType {
   return null;
 }
 
-export function logToneClasses(level: string, side = 'incoming', directClaude = false, specialBubble: SpecialBubbleType = null): string {
+export function logToneClasses(level: string, side = 'incoming', directClaude = false, specialBubble: SpecialBubbleType = null, isValid = true): string {
+  if (specialBubble === 'validation-report') {
+    if (isValid) {
+      return 'bg-utility-success-50 text-success-primary';
+    }
+    return 'bg-utility-warning-50 text-warning-primary';
+  }
   if (specialBubble === 'in-progress') {
     return 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300';
   }
@@ -194,6 +203,51 @@ export function formatReconciliationReason(reasonRaw: string): string {
   }
 
   return labels.join(', ');
+}
+
+export interface ValidationReportData {
+  valid: boolean;
+  summary: {
+    totalTasks: number;
+    totalEpics: number;
+  };
+  errors: Array<{ message: string; suggestion?: string }>;
+  warnings: Array<{ message: string }>;
+  hasMoreErrors: boolean;
+  hasMoreWarnings: boolean;
+  totalErrors: number;
+  totalWarnings: number;
+}
+
+export function parseValidationReport(message: unknown): ValidationReportData | null {
+  const text = normalizeText(message);
+  const match = text.match(/^\[VALIDATION_REPORT\]\s*(.+)$/);
+  if (!match) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(match[1]);
+    if (!parsed || typeof parsed !== 'object' || parsed.type !== 'validation_report') {
+      return null;
+    }
+
+    return {
+      valid: Boolean(parsed.valid),
+      summary: {
+        totalTasks: Number(parsed.summary?.totalTasks || 0),
+        totalEpics: Number(parsed.summary?.totalEpics || 0)
+      },
+      errors: Array.isArray(parsed.errors) ? parsed.errors : [],
+      warnings: Array.isArray(parsed.warnings) ? parsed.warnings : [],
+      hasMoreErrors: Boolean(parsed.hasMoreErrors),
+      hasMoreWarnings: Boolean(parsed.hasMoreWarnings),
+      totalErrors: Number(parsed.totalErrors || 0),
+      totalWarnings: Number(parsed.totalWarnings || 0)
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function parseClaudeTaskContract(message: unknown): TaskContractData | null {

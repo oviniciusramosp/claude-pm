@@ -22,8 +22,7 @@ const boardValidator = new BoardValidator(config);
 try {
   const validationResult = await boardValidator.validate();
   if (!validationResult.valid) {
-    logger.warn('Board structure validation failed:');
-    logger.warn(boardValidator.formatSummary(validationResult));
+    logger.warn(`[VALIDATION_REPORT] ${boardValidator.formatForFeed(validationResult)}`);
   } else {
     logger.success('Board structure validated successfully');
   }
