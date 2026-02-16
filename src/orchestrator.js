@@ -1022,6 +1022,7 @@ export class Orchestrator {
     this.logger.info(`Triggering AC fix for "${taskLabel(task)}" via panel API...`);
 
     try {
+      // Step 1: Trigger the fix
       const response = await fetch(`${apiBaseUrl}/api/board/fix-task`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1034,9 +1035,52 @@ export class Orchestrator {
         return false;
       }
 
-      await response.json().catch(() => ({}));
-      this.logger.success(`AC fix completed successfully for "${taskLabel(task)}"`);
-      return true;
+      // Step 2: Poll until fix completes or times out
+      const MAX_WAIT_MS = 360000; // 6 minutes (AC_FIX_TIMEOUT_MS is 5 min in panelServer)
+      const POLL_INTERVAL_MS = 2000; // Check every 2 seconds
+      const startTime = Date.now();
+
+      this.logger.info(`Waiting for AC fix to complete for "${taskLabel(task)}"...`);
+
+      while (true) {
+        const elapsed = Date.now() - startTime;
+        if (elapsed > MAX_WAIT_MS) {
+          this.logger.error(`AC fix timed out after ${MAX_WAIT_MS / 1000}s for "${taskLabel(task)}"`);
+          return false;
+        }
+
+        // Check if fix is still running
+        const hasActiveFixes = await checkActiveFixes(panelPort);
+        if (!hasActiveFixes) {
+          // Fix completed — check final status
+          const statusResponse = await fetch(`${apiBaseUrl}/api/board/fix-status`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+          });
+
+          if (statusResponse.ok) {
+            const statusData = await statusResponse.json().catch(() => ({}));
+            const taskFixStatus = statusData.fixStatus?.[task.id];
+
+            if (taskFixStatus?.status === 'success') {
+              this.logger.success(`AC fix completed successfully for "${taskLabel(task)}"`);
+              return true;
+            }
+
+            if (taskFixStatus?.status === 'failed') {
+              this.logger.error(`AC fix failed for "${taskLabel(task)}": ${taskFixStatus.error || 'unknown error'}`);
+              return false;
+            }
+          }
+
+          // If we can't get status but no active fixes, assume success
+          this.logger.success(`AC fix completed for "${taskLabel(task)}" (status unavailable, assuming success)`);
+          return true;
+        }
+
+        // Fix still running — wait and poll again
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+      }
     } catch (error) {
       this.logger.error(`Failed to trigger AC fix: ${error.message}`);
       return false;
