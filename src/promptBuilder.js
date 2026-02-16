@@ -13,8 +13,7 @@ export function buildTaskPrompt(task, markdown, options = {}) {
     extraPrompt = '',
     forceTestCreation = false,
     forceTestRun = false,
-    forceCommit = false,
-    claudeMdInjected = false
+    forceCommit = false
   } = typeof options === 'string' ? { extraPrompt: options } : options;
 
   const agents = task.agents.length > 0 ? task.agents.join(', ') : '(no agents specified)';
@@ -39,47 +38,46 @@ export function buildTaskPrompt(task, markdown, options = {}) {
     basePrompt.push(acTable);
   }
 
-  if (!claudeMdInjected) {
-    basePrompt.push(
-      '='.repeat(80),
-      'ACCEPTANCE CRITERIA TRACKING (MANDATORY)',
-      '='.repeat(80),
-      '',
-      'You MUST track Acceptance Criteria completion during execution:',
-      '',
-      'As you complete EACH Acceptance Criteria, emit a JSON marker IMMEDIATELY on its own line:',
-      '',
-      '{"ac_complete": <number>}',
-      '',
-      'Example: After completing AC-3, emit exactly:',
-      '{"ac_complete": 3}',
-      '',
-      'Rules:',
-      '- Use the AC number from the reference table above.',
-      '- Each marker MUST be a standalone JSON object on its own line.',
-      '- Emit this marker IMMEDIATELY after completing each AC, before moving to the next.',
-      '- Do NOT include ac_complete markers inside the final response JSON.',
-      '',
-      '='.repeat(80),
-      ''
-    );
-  }
+  // ALWAYS include AC tracking instructions in the task prompt for maximum visibility
+  // (even when claudeMdInjected=true, as the CLAUDE.md reference can be missed in large contexts)
+  basePrompt.push(
+    '='.repeat(80),
+    'ACCEPTANCE CRITERIA TRACKING (MANDATORY)',
+    '='.repeat(80),
+    '',
+    'You MUST track Acceptance Criteria completion during execution:',
+    '',
+    'As you complete EACH Acceptance Criteria, emit a JSON marker IMMEDIATELY on its own line:',
+    '',
+    '{"ac_complete": <number>}',
+    '',
+    'Example: After completing AC-3, emit exactly:',
+    '{"ac_complete": 3}',
+    '',
+    'Rules:',
+    '- Use the AC number from the reference table above.',
+    '- Each marker MUST be a standalone JSON object on its own line.',
+    '- Emit this marker IMMEDIATELY after completing each AC, before moving to the next.',
+    '- Do NOT include ac_complete markers inside the final response JSON.',
+    '',
+    '='.repeat(80),
+    ''
+  );
 
   basePrompt.push(
     normalizeText(markdown || '(no description)'),
     ''
   );
 
-  if (!claudeMdInjected) {
-    basePrompt.push(
-      'Execution Rules:',
-      '- Complete all Acceptance Criteria in the task.',
-      '- Track EACH completed AC using {"ac_complete": <number>} JSON markers (see above).',
-      '- On successful completion, create a commit with a clear, objective message.',
-      '- Never include secrets in code, commits, or logs.',
-      ''
-    );
-  }
+  // ALWAYS include execution rules for AC tracking (critical for task success)
+  basePrompt.push(
+    'Execution Rules:',
+    '- Complete all Acceptance Criteria in the task.',
+    '- Track EACH completed AC using {"ac_complete": <number>} JSON markers (see above).',
+    '- On successful completion, create a commit with a clear, objective message.',
+    '- Never include secrets in code, commits, or logs.',
+    ''
+  );
 
   if (forceTestCreation || forceTestRun || forceCommit) {
     basePrompt.push('Mandatory completion rules:');
@@ -99,40 +97,39 @@ export function buildTaskPrompt(task, markdown, options = {}) {
     basePrompt.push('');
   }
 
-  if (!claudeMdInjected) {
-    basePrompt.push(
-      '='.repeat(80),
-      'RESPONSE REQUIREMENTS (MANDATORY)',
-      '='.repeat(80),
-      '',
-      'After completing all work, you MUST respond with a final JSON object in a single line.',
-      '',
-      'Required JSON structure:',
-      '{',
-      '  "status": "done|blocked",',
-      '  "summary": "Brief summary of what was done",',
-      '  "notes": "Additional details or context",',
-      '  "files": ["path/to/file1.js", "path/to/file2.ts"],',
-      '  "tests": "Test results summary"',
-      '}',
-      '',
-      'Field requirements:',
-      '- status: Use "done" only when implementation is complete. Use "blocked" if blocked.',
-      '- summary: Concise description of what was accomplished.',
-      '- notes: Any important details, decisions, or context.',
-      '- files: Array of file paths that were created or modified.',
-      '- tests: Summary of test results or "N/A" if not applicable.',
-      '',
-      'IMPORTANT: The final JSON must contain a "status" field. Do NOT include "ac_complete" in this JSON.',
-      'If you are blocked at any point, emit the final JSON immediately with status "blocked".',
-      '',
-      'Example valid response:',
-      '{"status":"done","summary":"Implemented login page with form validation","notes":"Used React Hook Form for validation","files":["src/pages/Login.tsx","src/components/LoginForm.tsx"],"tests":"5 tests passing"}',
-      '',
-      '='.repeat(80),
-      ''
-    );
-  }
+  // ALWAYS include response requirements (critical for parsing execution results)
+  basePrompt.push(
+    '='.repeat(80),
+    'RESPONSE REQUIREMENTS (MANDATORY)',
+    '='.repeat(80),
+    '',
+    'After completing all work, you MUST respond with a final JSON object in a single line.',
+    '',
+    'Required JSON structure:',
+    '{',
+    '  "status": "done|blocked",',
+    '  "summary": "Brief summary of what was done",',
+    '  "notes": "Additional details or context",',
+    '  "files": ["path/to/file1.js", "path/to/file2.ts"],',
+    '  "tests": "Test results summary"',
+    '}',
+    '',
+    'Field requirements:',
+    '- status: Use "done" only when implementation is complete. Use "blocked" if blocked.',
+    '- summary: Concise description of what was accomplished.',
+    '- notes: Any important details, decisions, or context.',
+    '- files: Array of file paths that were created or modified.',
+    '- tests: Summary of test results or "N/A" if not applicable.',
+    '',
+    'IMPORTANT: The final JSON must contain a "status" field. Do NOT include "ac_complete" in this JSON.',
+    'If you are blocked at any point, emit the final JSON immediately with status "blocked".',
+    '',
+    'Example valid response:',
+    '{"status":"done","summary":"Implemented login page with form validation","notes":"Used React Hook Form for validation","files":["src/pages/Login.tsx","src/components/LoginForm.tsx"],"tests":"5 tests passing"}',
+    '',
+    '='.repeat(80),
+    ''
+  );
 
   if (extraPrompt && extraPrompt.trim().length > 0) {
     basePrompt.push('Additional operator instructions:');

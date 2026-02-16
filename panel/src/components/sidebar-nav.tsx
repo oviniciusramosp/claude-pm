@@ -51,23 +51,8 @@ export function SidebarNav({
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
 }) {
-  const [runMenuOpen, setRunMenuOpen] = useState(false);
   const [workMenuOpen, setWorkMenuOpen] = useState(false);
-  const runMenuRef = useRef(null);
   const workMenuRef = useRef(null);
-
-  useEffect(() => {
-    if (!runMenuOpen) return;
-
-    function handleClickOutside(e: MouseEvent) {
-      if (runMenuRef.current && !runMenuRef.current.contains(e.target as Node)) {
-        setRunMenuOpen(false);
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [runMenuOpen]);
 
   useEffect(() => {
     if (!workMenuOpen) return;
@@ -165,57 +150,16 @@ export function SidebarNav({
             Stop API
           </Button>
         ) : (
-          <div className="relative" ref={runMenuRef}>
-            <div className="flex items-stretch">
-              <Button
-                size="sm"
-                color="primary"
-                className="flex-1 justify-center rounded-r-none"
-                iconLeading={PlayCircle}
-                isLoading={Boolean(busy.startApi)}
-                onPress={() => runAction('startApi', '/api/process/api/start', 'API started')}
-              >
-                Start API
-              </Button>
-              <Button
-                size="sm"
-                color="primary"
-                className="!h-auto rounded-l-none border-l border-l-white/20 px-2"
-                onPress={() => setRunMenuOpen((prev) => !prev)}
-                aria-label="Run options"
-                aria-expanded={runMenuOpen}
-              >
-                <Icon icon={ChevronDown} className={cx('size-4 transition-transform', runMenuOpen && 'rotate-180')} />
-              </Button>
-            </div>
-
-            {runMenuOpen && (
-              <div className="absolute left-0 right-0 z-50 mt-1 overflow-hidden rounded-sm border border-secondary bg-primary shadow-lg">
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 px-3 py-2 text-sm font-medium text-secondary transition hover:bg-primary_hover"
-                  onClick={() => {
-                    setRunMenuOpen(false);
-                    runAction('runTask', '/api/automation/run-task', 'Single-task run requested');
-                  }}
-                >
-                  <Icon icon={PlayCircle} className="size-4 text-fg-quaternary" />
-                  <span>Run Task</span>
-                </button>
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 px-3 py-2 text-sm font-medium text-secondary transition hover:bg-primary_hover"
-                  onClick={() => {
-                    setRunMenuOpen(false);
-                    runAction('runEpic', '/api/automation/run-epic', 'Epic run requested');
-                  }}
-                >
-                  <Icon icon={LayersThree01} className="size-4 text-fg-quaternary" />
-                  <span>Run Epic</span>
-                </button>
-              </div>
-            )}
-          </div>
+          <Button
+            size="sm"
+            color="primary"
+            className="w-full justify-center"
+            iconLeading={PlayCircle}
+            isLoading={Boolean(busy.startApi)}
+            onPress={() => runAction('startApi', '/api/process/api/start', 'API started')}
+          >
+            Start API
+          </Button>
         )}
 
         {apiRunning && (
