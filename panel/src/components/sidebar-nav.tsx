@@ -1,7 +1,7 @@
 // panel/src/components/sidebar-nav.tsx
 
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertOctagon, Asterisk02, ChevronDown, LayersThree01, Moon01, PlayCircle, Settings01, StopCircle, Sun } from '@untitledui/icons';
+import { AlertOctagon, Asterisk02, ChevronDown, LayersThree01, Moon01, PauseCircle, PlayCircle, Settings01, StopCircle, Sun } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { cx } from '@/utils/cx';
 import { SIDEBAR_NAV_ITEMS } from '../constants';
@@ -14,6 +14,7 @@ export function SidebarNav({
   isDark,
   onThemeToggle,
   apiRunning,
+  isPaused,
   isEpicRunning,
   apiHealthStatus,
   busy,
@@ -34,6 +35,7 @@ export function SidebarNav({
   isDark: boolean;
   onThemeToggle: () => void;
   apiRunning: boolean;
+  isPaused: boolean;
   isEpicRunning: boolean;
   apiHealthStatus: { label: string; color: string; connectionState: string };
   busy: Record<string, any>;
@@ -143,9 +145,9 @@ export function SidebarNav({
             className="w-full justify-center"
             iconLeading={StopCircle}
             isLoading={Boolean(busy.stopApi)}
-            onPress={() => runAction('stopApi', '/api/process/api/stop', isEpicRunning ? 'Epic stop requested' : 'App stop requested')}
+            onPress={() => runAction('stopApi', '/api/process/api/stop', isEpicRunning ? 'Epic stop requested' : 'API stopped')}
           >
-            {isEpicRunning ? 'Stop Epic' : 'Stop App'}
+            Stop API
           </Button>
         ) : (
           <div className="relative" ref={runMenuRef}>
@@ -156,9 +158,9 @@ export function SidebarNav({
                 className="flex-1 justify-center rounded-r-none"
                 iconLeading={PlayCircle}
                 isLoading={Boolean(busy.startApi)}
-                onPress={() => runAction('startApi', '/api/process/api/start', 'App started')}
+                onPress={() => runAction('startApi', '/api/process/api/start', 'API started')}
               >
-                Start App
+                Start API
               </Button>
               <Button
                 size="sm"
@@ -199,6 +201,25 @@ export function SidebarNav({
               </div>
             )}
           </div>
+        )}
+
+        {apiRunning && (
+          <Button
+            size="sm"
+            color={isPaused ? "primary" : "secondary"}
+            iconLeading={isPaused ? PlayCircle : PauseCircle}
+            className="w-full justify-center"
+            isLoading={Boolean(busy.pause || busy.unpause)}
+            onPress={() => {
+              if (isPaused) {
+                runAction('unpause', '/api/automation/unpause', 'Working resumed');
+              } else {
+                runAction('pause', '/api/automation/pause', 'Working paused');
+              }
+            }}
+          >
+            {isPaused ? 'Start Working' : 'Stop Working'}
+          </Button>
         )}
 
         <Button
