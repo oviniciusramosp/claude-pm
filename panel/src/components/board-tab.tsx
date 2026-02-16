@@ -20,6 +20,7 @@ interface BoardTabProps {
   showToast: (message: string, color?: 'success' | 'warning' | 'danger' | 'neutral') => void;
   refreshTrigger: number;
   onShowErrorDetail: (title: string, message: string) => void;
+  setFixingTaskId?: (taskId: string | null) => void;
 }
 
 interface BoardError {
@@ -236,7 +237,7 @@ function SkeletonCard() {
   );
 }
 
-export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDetail }: BoardTabProps) {
+export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDetail, setFixingTaskId: setFixingTaskIdProp }: BoardTabProps) {
   const [tasks, setTasks] = useState<BoardTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [boardError, setBoardError] = useState<BoardError | null>(null);
@@ -381,6 +382,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
 
   const handleFixTask = useCallback(async (taskId: string) => {
     setFixingTaskId(taskId);
+    setFixingTaskIdProp?.(taskId);
     try {
       const response = await fetch(`${apiBaseUrl}/api/board/fix-task`, {
         method: 'POST',
@@ -399,9 +401,10 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
     } finally {
       if (mountedRef.current) {
         setFixingTaskId(null);
+        setFixingTaskIdProp?.(null);
       }
     }
-  }, [apiBaseUrl, showToast, fetchBoard]);
+  }, [apiBaseUrl, showToast, fetchBoard, setFixingTaskIdProp]);
 
   // Initial load + polling
   useEffect(() => {

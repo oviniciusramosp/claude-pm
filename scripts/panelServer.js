@@ -1672,8 +1672,52 @@ app.post('/api/board/fix-task', async (req, res) => {
     });
 
     if (exitCode === 0) {
+      // Re-read the task file to check AC completion status
+      const updatedContent = await fs.readFile(task._filePath, 'utf-8');
+      const uncheckedACs = (updatedContent.match(/^\s*-\s*\[ \]\s+/gm) || []).length;
+      const checkedACs = (updatedContent.match(/^\s*-\s*\[x\]\s+/gim) || []).length;
+      const totalACs = uncheckedACs + checkedACs;
+
+      // Update task status based on AC completion
+      let newStatus = null;
+      if (totalACs > 0) {
+        if (uncheckedACs === 0) {
+          // All ACs are complete -> move to Done
+          newStatus = boardConfig.board.statuses.done;
+          await client.updateTaskStatus(taskId, newStatus);
+          pushLog('success', LOG_SOURCE.panel, `Task ${taskId} moved to Done (all ${checkedACs} ACs completed)`);
+        } else if (checkedACs > 0) {
+          // Some ACs complete but not all -> move to In Progress if not already
+          const currentStatus = task.status.trim().toLowerCase();
+          const doneStatus = boardConfig.board.statuses.done.toLowerCase();
+          const inProgressStatus = boardConfig.board.statuses.inProgress.toLowerCase();
+
+          if (currentStatus !== doneStatus && currentStatus !== inProgressStatus) {
+            newStatus = boardConfig.board.statuses.inProgress;
+            await client.updateTaskStatus(taskId, newStatus);
+            pushLog('info', LOG_SOURCE.panel, `Task ${taskId} moved to In Progress (${checkedACs}/${totalACs} ACs completed)`);
+          }
+        } else {
+          // No ACs completed -> move to Not Started if not already
+          const currentStatus = task.status.trim().toLowerCase();
+          const notStartedStatus = boardConfig.board.statuses.notStarted.toLowerCase();
+
+          if (currentStatus !== notStartedStatus) {
+            newStatus = boardConfig.board.statuses.notStarted;
+            await client.updateTaskStatus(taskId, newStatus);
+            pushLog('info', LOG_SOURCE.panel, `Task ${taskId} moved to Not Started (0 ACs completed)`);
+          }
+        }
+      }
+
       pushLog('success', LOG_SOURCE.panel, `Task fix completed successfully: ${taskId}`);
-      res.json({ ok: true, taskId, summary: 'ACs verified and updated by Claude' });
+      res.json({
+        ok: true,
+        taskId,
+        summary: `${checkedACs}/${totalACs} ACs completed`,
+        statusChanged: newStatus !== null,
+        newStatus
+      });
     } else {
       pushLog('error', LOG_SOURCE.panel, `Task fix failed for ${taskId} (exit code ${exitCode}): ${stderr.slice(0, 200)}`);
       res.status(500).json({ ok: false, message: `Claude execution failed (exit code ${exitCode})`, stderr: stderr.slice(0, 500) });
@@ -1692,14 +1736,19 @@ The task file is located at: ${taskFilePath}
 
 Your goal is to:
 1. Read the task acceptance criteria (markdown checkboxes: \`- [ ]\` or \`- [x]\`)
-2. Determine which acceptance criteria have been completed by examining the codebase
-3. Update the task file at ${taskFilePath} to check off (\`- [x]\`) any completed ACs
+2. Examine the codebase to determine which ACs have been implemented
+3. Update the task file to check off (\`- [x]\`) any completed ACs
+4. Leave unchecked (\`- [ ]\`) any ACs that are not yet implemented
 
 **IMPORTANT**:
 - Only mark an AC as complete if the code/implementation clearly satisfies it
-- If unsure, leave the AC unchecked
+- If unsure or if the implementation is incomplete, leave the AC unchecked
 - Use the Edit tool to update the task file
-- After updating the file, output a brief summary of what you found
+- After updating, provide a brief summary (e.g., "3/5 ACs completed")
+
+**AC Completion Rules**:
+- AC is COMPLETE if: code exists, tests pass (if applicable), functionality works as described
+- AC is INCOMPLETE if: code is missing, implementation is partial, tests fail, or you're uncertain
 
 Current task file content:
 \`\`\`markdown

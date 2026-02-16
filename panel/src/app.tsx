@@ -53,6 +53,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
   const [collectedErrors, setCollectedErrors] = useState([]);
   const [debugModalOpen, setDebugModalOpen] = useState(false);
   const [boardRefreshTrigger, setBoardRefreshTrigger] = useState(0);
+  const [fixingTaskId, setFixingTaskId] = useState(null);
   const logFeedRef = useRef(null);
   const didResolveInitialTabRef = useRef(false);
 
@@ -604,6 +605,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
               showToast={showToast}
               refreshTrigger={boardRefreshTrigger}
               onShowErrorDetail={(title, message) => setErrorModal({ open: true, title, message })}
+              setFixingTaskId={setFixingTaskId}
             />
           ) : activeTab === NAV_TAB_KEYS.git ? (
             <GitTab
@@ -621,6 +623,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
               copyLiveFeedMessage={copyLiveFeedMessage}
               busy={busy}
               orchestratorState={orchestratorState}
+              fixingTaskId={fixingTaskId}
             />
           )}
         </div>

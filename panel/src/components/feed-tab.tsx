@@ -169,7 +169,8 @@ export function FeedTab({
   sendClaudeChatMessage,
   copyLiveFeedMessage,
   busy,
-  orchestratorState
+  orchestratorState,
+  fixingTaskId
 }: {
   logs: LogEntry[];
   logFeedRef: RefObject<HTMLDivElement | null>;
@@ -179,6 +180,7 @@ export function FeedTab({
   copyLiveFeedMessage: (message: string) => void;
   busy: Record<string, any>;
   orchestratorState: OrchestratorState | null;
+  fixingTaskId?: string | null;
 }) {
   const claudeWorking = orchestratorState?.active && orchestratorState.currentTaskId;
 
@@ -199,6 +201,23 @@ export function FeedTab({
         </h2>
         <p className="m-0 text-sm text-tertiary">Unified stream for panel, app and direct Claude chat.</p>
       </div>
+
+      {/* Fix in progress banner */}
+      {fixingTaskId && (
+        <div className="flex items-center gap-3 rounded-lg border border-utility-brand-200 bg-utility-brand-50 px-4 py-3 shadow-sm animate-pulse">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-utility-brand-100">
+            <Icon icon={CpuChip01} className="size-4 text-utility-brand-600 animate-spin" />
+          </div>
+          <div className="flex-1">
+            <p className="m-0 text-sm font-medium text-utility-brand-900">
+              Fixing Acceptance Criteria
+            </p>
+            <p className="m-0 text-xs text-utility-brand-700">
+              Claude is verifying task: <span className="font-mono">{fixingTaskId}</span>
+            </p>
+          </div>
+        </div>
+      )}
 
       <div
         ref={logFeedRef}
