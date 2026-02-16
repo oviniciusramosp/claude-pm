@@ -1619,7 +1619,7 @@ app.post('/api/board/fix-task', async (req, res) => {
     const taskContent = await fs.readFile(task._filePath, 'utf-8');
 
     // Build prompt for Claude to verify and fix ACs
-    const prompt = buildFixTaskPrompt(taskId, task.name, taskContent);
+    const prompt = buildFixTaskPrompt(taskId, task.name, taskContent, task._filePath);
 
     // Execute Claude in one-shot mode
     pushLog('info', LOG_SOURCE.panel, `Running Claude to verify and fix ACs for: ${taskId}`);
@@ -1656,6 +1656,8 @@ app.post('/api/board/fix-task', async (req, res) => {
     child.stderr?.on('data', (chunk) => {
       const text = chunk.toString();
       stderr += text;
+      // Log stderr in real-time for debugging
+      pushLog('error', LOG_SOURCE.claude, text.trim());
     });
 
     const exitCode = await new Promise((resolve) => {
@@ -1666,7 +1668,7 @@ app.post('/api/board/fix-task', async (req, res) => {
       pushLog('success', LOG_SOURCE.panel, `Task fix completed successfully: ${taskId}`);
       res.json({ ok: true, taskId, summary: 'ACs verified and updated by Claude' });
     } else {
-      pushLog('error', LOG_SOURCE.panel, `Task fix failed for ${taskId} (exit code ${exitCode})`);
+      pushLog('error', LOG_SOURCE.panel, `Task fix failed for ${taskId} (exit code ${exitCode}): ${stderr.slice(0, 200)}`);
       res.status(500).json({ ok: false, message: `Claude execution failed (exit code ${exitCode})`, stderr: stderr.slice(0, 500) });
     }
   } catch (error) {
@@ -1676,21 +1678,24 @@ app.post('/api/board/fix-task', async (req, res) => {
   }
 });
 
-function buildFixTaskPrompt(taskId, taskName, taskContent) {
+function buildFixTaskPrompt(taskId, taskName, taskContent, taskFilePath) {
   return `You are verifying acceptance criteria for task "${taskName}" (${taskId}).
 
-The task file content is shown below. Your goal is to:
+The task file is located at: ${taskFilePath}
+
+Your goal is to:
 1. Read the task acceptance criteria (markdown checkboxes: \`- [ ]\` or \`- [x]\`)
 2. Determine which acceptance criteria have been completed by examining the codebase
-3. Update the task file to check off (\`- [x]\`) any completed ACs
+3. Update the task file at ${taskFilePath} to check off (\`- [x]\`) any completed ACs
 
 **IMPORTANT**:
 - Only mark an AC as complete if the code/implementation clearly satisfies it
 - If unsure, leave the AC unchecked
+- Use the Edit tool to update the task file
 - After updating the file, output a brief summary of what you found
 
-Task file content:
-\`\`\`
+Current task file content:
+\`\`\`markdown
 ${taskContent}
 \`\`\`
 
