@@ -563,15 +563,42 @@ export class Orchestrator {
 
         if (remainingUnchecked > 0) {
           this.logger.warn(
-            `Task "${taskLabel(task)}" has ${remainingUnchecked} unchecked Acceptance Criteria. Keeping in In Progress.`
+            `Task "${taskLabel(task)}" has ${remainingUnchecked} unchecked Acceptance Criteria. Triggering automatic AC fix.`
           );
-          await this.runStore.markFailed(task, `${remainingUnchecked} Acceptance Criteria still unchecked after execution.`);
 
-          const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
-          if (shouldHalt) {
-            this.halted = true;
+          // Automatically trigger AC fix
+          const fixSuccess = await this.triggerAcFix(task);
+
+          if (!fixSuccess) {
+            // Fix failed or timed out — mark task as failed and halt
+            await this.runStore.markFailed(task, `${remainingUnchecked} Acceptance Criteria still unchecked after execution. AC fix failed.`);
+
+            const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
+            if (shouldHalt) {
+              this.halted = true;
+            }
+            break;
           }
-          break;
+
+          // Fix succeeded — verify ACs again
+          const postFixMarkdown = await this.boardClient.getTaskMarkdown(task.id);
+          const postFixUnchecked = (postFixMarkdown.match(/^\s*-\s*\[ \]\s+/gm) || []).length;
+
+          if (postFixUnchecked > 0) {
+            this.logger.warn(
+              `Task "${taskLabel(task)}" still has ${postFixUnchecked} unchecked ACs after fix. Keeping in In Progress.`
+            );
+            await this.runStore.markFailed(task, `${postFixUnchecked} Acceptance Criteria still unchecked after AC fix.`);
+
+            const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
+            if (shouldHalt) {
+              this.halted = true;
+            }
+            break;
+          }
+
+          // All ACs now checked — proceed to Done
+          this.logger.success(`AC fix completed successfully for "${taskLabel(task)}". All ACs now checked.`);
         }
 
         await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.done);
@@ -869,15 +896,42 @@ export class Orchestrator {
 
         if (epicRemainingUnchecked > 0) {
           this.logger.warn(
-            `Task "${taskLabel(task)}" has ${epicRemainingUnchecked} unchecked Acceptance Criteria. Keeping in In Progress.`
+            `Task "${taskLabel(task)}" has ${epicRemainingUnchecked} unchecked Acceptance Criteria. Triggering automatic AC fix.`
           );
-          await this.runStore.markFailed(task, `${epicRemainingUnchecked} Acceptance Criteria still unchecked after execution.`);
 
-          const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
-          if (shouldHalt) {
-            this.halted = true;
+          // Automatically trigger AC fix
+          const fixSuccess = await this.triggerAcFix(task);
+
+          if (!fixSuccess) {
+            // Fix failed or timed out — mark task as failed and halt
+            await this.runStore.markFailed(task, `${epicRemainingUnchecked} Acceptance Criteria still unchecked after execution. AC fix failed.`);
+
+            const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
+            if (shouldHalt) {
+              this.halted = true;
+            }
+            break;
           }
-          break;
+
+          // Fix succeeded — verify ACs again
+          const postFixMarkdown = await this.boardClient.getTaskMarkdown(task.id);
+          const postFixUnchecked = (postFixMarkdown.match(/^\s*-\s*\[ \]\s+/gm) || []).length;
+
+          if (postFixUnchecked > 0) {
+            this.logger.warn(
+              `Task "${taskLabel(task)}" still has ${postFixUnchecked} unchecked ACs after fix. Keeping in In Progress.`
+            );
+            await this.runStore.markFailed(task, `${postFixUnchecked} Acceptance Criteria still unchecked after AC fix.`);
+
+            const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
+            if (shouldHalt) {
+              this.halted = true;
+            }
+            break;
+          }
+
+          // All ACs now checked — proceed to Done
+          this.logger.success(`AC fix completed successfully for "${taskLabel(task)}". All ACs now checked.`);
         }
 
         await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.done);
@@ -959,6 +1013,34 @@ export class Orchestrator {
     this.logger.info(buildContractJson(reviewExecution));
 
     return reviewExecution;
+  }
+
+  async triggerAcFix(task) {
+    const panelPort = Number(process.env.PANEL_PORT || 4100);
+    const apiBaseUrl = `http://localhost:${panelPort}`;
+
+    this.logger.info(`Triggering AC fix for "${taskLabel(task)}" via panel API...`);
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/board/fix-task`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId: task.id })
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        this.logger.error(`AC fix request failed: ${payload?.message || response.statusText}`);
+        return false;
+      }
+
+      await response.json().catch(() => ({}));
+      this.logger.success(`AC fix completed successfully for "${taskLabel(task)}"`);
+      return true;
+    } catch (error) {
+      this.logger.error(`Failed to trigger AC fix: ${error.message}`);
+      return false;
+    }
   }
 
   async stampEpicChildrenStatuses(epic, previousTasks) {
