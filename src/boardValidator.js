@@ -307,30 +307,35 @@ export class BoardValidator {
       });
     }
 
-    // Check status field
-    if (!frontmatter.status) {
-      result.valid = false;
-      result.missingStatus = true;
-      result.errors.push({
-        type: 'missing_status',
-        message: `Missing 'status' field: ${path.basename(filePath)}`,
-        path: filePath,
-        severity: 'critical',
-        suggestion: `Add status field with one of: ${this.validStatuses.join(', ')}`
-      });
-    } else {
-      // Validate status value
-      const normalizedStatus = String(frontmatter.status).trim();
-      if (!this.validStatuses.includes(normalizedStatus)) {
+    // Check status field (skip for epic.md files - they don't need status)
+    const fileName = path.basename(filePath);
+    const isEpicDefinition = fileName === 'epic.md';
+
+    if (!isEpicDefinition) {
+      if (!frontmatter.status) {
         result.valid = false;
-        result.invalidStatus = true;
+        result.missingStatus = true;
         result.errors.push({
-          type: 'invalid_status',
-          message: `Invalid status value: "${frontmatter.status}" in ${path.basename(filePath)}`,
+          type: 'missing_status',
+          message: `Missing 'status' field: ${fileName}`,
           path: filePath,
           severity: 'critical',
-          suggestion: `Status must be one of: ${this.validStatuses.join(', ')}`
+          suggestion: `Add status field with one of: ${this.validStatuses.join(', ')}`
         });
+      } else {
+        // Validate status value
+        const normalizedStatus = String(frontmatter.status).trim();
+        if (!this.validStatuses.includes(normalizedStatus)) {
+          result.valid = false;
+          result.invalidStatus = true;
+          result.errors.push({
+            type: 'invalid_status',
+            message: `Invalid status value: "${frontmatter.status}" in ${fileName}`,
+            path: filePath,
+            severity: 'critical',
+            suggestion: `Status must be one of: ${this.validStatuses.join(', ')}`
+          });
+        }
       }
     }
 
