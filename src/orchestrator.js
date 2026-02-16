@@ -156,6 +156,7 @@ export class Orchestrator {
     this.watchdog = new Watchdog({ config, logger });
     this.halted = false;
     this.paused = true; // Start paused by default
+    this.shutdownTimer = null; // Track pending shutdown
   }
 
   async _recordTaskUsage(task, execution) {
@@ -176,6 +177,13 @@ export class Orchestrator {
 
     if (this.paused) {
       return;
+    }
+
+    // Cancel pending shutdown if new work is scheduled
+    if (this.shutdownTimer) {
+      this.logger.info('Cancelling pending auto-shutdown (new work scheduled)');
+      clearTimeout(this.shutdownTimer);
+      this.shutdownTimer = null;
     }
 
     this.pendingReasons.push(reason);
@@ -302,7 +310,9 @@ export class Orchestrator {
       return;
     }
 
-    this.logger.info(`Starting board reconciliation (reason: ${reason})`);
+    // Deduplicate reasons for cleaner logs
+    const uniqueReasons = Array.from(new Set(reason.split(', '))).join(', ');
+    this.logger.info(`Starting board reconciliation (reason: ${uniqueReasons})`);
 
     // Check for incomplete epics first — they must be finished before standalone tasks.
     const initialTasks = await this.boardClient.listTasks();
@@ -650,7 +660,8 @@ export class Orchestrator {
     this.observeStatuses(finalTasks);
     await this.closeCompletedEpics(finalTasks);
 
-    this.logger.success(`Reconciliation finished (processed: ${processed}, reason: ${reason})`);
+    const finalReasons = Array.from(new Set(reason.split(', '))).join(', ');
+    this.logger.success(`Reconciliation finished (processed: ${processed}, reason: ${finalReasons})`);
   }
 
   async reconcileEpic(reason) {
@@ -662,7 +673,9 @@ export class Orchestrator {
       return;
     }
 
-    this.logger.info(`Starting epic reconciliation (reason: ${reason})`);
+    // Deduplicate reasons for cleaner logs
+    const uniqueReasons = Array.from(new Set(reason.split(', '))).join(', ');
+    this.logger.info(`Starting epic reconciliation (reason: ${uniqueReasons})`);
 
     const tasks = await this.boardClient.listTasks();
     this.observeStatuses(tasks);
@@ -983,15 +996,27 @@ export class Orchestrator {
     this.observeStatuses(finalTasks);
     await this.closeCompletedEpics(finalTasks);
 
-    this.logger.success(`Epic reconciliation finished (epic: "${taskLabel(epic)}", processed: ${processed}, reason: ${reason})`);
+    const finalEpicReasons = Array.from(new Set(reason.split(', '))).join(', ');
+    this.logger.success(`Epic reconciliation finished (epic: "${taskLabel(epic)}", processed: ${processed}, reason: ${finalEpicReasons})`);
 
-    // If the epic was completed and moved to Done, stop the automation process.
+    // If the epic was completed and moved to Done, schedule shutdown — but allow it to be cancelled
     const postCloseTasks = await this.boardClient.listTasks();
     const completedEpic = postCloseTasks.find(t => t.id === epic.id);
     if (completedEpic && normalize(completedEpic.status) === normalize(this.config.board.statuses.done)) {
-      this.logger.success(`Epic "${taskLabel(epic)}" completed successfully. Stopping automation.`);
-      this.logger.info(`Auto-shutdown triggered by: epic-completion (epic: "${taskLabel(epic)}")`);
-      setTimeout(() => process.exit(0), 1500);
+      this.logger.success(`Epic "${taskLabel(epic)}" completed successfully. Scheduling auto-shutdown.`);
+
+      // Schedule shutdown with a grace period to allow cancellation if new work arrives
+      this.shutdownTimer = setTimeout(() => {
+        // Final check: verify no work is running or pending
+        if (this.running || this.pending || this.currentTaskId) {
+          this.logger.info('Auto-shutdown cancelled (work in progress)');
+          this.shutdownTimer = null;
+          return;
+        }
+
+        this.logger.info(`Auto-shutdown triggered by: epic-completion (epic: "${taskLabel(epic)}")`);
+        process.exit(0);
+      }, 3000); // 3 seconds grace period (increased from 1.5s for better safety)
     }
   }
 
