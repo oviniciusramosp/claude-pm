@@ -1610,6 +1610,10 @@ app.post('/api/board/fix-task', async (req, res) => {
       return;
     }
 
+    // Check if this is an Epic
+    const isEpic = task.type?.toLowerCase() === 'epic' || tasks.some((t) => t.parentId === task.id);
+    const childTasks = isEpic ? tasks.filter((t) => t.parentId === task.id) : [];
+
     // Read task markdown content using the internal _filePath
     if (!task._filePath) {
       pushLog('error', LOG_SOURCE.panel, `Task has no file path: ${taskId}`);
@@ -1619,7 +1623,9 @@ app.post('/api/board/fix-task', async (req, res) => {
     const taskContent = await fs.readFile(task._filePath, 'utf-8');
 
     // Build prompt for Claude to verify and fix ACs
-    const prompt = buildFixTaskPrompt(taskId, task.name, taskContent, task._filePath);
+    const prompt = isEpic
+      ? buildEpicFixPrompt(taskId, task.name, taskContent, task._filePath, childTasks)
+      : buildFixTaskPrompt(taskId, task.name, taskContent, task._filePath);
 
     // Execute Claude in one-shot mode
     pushLog('info', LOG_SOURCE.panel, `Running Claude to verify and fix ACs for: ${taskId}`);
@@ -1672,52 +1678,130 @@ app.post('/api/board/fix-task', async (req, res) => {
     });
 
     if (exitCode === 0) {
-      // Re-read the task file to check AC completion status
-      const updatedContent = await fs.readFile(task._filePath, 'utf-8');
-      const uncheckedACs = (updatedContent.match(/^\s*-\s*\[ \]\s+/gm) || []).length;
-      const checkedACs = (updatedContent.match(/^\s*-\s*\[x\]\s+/gim) || []).length;
-      const totalACs = uncheckedACs + checkedACs;
+      if (isEpic) {
+        // Process Epic: check all child tasks and update their statuses
+        const childResults = [];
+        for (const child of childTasks) {
+          const childContent = await fs.readFile(child._filePath, 'utf-8');
+          const unchecked = (childContent.match(/^\s*-\s*\[ \]\s+/gm) || []).length;
+          const checked = (childContent.match(/^\s*-\s*\[x\]\s+/gim) || []).length;
+          const total = unchecked + checked;
 
-      // Update task status based on AC completion
-      let newStatus = null;
-      if (totalACs > 0) {
-        if (uncheckedACs === 0) {
-          // All ACs are complete -> move to Done
-          newStatus = boardConfig.board.statuses.done;
-          await client.updateTaskStatus(taskId, newStatus);
-          pushLog('success', LOG_SOURCE.panel, `Task ${taskId} moved to Done (all ${checkedACs} ACs completed)`);
-        } else if (checkedACs > 0) {
-          // Some ACs complete but not all -> move to In Progress if not already
-          const currentStatus = task.status.trim().toLowerCase();
-          const doneStatus = boardConfig.board.statuses.done.toLowerCase();
-          const inProgressStatus = boardConfig.board.statuses.inProgress.toLowerCase();
-
-          if (currentStatus !== doneStatus && currentStatus !== inProgressStatus) {
-            newStatus = boardConfig.board.statuses.inProgress;
-            await client.updateTaskStatus(taskId, newStatus);
-            pushLog('info', LOG_SOURCE.panel, `Task ${taskId} moved to In Progress (${checkedACs}/${totalACs} ACs completed)`);
+          // Update child status
+          let childStatus = null;
+          if (total > 0) {
+            if (unchecked === 0) {
+              childStatus = boardConfig.board.statuses.done;
+              await client.updateTaskStatus(child.id, childStatus);
+              pushLog('success', LOG_SOURCE.panel, `  ${child.id} → Done (${checked}/${total} ACs)`);
+            } else if (checked > 0) {
+              const currentStatus = child.status.trim().toLowerCase();
+              const inProgressStatus = boardConfig.board.statuses.inProgress.toLowerCase();
+              if (currentStatus !== inProgressStatus) {
+                childStatus = boardConfig.board.statuses.inProgress;
+                await client.updateTaskStatus(child.id, childStatus);
+                pushLog('info', LOG_SOURCE.panel, `  ${child.id} → In Progress (${checked}/${total} ACs)`);
+              }
+            } else {
+              const currentStatus = child.status.trim().toLowerCase();
+              const notStartedStatus = boardConfig.board.statuses.notStarted.toLowerCase();
+              if (currentStatus !== notStartedStatus) {
+                childStatus = boardConfig.board.statuses.notStarted;
+                await client.updateTaskStatus(child.id, childStatus);
+                pushLog('info', LOG_SOURCE.panel, `  ${child.id} → Not Started (0/${total} ACs)`);
+              }
+            }
           }
-        } else {
-          // No ACs completed -> move to Not Started if not already
-          const currentStatus = task.status.trim().toLowerCase();
-          const notStartedStatus = boardConfig.board.statuses.notStarted.toLowerCase();
 
-          if (currentStatus !== notStartedStatus) {
-            newStatus = boardConfig.board.statuses.notStarted;
-            await client.updateTaskStatus(taskId, newStatus);
-            pushLog('info', LOG_SOURCE.panel, `Task ${taskId} moved to Not Started (0 ACs completed)`);
+          childResults.push({ id: child.id, checked, total, status: childStatus });
+        }
+
+        // Check Epic's own ACs
+        const epicContent = await fs.readFile(task._filePath, 'utf-8');
+        const epicUnchecked = (epicContent.match(/^\s*-\s*\[ \]\s+/gm) || []).length;
+        const epicChecked = (epicContent.match(/^\s*-\s*\[x\]\s+/gim) || []).length;
+        const epicTotal = epicUnchecked + epicChecked;
+
+        // Update Epic status based on children
+        const allChildrenDone = childTasks.every((child) => {
+          const result = childResults.find((r) => r.id === child.id);
+          return result && result.checked === result.total && result.total > 0;
+        });
+
+        let epicStatus = null;
+        if (allChildrenDone && childTasks.length > 0) {
+          epicStatus = boardConfig.board.statuses.done;
+          await client.updateTaskStatus(taskId, epicStatus);
+          pushLog('success', LOG_SOURCE.panel, `Epic ${taskId} → Done (all children complete)`);
+        } else if (childResults.some((r) => r.checked > 0)) {
+          const currentStatus = task.status.trim().toLowerCase();
+          const inProgressStatus = boardConfig.board.statuses.inProgress.toLowerCase();
+          if (currentStatus !== inProgressStatus) {
+            epicStatus = boardConfig.board.statuses.inProgress;
+            await client.updateTaskStatus(taskId, epicStatus);
+            pushLog('info', LOG_SOURCE.panel, `Epic ${taskId} → In Progress (some children have progress)`);
           }
         }
-      }
 
-      pushLog('success', LOG_SOURCE.panel, `Task fix completed successfully: ${taskId}`);
-      res.json({
-        ok: true,
-        taskId,
-        summary: `${checkedACs}/${totalACs} ACs completed`,
-        statusChanged: newStatus !== null,
-        newStatus
-      });
+        pushLog('success', LOG_SOURCE.panel, `Epic fix completed: ${taskId} (${childTasks.length} children processed)`);
+        res.json({
+          ok: true,
+          taskId,
+          isEpic: true,
+          summary: `Epic: ${epicChecked}/${epicTotal} ACs, ${childResults.length} children updated`,
+          children: childResults,
+          statusChanged: epicStatus !== null,
+          newStatus: epicStatus
+        });
+      } else {
+        // Regular task: check its ACs and update status
+        const updatedContent = await fs.readFile(task._filePath, 'utf-8');
+        const uncheckedACs = (updatedContent.match(/^\s*-\s*\[ \]\s+/gm) || []).length;
+        const checkedACs = (updatedContent.match(/^\s*-\s*\[x\]\s+/gim) || []).length;
+        const totalACs = uncheckedACs + checkedACs;
+
+        // Update task status based on AC completion
+        let newStatus = null;
+        if (totalACs > 0) {
+          if (uncheckedACs === 0) {
+            // All ACs are complete -> move to Done
+            newStatus = boardConfig.board.statuses.done;
+            await client.updateTaskStatus(taskId, newStatus);
+            pushLog('success', LOG_SOURCE.panel, `Task ${taskId} moved to Done (all ${checkedACs} ACs completed)`);
+          } else if (checkedACs > 0) {
+            // Some ACs complete but not all -> move to In Progress if not already
+            const currentStatus = task.status.trim().toLowerCase();
+            const doneStatus = boardConfig.board.statuses.done.toLowerCase();
+            const inProgressStatus = boardConfig.board.statuses.inProgress.toLowerCase();
+
+            if (currentStatus !== doneStatus && currentStatus !== inProgressStatus) {
+              newStatus = boardConfig.board.statuses.inProgress;
+              await client.updateTaskStatus(taskId, newStatus);
+              pushLog('info', LOG_SOURCE.panel, `Task ${taskId} moved to In Progress (${checkedACs}/${totalACs} ACs completed)`);
+            }
+          } else {
+            // No ACs completed -> move to Not Started if not already
+            const currentStatus = task.status.trim().toLowerCase();
+            const notStartedStatus = boardConfig.board.statuses.notStarted.toLowerCase();
+
+            if (currentStatus !== notStartedStatus) {
+              newStatus = boardConfig.board.statuses.notStarted;
+              await client.updateTaskStatus(taskId, newStatus);
+              pushLog('info', LOG_SOURCE.panel, `Task ${taskId} moved to Not Started (0 ACs completed)`);
+            }
+          }
+        }
+
+        pushLog('success', LOG_SOURCE.panel, `Task fix completed successfully: ${taskId}`);
+        res.json({
+          ok: true,
+          taskId,
+          isEpic: false,
+          summary: `${checkedACs}/${totalACs} ACs completed`,
+          statusChanged: newStatus !== null,
+          newStatus
+        });
+      }
     } else {
       pushLog('error', LOG_SOURCE.panel, `Task fix failed for ${taskId} (exit code ${exitCode}): ${stderr.slice(0, 200)}`);
       res.status(500).json({ ok: false, message: `Claude execution failed (exit code ${exitCode})`, stderr: stderr.slice(0, 500) });
@@ -1728,6 +1812,56 @@ app.post('/api/board/fix-task', async (req, res) => {
     res.status(500).json({ ok: false, message: msg });
   }
 });
+
+function buildEpicFixPrompt(epicId, epicName, epicContent, epicFilePath, childTasks) {
+  const childTasksList = childTasks
+    .map((child) => `  - ${child.id}: ${child.name} (${child._filePath})`)
+    .join('\n');
+
+  const childTasksDetails = childTasks
+    .map((child) => {
+      return `### ${child.id}: ${child.name}
+File: ${child._filePath}
+Priority: ${child.priority || 'N/A'}
+Status: ${child.status || 'N/A'}`;
+    })
+    .join('\n\n');
+
+  return `You are verifying acceptance criteria for Epic "${epicName}" (${epicId}) and all its child tasks.
+
+**Epic file**: ${epicFilePath}
+
+**Child tasks** (${childTasks.length} total):
+${childTasksList}
+
+Your goal is to:
+1. For EACH child task, read its file and examine the acceptance criteria
+2. Examine the codebase to determine which ACs have been implemented for each child
+3. Update EACH child task file to check off (\`- [x]\`) completed ACs
+4. Update the Epic file's ACs to reflect overall progress
+5. Provide a summary of progress for each child and the Epic
+
+**IMPORTANT**:
+- Process ALL child tasks - don't skip any
+- Only mark an AC as complete if the code/implementation clearly satisfies it
+- If unsure or if implementation is incomplete, leave the AC unchecked
+- Use the Edit tool to update each file
+- After updating all files, provide a summary (e.g., "Child 1: 3/5 ACs, Child 2: 2/4 ACs, Epic: 5/9 ACs")
+
+**AC Completion Rules**:
+- AC is COMPLETE if: code exists, tests pass (if applicable), functionality works as described
+- AC is INCOMPLETE if: code is missing, implementation is partial, tests fail, or you're uncertain
+
+**Epic information**:
+${childTasksDetails}
+
+**Epic file content**:
+\`\`\`markdown
+${epicContent}
+\`\`\`
+
+Now examine the codebase and update ALL task files (epic + children) with accurate AC completion status.`;
+}
 
 function buildFixTaskPrompt(taskId, taskName, taskContent, taskFilePath) {
   return `You are verifying acceptance criteria for task "${taskName}" (${taskId}).
