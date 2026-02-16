@@ -118,11 +118,12 @@ function buildContractJson(execution) {
 }
 
 export class Orchestrator {
-  constructor({ config, logger, boardClient, runStore }) {
+  constructor({ config, logger, boardClient, runStore, usageStore }) {
     this.config = config;
     this.logger = logger;
     this.boardClient = boardClient;
     this.runStore = runStore;
+    this.usageStore = usageStore;
 
     this.running = false;
     this.timer = null;
@@ -135,6 +136,16 @@ export class Orchestrator {
     this.claudeCompletedTaskIds = new Map();
     this.watchdog = new Watchdog({ config, logger });
     this.halted = false;
+  }
+
+  async _recordTaskUsage(task, execution) {
+    if (this.usageStore && execution && execution.usage) {
+      try {
+        await this.usageStore.recordUsage(task.id, task.name, execution.usage);
+      } catch (err) {
+        this.logger.warn(`Failed to record token usage: ${err.message}`);
+      }
+    }
   }
 
   schedule(reason, options = {}) {
@@ -318,16 +329,25 @@ export class Orchestrator {
       const executionStartTime = Date.now();
       const headBefore = getGitHead(this.config.claude.workdir);
 
-      const onAcComplete = (acText) => {
-        this.boardClient.updateCheckboxes(task.id, [acText]).then(() => {
-          this.logger.info(`AC completed: "${acText}"`);
-        }).catch((err) => {
-          this.logger.warn(`Failed to update AC checkbox: ${err.message}`);
-        });
+      const onAcComplete = (acRef) => {
+        if (acRef.type === 'numbered') {
+          this.boardClient.updateCheckboxesByIndex(task.id, [acRef.index]).then(() => {
+            this.logger.info(`AC completed: AC-${acRef.index}`);
+          }).catch((err) => {
+            this.logger.warn(`Failed to update AC checkbox: ${err.message}`);
+          });
+        } else {
+          this.boardClient.updateCheckboxes(task.id, [acRef.text]).then(() => {
+            this.logger.info(`AC completed: "${acRef.text}"`);
+          }).catch((err) => {
+            this.logger.warn(`Failed to update AC checkbox: ${err.message}`);
+          });
+        }
       };
 
       try {
         let execution = await runClaudeTask(task, prompt, this.config, { signal, onAcComplete });
+        await this._recordTaskUsage(task, execution);
 
         this.watchdog.stop();
         let executionElapsed = Date.now() - executionStartTime;
@@ -369,6 +389,7 @@ export class Orchestrator {
           const retryStartTime = Date.now();
 
           execution = await runClaudeTask(task, retryPrompt, this.config, { signal: retrySignal, onAcComplete });
+          await this._recordTaskUsage(task, execution);
 
           this.watchdog.stop();
           executionElapsed = Date.now() - retryStartTime;
@@ -446,7 +467,11 @@ export class Orchestrator {
           }
         }
 
-        await this.boardClient.updateCheckboxes(task.id, finalExecution.completedAcs);
+        // Apply collected per-AC completions from stdout as fallback
+        // (in streaming mode, these were already applied in real-time via onAcComplete)
+        if (Array.isArray(finalExecution.collectedAcIndices) && finalExecution.collectedAcIndices.length > 0) {
+          await this.boardClient.updateCheckboxesByIndex(task.id, finalExecution.collectedAcIndices);
+        }
 
         // Verify all ACs are checked before moving to Done
         const postCheckMarkdown = await this.boardClient.getTaskMarkdown(task.id);
@@ -600,16 +625,25 @@ export class Orchestrator {
       const executionStartTime = Date.now();
       const headBefore = getGitHead(this.config.claude.workdir);
 
-      const onAcComplete = (acText) => {
-        this.boardClient.updateCheckboxes(task.id, [acText]).then(() => {
-          this.logger.info(`AC completed: "${acText}"`);
-        }).catch((err) => {
-          this.logger.warn(`Failed to update AC checkbox: ${err.message}`);
-        });
+      const onAcComplete = (acRef) => {
+        if (acRef.type === 'numbered') {
+          this.boardClient.updateCheckboxesByIndex(task.id, [acRef.index]).then(() => {
+            this.logger.info(`AC completed: AC-${acRef.index}`);
+          }).catch((err) => {
+            this.logger.warn(`Failed to update AC checkbox: ${err.message}`);
+          });
+        } else {
+          this.boardClient.updateCheckboxes(task.id, [acRef.text]).then(() => {
+            this.logger.info(`AC completed: "${acRef.text}"`);
+          }).catch((err) => {
+            this.logger.warn(`Failed to update AC checkbox: ${err.message}`);
+          });
+        }
       };
 
       try {
         let execution = await runClaudeTask(task, prompt, this.config, { signal, onAcComplete });
+        await this._recordTaskUsage(task, execution);
 
         this.watchdog.stop();
         let executionElapsed = Date.now() - executionStartTime;
@@ -651,6 +685,7 @@ export class Orchestrator {
           const retryStartTime = Date.now();
 
           execution = await runClaudeTask(task, retryPrompt, this.config, { signal: retrySignal, onAcComplete });
+          await this._recordTaskUsage(task, execution);
 
           this.watchdog.stop();
           executionElapsed = Date.now() - retryStartTime;
@@ -728,7 +763,11 @@ export class Orchestrator {
           }
         }
 
-        await this.boardClient.updateCheckboxes(task.id, finalExecution.completedAcs);
+        // Apply collected per-AC completions from stdout as fallback
+        // (in streaming mode, these were already applied in real-time via onAcComplete)
+        if (Array.isArray(finalExecution.collectedAcIndices) && finalExecution.collectedAcIndices.length > 0) {
+          await this.boardClient.updateCheckboxesByIndex(task.id, finalExecution.collectedAcIndices);
+        }
 
         // Verify all ACs are checked before moving to Done
         const epicPostCheckMarkdown = await this.boardClient.getTaskMarkdown(task.id);
@@ -818,6 +857,7 @@ export class Orchestrator {
 
     const reviewStartTime = Date.now();
     const reviewExecution = await runClaudeTask(task, reviewPrompt, this.config, { overrideModel: OPUS_REVIEW_MODEL });
+    await this._recordTaskUsage(task, reviewExecution);
     const reviewElapsed = Date.now() - reviewStartTime;
 
     this.logger.info(`Opus review finished: "${taskLabel(task)}" (${formatDuration(reviewElapsed)})`);
@@ -863,6 +903,37 @@ export class Orchestrator {
         continue;
       }
 
+      // Verify all children's ACs are actually checked before closing the Epic
+      const childrenWithUncheckedAcs = [];
+      for (const child of epicResult.children) {
+        const childMarkdown = await this.boardClient.getTaskMarkdown(child.id);
+        const uncheckedCount = (childMarkdown.match(/^\s*-\s*\[ \]\s+/gm) || []).length;
+        if (uncheckedCount > 0) {
+          childrenWithUncheckedAcs.push({
+            name: child.name,
+            id: child.id,
+            unchecked: uncheckedCount
+          });
+        }
+      }
+
+      if (childrenWithUncheckedAcs.length > 0) {
+        const details = childrenWithUncheckedAcs
+          .map(c => `"${c.name}" (${c.unchecked} unchecked)`)
+          .join(', ');
+        this.logger.warn(
+          `Epic "${taskLabel(task)}" has children with unchecked ACs: ${details}. Resetting to In Progress.`
+        );
+
+        // Reset these children back to In Progress so they can be re-executed
+        for (const child of childrenWithUncheckedAcs) {
+          await this.boardClient.updateTaskStatus(child.id, this.config.board.statuses.inProgress);
+          this.logger.info(`Reset "${child.name}" from Done to In Progress (${child.unchecked} ACs unchecked)`);
+        }
+
+        continue;
+      }
+
       const summary = await this.runStore.getEpicSummary(epicResult.children);
 
       if (this.config.claude.epicReviewEnabled) {
@@ -881,6 +952,7 @@ export class Orchestrator {
 
           const epicReviewStartTime = Date.now();
           const reviewExecution = await runClaudeTask(task, reviewPrompt, this.config, { overrideModel: OPUS_REVIEW_MODEL });
+          await this._recordTaskUsage(task, reviewExecution);
           const epicReviewElapsed = Date.now() - epicReviewStartTime;
 
           this.logger.info(`Opus epic review finished: "${taskLabel(task)}" (${formatDuration(epicReviewElapsed)})`);
