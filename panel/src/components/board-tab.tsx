@@ -508,15 +508,22 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
         showToast(payload?.message || 'Fix task failed', 'danger');
         // Fetch updated status from server
         await fetchFixStatus();
+        // Clear fixing state on error
+        setFixingTaskIdProp?.(null);
         return;
       }
       showToast(`Task fix completed: ${taskId}`, 'success');
+      // Clear fixing state immediately on success (before board refresh)
+      setFixingTaskIdProp?.(null);
       await fetchBoard(true);
     } catch (err: any) {
       showToast(err.message || 'Fix task failed', 'danger');
       // Fetch updated status from server
       await fetchFixStatus();
+      // Clear fixing state on exception
+      setFixingTaskIdProp?.(null);
     } finally {
+      // Safety net: ensure fixing state is always cleared
       if (mountedRef.current) {
         setFixingTaskIdProp?.(null);
       }
