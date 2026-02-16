@@ -83,6 +83,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
   const isEpicRunning = useMemo(() => {
     return orchestratorState?.active && orchestratorState?.mode === 'epic';
   }, [orchestratorState]);
+  const isPaused = orchestratorState?.paused === true;
 
   const disabledTabs = useMemo(() => new Set<string>(), []);
 
@@ -542,6 +543,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
         isDark={isDark}
         onThemeToggle={onThemeToggle}
         apiRunning={apiRunning}
+        isPaused={isPaused}
         isEpicRunning={isEpicRunning}
         apiHealthStatus={apiHealthStatus}
         busy={busy}
@@ -660,8 +662,29 @@ export function App({ mode = 'light', setMode = () => {} }) {
         onCopy={async () => {
           if (collectedErrors.length === 0) return;
           const text = collectedErrors
-            .map((e) => `[${e.ts || ''}] [${String(e.source || 'unknown').toUpperCase()}] ${e.message || ''}`)
-            .join('\n');
+            .map((e) => {
+              const lines = [
+                `[${e.ts || ''}] [${String(e.source || 'unknown').toUpperCase()}]`,
+                `Message: ${e.message || ''}`,
+              ];
+              if (e.exitCode !== undefined && e.exitCode !== null) {
+                lines.push(`Exit Code: ${e.exitCode}`);
+              }
+              if (e.signal) {
+                lines.push(`Signal: ${e.signal}`);
+              }
+              if (e.stderr) {
+                lines.push(`\nStderr:\n${e.stderr}`);
+              }
+              if (e.stdout) {
+                lines.push(`\nStdout:\n${e.stdout}`);
+              }
+              if (e.stack) {
+                lines.push(`\nStack Trace:\n${e.stack}`);
+              }
+              return lines.join('\n');
+            })
+            .join('\n\n---\n\n');
           try {
             await navigator.clipboard.writeText(text);
             showToast('Errors copied to clipboard.');

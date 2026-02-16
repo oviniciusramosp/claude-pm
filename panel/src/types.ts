@@ -45,6 +45,12 @@ export interface LogEntry {
   message?: string;
   isPrompt?: boolean;
   promptTitle?: string;
+  // Debug fields (only for error-level logs)
+  stack?: string;
+  exitCode?: string | number;
+  signal?: string;
+  stderr?: string;
+  stdout?: string;
 }
 
 export interface Toast {

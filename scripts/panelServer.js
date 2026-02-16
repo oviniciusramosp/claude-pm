@@ -320,7 +320,7 @@ function shouldSuppressProcessMessage(source, message) {
   return false;
 }
 
-function buildProcessStopLog(source, code, signal) {
+function buildProcessStopLog(source, code, signal, debugInfo = {}) {
   const name = processDisplayName(source);
   const normalizedSignal = String(signal || '').toUpperCase();
   const expectedSignals = new Set(['SIGTERM', 'SIGINT']);
@@ -338,7 +338,11 @@ function buildProcessStopLog(source, code, signal) {
 
   return {
     level: 'error',
-    message: `${name} stopped unexpectedly (exit code: ${exitCode}${signalLabel}).`
+    message: `${name} stopped unexpectedly (exit code: ${exitCode}${signalLabel}).`,
+    exitCode,
+    signal,
+    stderr: debugInfo.stderr,
+    stdout: debugInfo.stdout
   };
 }
 
@@ -443,6 +447,10 @@ function startManagedProcess(target, command, source, envOverrides = {}) {
     return undefined;
   }
 
+  // Capture output buffers for debugging (last 5000 chars of each stream)
+  const outputBuffers = { stdout: [], stderr: [] };
+  const MAX_DEBUG_BUFFER_CHARS = 5000;
+
   const stdoutForwarder = createProcessLogForwarder({
     fallbackLevel: 'info',
     onLog: (parsed) => {
@@ -466,10 +474,22 @@ function startManagedProcess(target, command, source, envOverrides = {}) {
   });
 
   const stdoutReader = readLines(child.stdout, (line) => {
+    // Buffer output for debug info
+    outputBuffers.stdout.push(line);
+    const totalChars = outputBuffers.stdout.reduce((sum, l) => sum + l.length, 0);
+    if (totalChars > MAX_DEBUG_BUFFER_CHARS) {
+      outputBuffers.stdout.shift();
+    }
     stdoutForwarder.handleLine(line);
   });
 
   const stderrReader = readLines(child.stderr, (line) => {
+    // Buffer output for debug info
+    outputBuffers.stderr.push(line);
+    const totalChars = outputBuffers.stderr.reduce((sum, l) => sum + l.length, 0);
+    if (totalChars > MAX_DEBUG_BUFFER_CHARS) {
+      outputBuffers.stderr.shift();
+    }
     stderrForwarder.handleLine(line);
   });
 
@@ -479,8 +499,18 @@ function startManagedProcess(target, command, source, envOverrides = {}) {
     stdoutReader.close();
     stderrReader.close();
 
-    const stopLog = buildProcessStopLog(source, code, signal);
-    pushLog(stopLog.level, source, stopLog.message);
+    const debugInfo = {
+      stdout: outputBuffers.stdout.join('\n').trim(),
+      stderr: outputBuffers.stderr.join('\n').trim()
+    };
+
+    const stopLog = buildProcessStopLog(source, code, signal, debugInfo);
+    pushLog(stopLog.level, source, stopLog.message, {
+      exitCode: stopLog.exitCode,
+      signal: stopLog.signal,
+      stderr: stopLog.stderr,
+      stdout: stopLog.stdout
+    });
     target.child = null;
     target.status = 'stopped';
     target.startedAt = null;
@@ -488,7 +518,9 @@ function startManagedProcess(target, command, source, envOverrides = {}) {
   });
 
   child.on('error', (error) => {
-    pushLog('error', source, `Process error: ${error.message}`);
+    pushLog('error', source, `Process error: ${error.message}`, {
+      stack: error.stack
+    });
   });
 
   return true;
@@ -1277,7 +1309,9 @@ app.post('/api/automation/run', async (_req, res) => {
     pushLog('success', LOG_SOURCE.panel, 'Manual run requested successfully');
     res.json({ ok: true, payload });
   } catch (error) {
-    pushLog('error', LOG_SOURCE.panel, `Manual run error: ${error.message}`);
+    pushLog('error', LOG_SOURCE.panel, `Manual run error: ${error.message}`, {
+      stack: error.stack
+    });
     res.status(500).json({ ok: false, message: error.message });
   }
 });
@@ -1433,6 +1467,79 @@ app.get('/api/board/task-markdown', async (req, res) => {
   } catch (error) {
     const msg = error.message || String(error);
     res.status(500).json({ ok: false, message: msg });
+  }
+});
+
+app.get('/validate-board', async (_req, res) => {
+  const env = await readEnvPairs();
+  const boardDir = resolveBoardDir(env);
+
+  const boardConfig = {
+    board: {
+      dir: boardDir,
+      statuses: {
+        notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+        inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+        done: env.BOARD_STATUS_DONE || 'Done'
+      },
+      typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
+    }
+  };
+
+  try {
+    const client = new LocalBoardClient(boardConfig);
+    await client.initialize();
+    const tasks = await client.listTasks();
+
+    const errors = [];
+    const warnings = [];
+    let tasksWithoutStatus = 0;
+    let tasksWithInvalidStatus = 0;
+
+    const validStatuses = [
+      boardConfig.board.statuses.notStarted,
+      boardConfig.board.statuses.inProgress,
+      boardConfig.board.statuses.done
+    ];
+
+    for (const task of tasks) {
+      if (!task.status) {
+        tasksWithoutStatus++;
+        errors.push({
+          type: 'missing_status',
+          message: `Task "${task.name}" (${task.id}) is missing a status field`,
+          severity: 'error',
+          suggestion: 'Add a status field to the frontmatter',
+          path: task.url
+        });
+      } else if (!validStatuses.includes(task.status)) {
+        tasksWithInvalidStatus++;
+        errors.push({
+          type: 'invalid_status',
+          message: `Task "${task.name}" (${task.id}) has invalid status: "${task.status}"`,
+          severity: 'error',
+          suggestion: `Use one of: ${validStatuses.join(', ')}`,
+          path: task.url
+        });
+      }
+    }
+
+    const epics = tasks.filter((t) => isEpicTask(t, tasks, boardConfig));
+
+    res.json({
+      valid: errors.length === 0,
+      errors,
+      warnings,
+      info: {
+        totalTasks: tasks.length,
+        totalEpics: epics.length,
+        tasksWithoutStatus,
+        tasksWithInvalidStatus
+      }
+    });
+  } catch (error) {
+    const msg = error.message || String(error);
+    res.status(500).json({ error: msg });
   }
 });
 
@@ -1859,7 +1966,11 @@ app.post('/api/board/fix-task', async (req, res) => {
     }
   } catch (error) {
     const msg = error.message || String(error);
-    pushLog('error', LOG_SOURCE.panel, `Task fix error for ${taskId}: ${msg}`);
+    pushLog('error', LOG_SOURCE.panel, `Task fix error for ${taskId}: ${msg}`, {
+      stack: error.stack,
+      exitCode: error.exitCode,
+      stderr: error.stderr
+    });
 
     // Mark task as failed
     state.fixTasks.set(taskId, {
