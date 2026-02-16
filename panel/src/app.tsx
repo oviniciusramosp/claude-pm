@@ -596,6 +596,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
               allFieldsValidated={allFieldsValidated}
               changedKeys={changedKeys}
               onSaveClick={onSaveClick}
+              apiBaseUrl={apiBaseUrl}
             />
           ) : activeTab === NAV_TAB_KEYS.board ? (
             <BoardTab

@@ -26,6 +26,35 @@ export function generateManagedContent() {
   lines.push('');
 
   // Environment Variables
+  lines.push('## Board Structure');
+  lines.push('');
+  lines.push('Tasks live as `.md` files with YAML frontmatter in the `Board/` directory.');
+  lines.push('');
+  lines.push('**CRITICAL: Status is tracked via the `status` field in frontmatter, NOT by folder location.**');
+  lines.push('');
+  lines.push('Valid status values (exact match required):');
+  lines.push('- `"Not Started"` - Task not yet started');
+  lines.push('- `"In Progress"` - Task currently being worked on');
+  lines.push('- `"Done"` - Task completed successfully');
+  lines.push('');
+  lines.push('**Structure:**');
+  lines.push('```');
+  lines.push('Board/');
+  lines.push('├── my-standalone-task.md     # Standalone task');
+  lines.push('└── Epic-1/                   # Epic folder');
+  lines.push('    ├── epic.md               # Epic definition');
+  lines.push('    ├── us-001-login.md       # Child task 1');
+  lines.push('    └── us-002-signup.md      # Child task 2');
+  lines.push('```');
+  lines.push('');
+  lines.push('**Required frontmatter fields:**');
+  lines.push('- `name` - Task name');
+  lines.push('- `status` - One of: `"Not Started"`, `"In Progress"`, `"Done"` (exact match with spaces and capitals)');
+  lines.push('- `type` - Task type (e.g., `UserStory`, `Bug`, `Chore`, `Epic`)');
+  lines.push('- `priority` - Priority level (e.g., `P0`, `P1`, `P2`, `P3`)');
+  lines.push('');
+  lines.push('**When you update a task, NEVER modify the `status` field yourself.** The orchestrator handles status updates.');
+  lines.push('');
   lines.push('## Available Environment Variables');
   lines.push('');
   lines.push('The following environment variables are set for every task execution:');

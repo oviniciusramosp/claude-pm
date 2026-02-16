@@ -47,6 +47,29 @@ Acceptance criteria and instructions for Claude go here.
 - **Changing task status** = updating the `status` field in frontmatter (e.g., `"Not Started"` → `"In Progress"` → `"Done"`).
 - **Task ID** = filename without extension (e.g. `my-standalone-task`, `Epic-1/us-001-login`).
 
+### Board Structure Validation
+
+The system automatically validates the Board structure on startup and in the Panel. Validation checks:
+
+1. **Board directory exists** - The `Board/` folder must exist at the configured path
+2. **All tasks have `status` field** - Every `.md` file must have a `status` field in frontmatter
+3. **Valid status values** - Status must be one of: `"Not Started"`, `"In Progress"`, `"Done"` (exact match with spaces and capitalization)
+4. **Epic structure** - Epic folders must contain `epic.md` file
+5. **No nested directories** - Only `.md` files allowed inside Epic folders (no subdirectories)
+6. **No legacy status folders** - Old structure with `Not Started/`, `In Progress/`, `Done/` folders should not contain files
+
+**Common validation errors:**
+- ❌ `Missing 'status' field` - Add `status: Not Started` to frontmatter
+- ❌ `Invalid status value: "not started"` - Use exact values with capital letters and spaces
+- ❌ `Board directory not found` - Create the `Board/` folder in your project directory
+- ❌ `Unexpected directory found` - Remove subdirectories or convert to Epic with `epic.md`
+
+**Validation in Panel:**
+- Opens the Setup tab to see real-time validation status
+- Errors are shown with suggestions for fixes
+- Click "Show Details" to see all issues
+- Click "Refresh Validation" after fixing issues
+
 ## Task and Epic Format Guide
 
 This section defines the complete format for creating tasks and epics that the automation system can understand.

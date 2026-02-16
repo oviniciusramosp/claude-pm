@@ -114,7 +114,7 @@ function AcDonut({ done, total }: { done: number; total: number }) {
   );
 }
 
-function BoardCard({ task, epic, allTasks, onClick }: { task: BoardTask; epic: boolean; allTasks: BoardTask[]; onClick: () => void }) {
+function BoardCard({ task, epic, allTasks, onClick, onFix }: { task: BoardTask; epic: boolean; allTasks: BoardTask[]; onClick: () => void; onFix?: (taskId: string) => void }) {
   const priorityColor = BOARD_PRIORITY_COLORS[task.priority] as any;
   const typeColor = BOARD_TYPE_COLORS[task.type] as any;
   const taskCode = extractTaskCode(task);
@@ -130,12 +130,27 @@ function BoardCard({ task, epic, allTasks, onClick }: { task: BoardTask; epic: b
       onClick={onClick}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
       className={cx(
-        'cursor-pointer rounded-lg border bg-primary p-3 shadow-xs transition hover:shadow-md hover:border-brand-solid',
+        'group relative cursor-pointer rounded-lg border bg-primary p-3 shadow-xs transition hover:shadow-md hover:border-brand-solid',
         epic ? 'border-l-4 border-l-utility-purple-500 border-secondary'
           : parentEpicInProgress ? 'border-utility-brand-200'
           : 'border-secondary'
       )}
     >
+      {/* Fix button (hover only) */}
+      {onFix && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onFix(task.id);
+          }}
+          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity rounded-md p-1.5 bg-utility-brand-50 hover:bg-utility-brand-100 border border-utility-brand-200 shadow-sm z-10"
+          title="Fix ACs with Claude"
+          aria-label="Fix acceptance criteria"
+        >
+          <Tool01 className="size-3.5 text-utility-brand-600" />
+        </button>
+      )}
       {/* Row 1: Epic reference + donut chart */}
       {(parentEpic || task.acTotal > 0) && (
         <div className="flex items-center gap-2 mb-2">
@@ -353,6 +368,25 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
     }
   }, [apiBaseUrl, showToast, fetchBoard]);
 
+  const handleFixTask = useCallback(async (taskId: string) => {
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/board/fix-task`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        showToast(payload?.message || 'Fix task failed', 'danger');
+        return;
+      }
+      showToast(`Task fix initiated: ${taskId}`, 'success');
+      await fetchBoard(true);
+    } catch (err: any) {
+      showToast(err.message || 'Fix task failed', 'danger');
+    }
+  }, [apiBaseUrl, showToast, fetchBoard]);
+
   // Initial load + polling
   useEffect(() => {
     mountedRef.current = true;
@@ -483,7 +517,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
 
                       if (!isCollapsible) {
                         return col.tasks.map((task) => (
-                          <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} />
+                          <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} />
                         ));
                       }
 
@@ -518,7 +552,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                             const expanded = expandedEpics.has(task.id);
                             return (
                               <div key={task.id} className="flex flex-col gap-2">
-                                <BoardCard task={task} epic allTasks={tasks} onClick={() => setSelectedTask(task)} />
+                                <BoardCard task={task} epic allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} />
                                 <button
                                   type="button"
                                   onClick={() => toggleEpic(task.id)}
@@ -530,14 +564,14 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                 {expanded && (
                                   <div className="ml-2 border-l-2 border-utility-purple-200 pl-2 flex flex-col gap-2">
                                     {children.map((child) => (
-                                      <BoardCard key={child.id} task={child} epic={false} allTasks={tasks} onClick={() => setSelectedTask(child)} />
+                                      <BoardCard key={child.id} task={child} epic={false} allTasks={tasks} onClick={() => setSelectedTask(child)} onFix={handleFixTask} />
                                     ))}
                                   </div>
                                 )}
                               </div>
                             );
                           }
-                          return <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} />;
+                          return <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} />;
                         });
                     })()
                   )}

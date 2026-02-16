@@ -22,6 +22,7 @@ import {
   TOGGLE_BY_KEY
 } from '../constants';
 import { Icon } from './icon';
+import { BoardValidationAlert } from './board-validation-alert';
 import type { ValidationResult } from '../types';
 
 export function SetupTab({
@@ -36,7 +37,8 @@ export function SetupTab({
   hasBlockingErrors,
   allFieldsValidated,
   changedKeys,
-  onSaveClick
+  onSaveClick,
+  apiBaseUrl
 }: {
   config: Record<string, any>;
   setConfig: React.Dispatch<React.SetStateAction<Record<string, any>>>;
@@ -50,6 +52,7 @@ export function SetupTab({
   allFieldsValidated: boolean;
   changedKeys: string[];
   onSaveClick: () => void;
+  apiBaseUrl: string;
 }) {
   let stepNumber = 0;
 
@@ -63,6 +66,11 @@ export function SetupTab({
         <p className="m-0 text-sm text-tertiary">
           Follow the steps below to configure your automation. These values are persisted in your local <code>.env</code> file.
         </p>
+      </div>
+
+      {/* Board Validation Alert */}
+      <div className="mt-4">
+        <BoardValidationAlert apiBaseUrl={apiBaseUrl} />
       </div>
 
       <div className="mt-6 space-y-6">

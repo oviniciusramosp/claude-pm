@@ -7,6 +7,7 @@ import { Orchestrator } from './orchestrator.js';
 import { RunStore } from './runStore.js';
 import { UsageStore } from './usageStore.js';
 import { syncClaudeMd } from './claudeMdManager.js';
+import { BoardValidator } from './boardValidator.js';
 const app = express();
 
 app.use(express.json({ limit: '2mb' }));
@@ -15,6 +16,21 @@ const boardClient = new LocalBoardClient(config);
 await boardClient.initialize();
 logger.info(`Board directory: ${config.board.dir}`);
 logger.info(`Claude working directory: ${config.claude.workdir}`);
+
+// Validate Board structure on startup
+const boardValidator = new BoardValidator(config);
+try {
+  const validationResult = await boardValidator.validate();
+  if (!validationResult.valid) {
+    logger.warn('Board structure validation failed:');
+    logger.warn(boardValidator.formatSummary(validationResult));
+  } else {
+    logger.success('Board structure validated successfully');
+  }
+} catch (error) {
+  logger.warn(`Board validation failed: ${error.message}`);
+}
+
 const runStore = new RunStore(config.state.runStorePath);
 const usageStore = new UsageStore(
   path.resolve(process.cwd(), process.env.USAGE_STORE_PATH || '.data/usage.json')
@@ -199,6 +215,24 @@ app.get('/usage/weekly', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get('/validate-board', async (req, res) => {
+  try {
+    const validator = new BoardValidator(config);
+    const result = await validator.validate();
+
+    res.json({
+      ok: result.valid,
+      ...result
+    });
+  } catch (error) {
+    logger.error(`Board validation error: ${error.message}`);
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
   }
 });
 
