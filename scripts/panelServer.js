@@ -1872,10 +1872,17 @@ async function startServer() {
   loadLogsFromDisk();
   await ensurePanelBuild();
 
+  // Log Board directory on startup for debugging
+  const env = await readEnvPairs();
+  const boardDir = resolveBoardDir(env);
+  const claudeWorkdir = path.resolve(cwd, env.CLAUDE_WORKDIR || '.');
+
   const server = app.listen(panelPort, () => {
     const url = `http://localhost:${panelPort}`;
     console.log(`✅ Joy UI panel started: ${url}`);
     console.log('ℹ️ Use this panel to configure .env, start app, and watch live logs.');
+    console.log(`📁 Board directory: ${boardDir}`);
+    console.log(`🔧 Claude working directory: ${claudeWorkdir}`);
     if (panelAutoOpen) {
       try {
         openBrowser(url);

@@ -13,6 +13,8 @@ app.use(express.json({ limit: '2mb' }));
 
 const boardClient = new LocalBoardClient(config);
 await boardClient.initialize();
+logger.info(`Board directory: ${config.board.dir}`);
+logger.info(`Claude working directory: ${config.claude.workdir}`);
 const runStore = new RunStore(config.state.runStorePath);
 const usageStore = new UsageStore(
   path.resolve(process.cwd(), process.env.USAGE_STORE_PATH || '.data/usage.json')
