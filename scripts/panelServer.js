@@ -326,10 +326,14 @@ function buildProcessStopLog(source, code, signal, debugInfo = {}) {
   const expectedSignals = new Set(['SIGTERM', 'SIGINT']);
   const isExpectedStop = code === 0 || expectedSignals.has(normalizedSignal);
 
+  // Build reason label from caller context
+  const reasonLabel = debugInfo.caller ? ` (triggered by: ${debugInfo.caller})` : '';
+
   if (isExpectedStop) {
     return {
       level: 'info',
-      message: `${name} stopped.`
+      message: `${name} stopped${reasonLabel}.`,
+      caller: debugInfo.caller
     };
   }
 
@@ -338,11 +342,12 @@ function buildProcessStopLog(source, code, signal, debugInfo = {}) {
 
   return {
     level: 'error',
-    message: `${name} stopped unexpectedly (exit code: ${exitCode}${signalLabel}).`,
+    message: `${name} stopped unexpectedly (exit code: ${exitCode}${signalLabel})${reasonLabel}.`,
     exitCode,
     signal,
     stderr: debugInfo.stderr,
-    stdout: debugInfo.stdout
+    stdout: debugInfo.stdout,
+    caller: debugInfo.caller
   };
 }
 
@@ -501,7 +506,8 @@ function startManagedProcess(target, command, source, envOverrides = {}) {
 
     const debugInfo = {
       stdout: outputBuffers.stdout.join('\n').trim(),
-      stderr: outputBuffers.stderr.join('\n').trim()
+      stderr: outputBuffers.stderr.join('\n').trim(),
+      caller: target.stopCaller || 'process-exit'
     };
 
     const stopLog = buildProcessStopLog(source, code, signal, debugInfo);
@@ -509,12 +515,14 @@ function startManagedProcess(target, command, source, envOverrides = {}) {
       exitCode: stopLog.exitCode,
       signal: stopLog.signal,
       stderr: stopLog.stderr,
-      stdout: stopLog.stdout
+      stdout: stopLog.stdout,
+      caller: stopLog.caller
     });
     target.child = null;
     target.status = 'stopped';
     target.startedAt = null;
     target.pid = null;
+    target.stopCaller = null; // Clear caller after use
   });
 
   child.on('error', (error) => {
@@ -526,12 +534,16 @@ function startManagedProcess(target, command, source, envOverrides = {}) {
   return true;
 }
 
-function stopManagedProcess(target, source) {
+function stopManagedProcess(target, source, caller = 'unknown') {
   if (!target.child) {
     return false;
   }
 
-  pushLog('info', source, 'Stopping process...');
+  pushLog('info', source, `Stopping process (triggered by: ${caller})...`);
+
+  // Store caller in target so it's available in the 'close' event handler
+  target.stopCaller = caller;
+
   target.child.kill('SIGTERM');
   return true;
 }
@@ -586,7 +598,7 @@ async function restartManagedProcess(target, source, command, envOverrides = {})
 
   const child = target.child;
   const closed = waitForProcessClose(child);
-  stopManagedProcess(target, source);
+  stopManagedProcess(target, source, 'restart-operation');
   await closed;
 
   const started = startManagedProcess(target, command, source, envOverrides);
@@ -1263,7 +1275,7 @@ app.post('/api/process/api/start', (req, res) => {
 });
 
 app.post('/api/process/api/stop', (req, res) => {
-  const stopped = stopManagedProcess(state.api, 'api');
+  const stopped = stopManagedProcess(state.api, 'api', 'panel-stop-button');
   if (!stopped) {
     res.status(409).json({ ok: false, message: 'API process is not running' });
     return;
@@ -2568,7 +2580,7 @@ async function startServer() {
     // Stop managed API process if running
     if (state.api.child) {
       console.log('   Stopping API process...');
-      stopManagedProcess(state.api, 'api');
+      stopManagedProcess(state.api, 'api', `panel-graceful-shutdown-${signal}`);
     }
 
     // Close server

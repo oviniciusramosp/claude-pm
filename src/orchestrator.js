@@ -990,6 +990,7 @@ export class Orchestrator {
     const completedEpic = postCloseTasks.find(t => t.id === epic.id);
     if (completedEpic && normalize(completedEpic.status) === normalize(this.config.board.statuses.done)) {
       this.logger.success(`Epic "${taskLabel(epic)}" completed successfully. Stopping automation.`);
+      this.logger.info(`Auto-shutdown triggered by: epic-completion (epic: "${taskLabel(epic)}")`);
       setTimeout(() => process.exit(0), 1500);
     }
   }
