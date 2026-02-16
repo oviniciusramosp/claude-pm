@@ -2445,6 +2445,32 @@ async function startServer() {
     console.error(`❌ Failed to start panel server: ${error.message}`);
     process.exit(1);
   });
+
+  // Graceful shutdown handlers
+  function gracefulShutdown(signal) {
+    console.log(`\n🛑 Received ${signal}, shutting down gracefully...`);
+
+    // Stop managed API process if running
+    if (state.api.child) {
+      console.log('   Stopping API process...');
+      stopManagedProcess(state.api, 'api');
+    }
+
+    // Close server
+    server.close(() => {
+      console.log('✅ Panel server closed.');
+      process.exit(0);
+    });
+
+    // Force exit after 5s if graceful shutdown fails
+    setTimeout(() => {
+      console.error('⚠️ Forced shutdown after timeout.');
+      process.exit(1);
+    }, 5000);
+  }
+
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 }
 
 startServer().catch((error) => {
