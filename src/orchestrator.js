@@ -118,6 +118,24 @@ function buildContractJson(execution) {
   });
 }
 
+async function checkActiveFixes(port = 4100) {
+  try {
+    const response = await fetch(`http://localhost:${port}/api/board/has-active-fixes`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    if (!response.ok) {
+      return false; // Fail open — proceed if panel is not reachable
+    }
+
+    const data = await response.json();
+    return data.hasActiveFixes === true;
+  } catch {
+    return false; // Fail open — proceed if panel is not reachable
+  }
+}
+
 export class Orchestrator {
   constructor({ config, logger, boardClient, runStore, usageStore }) {
     this.config = config;
@@ -275,6 +293,15 @@ export class Orchestrator {
 
   async reconcile(reason, maxTasks) {
     const limit = maxTasks || this.config.queue.maxTasksPerRun;
+
+    // Check if any AC fix operation is running — block reconciliation until it completes
+    const panelPort = Number(process.env.PANEL_PORT || 4100);
+    const hasActiveFixes = await checkActiveFixes(panelPort);
+    if (hasActiveFixes) {
+      this.logger.warn('AC fix operation in progress. Skipping reconciliation to prevent conflicts.');
+      return;
+    }
+
     this.logger.info(`Starting board reconciliation (reason: ${reason})`);
 
     // Check for incomplete epics first — they must be finished before standalone tasks.
@@ -600,6 +627,14 @@ export class Orchestrator {
   }
 
   async reconcileEpic(reason) {
+    // Check if any AC fix operation is running — block reconciliation until it completes
+    const panelPort = Number(process.env.PANEL_PORT || 4100);
+    const hasActiveFixes = await checkActiveFixes(panelPort);
+    if (hasActiveFixes) {
+      this.logger.warn('AC fix operation in progress. Skipping epic reconciliation to prevent conflicts.');
+      return;
+    }
+
     this.logger.info(`Starting epic reconciliation (reason: ${reason})`);
 
     const tasks = await this.boardClient.listTasks();

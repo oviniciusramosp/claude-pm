@@ -1484,6 +1484,18 @@ app.get('/api/board/fix-status', (_req, res) => {
   res.json({ ok: true, fixStatus });
 });
 
+app.get('/api/board/has-active-fixes', (_req, res) => {
+  // Check if any AC fix operation is currently running
+  let hasActive = false;
+  for (const [, status] of state.fixTasks.entries()) {
+    if (status.status === 'running') {
+      hasActive = true;
+      break;
+    }
+  }
+  res.json({ hasActiveFixes: hasActive });
+});
+
 app.get('/api/board/task-markdown', async (req, res) => {
   const taskId = String(req.query.taskId || '').trim();
   if (!taskId) {
