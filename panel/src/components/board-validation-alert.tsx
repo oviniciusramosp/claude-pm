@@ -54,13 +54,46 @@ export function BoardValidationAlert({
     try {
       const response = await fetch(`${apiBaseUrl}/validate-board`);
       if (!response.ok) {
-        throw new Error(`Validation failed: ${response.statusText}`);
+        // Try to parse JSON error response
+        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          if (errorData.error) {
+            errorMessage = errorData.error;
+          }
+        } catch {
+          // If JSON parsing fails, use the status text
+        }
+
+        // Provide more context for common errors
+        if (response.status === 404) {
+          throw new Error(
+            `API endpoint not found. The automation API may not be running or is using a different version. Try restarting the API.`
+          );
+        } else if (response.status === 500) {
+          throw new Error(
+            `Server error: ${errorMessage}. Check the API logs for more details.`
+          );
+        } else if (response.status >= 500) {
+          throw new Error(
+            `Server error (${response.status}). The automation API may be experiencing issues. Check the API logs.`
+          );
+        } else {
+          throw new Error(errorMessage);
+        }
       }
 
       const data = await response.json();
       setValidation(data);
     } catch (err: any) {
-      setError(err.message || 'Failed to validate board');
+      // Network errors or fetch failures
+      if (err.message.includes('Failed to fetch') || err.name === 'TypeError') {
+        setError(
+          'Cannot connect to the automation API. Make sure the API is running and accessible.'
+        );
+      } else {
+        setError(err.message || 'Failed to validate board structure');
+      }
       setValidation(null);
     } finally {
       setLoading(false);
@@ -81,13 +114,29 @@ export function BoardValidationAlert({
   if (error) {
     return (
       <div className="rounded-lg border border-error-200 bg-error-50 p-4 dark:border-error-500/30 dark:bg-error-950/30">
-        <div className="flex items-start gap-3">
-          <Icon icon={XCircle} className="size-5 shrink-0 text-error-600 dark:text-error-400" />
-          <div className="flex-1 space-y-1">
-            <p className="m-0 text-sm font-medium text-error-900 dark:text-error-100">
-              Validation Error
-            </p>
-            <p className="m-0 text-sm text-error-700 dark:text-error-300">{error}</p>
+        <div className="space-y-3">
+          <div className="flex items-start gap-3">
+            <Icon icon={XCircle} className="size-5 shrink-0 text-error-600 dark:text-error-400" />
+            <div className="flex-1 space-y-1">
+              <p className="m-0 text-sm font-medium text-error-900 dark:text-error-100">
+                Board Validation Unavailable
+              </p>
+              <p className="m-0 text-sm text-error-700 dark:text-error-300">{error}</p>
+            </div>
+          </div>
+          <div className="flex gap-2 border-t border-error-200/50 pt-3 dark:border-error-500/20">
+            <button
+              onClick={fetchValidation}
+              className="rounded-md border border-error-300 bg-white px-3 py-1.5 text-xs font-medium text-error-900 hover:bg-error-50 dark:border-error-600 dark:bg-error-950 dark:text-error-100 dark:hover:bg-error-900/50"
+            >
+              Retry
+            </button>
+            <a
+              href="#feed"
+              className="rounded-md border border-error-300 bg-white px-3 py-1.5 text-xs font-medium text-error-900 hover:bg-error-50 dark:border-error-600 dark:bg-error-950 dark:text-error-100 dark:hover:bg-error-900/50"
+            >
+              View API Logs
+            </a>
           </div>
         </div>
       </div>
