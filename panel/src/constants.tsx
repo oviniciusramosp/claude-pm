@@ -23,6 +23,13 @@ import {
 } from '@untitledui/icons';
 import type { TextFieldConfig, ToggleConfig, SetupSection, LogLevelMeta, LogSourceMeta } from './types';
 
+export const CLAUDE_MODELS = [
+  { value: '', label: 'Automatic (use task model)', description: 'Uses the model specified in each task' },
+  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6', description: 'Most capable, best for complex tasks' },
+  { value: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5', description: 'Balanced performance and speed' },
+  { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', description: 'Fast and cost-effective' }
+] as const;
+
 export const TEXT_FIELD_CONFIG: TextFieldConfig[] = [
   {
     key: 'CLAUDE_CODE_OAUTH_TOKEN',
@@ -278,10 +285,3 @@ export const FEED_TIMESTAMP_FORMATTER = new Intl.DateTimeFormat('pt-BR', {
   second: '2-digit',
   hour12: false
 });
-
-export const CLAUDE_MODELS = [
-  { value: '', label: 'Automatic (use task model)', description: 'Uses the model specified in each task' },
-  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6', description: 'Most capable, best for complex tasks' },
-  { value: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5', description: 'Balanced performance and speed' },
-  { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', description: 'Fast and cost-effective' }
-] as const;
