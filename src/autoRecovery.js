@@ -1,7 +1,7 @@
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { buildRecoveryPrompt } from './recoveryPromptBuilder.js';
-import { runClaude } from './claudeRunner.js';
+import { runClaudeTask } from './claudeRunner.js';
 
 /**
  * Auto-recovery system for failed tasks.
@@ -123,16 +123,31 @@ export class AutoRecovery {
 
     logger.info(`RECOVERY - Running recovery analysis with model: ${recoveryModel}`);
 
-    // Execute Claude with recovery prompt
-    const result = await runClaude(
-      prompt,
-      {
-        workdir: taskContext.workdir,
+    // Create a minimal task object for runClaudeTask
+    const recoveryTask = {
+      id: taskId,
+      name: `Recovery for ${taskId}`,
+      type: 'Recovery',
+      model: recoveryModel,
+    };
+
+    // Create config object for runClaudeTask
+    const recoveryConfig = {
+      claude: {
+        oauthToken: config.claude.oauthToken,
+        workdir: taskContext.workdir || config.claude.workdir,
         fullAccess: config.claude.fullAccess,
         streamOutput: false, // No streaming for recovery (cleaner logs)
         timeoutMs: config.autoRecovery.timeoutMs,
-        model: recoveryModel,
       }
+    };
+
+    // Execute Claude with recovery prompt
+    const result = await runClaudeTask(
+      recoveryTask,
+      prompt,
+      recoveryConfig,
+      { overrideModel: recoveryModel }
     );
 
     // Parse recovery result
