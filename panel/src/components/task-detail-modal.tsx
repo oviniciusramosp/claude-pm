@@ -133,7 +133,10 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl }: TaskDetailM
               )}
 
               {!loading && !error && !markdown && (
-                <p className="text-center text-sm text-quaternary">No content available.</p>
+                <div className="rounded-lg border border-dashed border-secondary bg-secondary p-8 text-center">
+                  <p className="text-sm font-medium text-tertiary">No description yet</p>
+                  <p className="mt-1 text-xs text-quaternary">This task file only contains metadata. The description will be added when the task starts.</p>
+                </div>
               )}
 
               {!loading && !error && renderedHtml && (
