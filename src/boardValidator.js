@@ -30,6 +30,7 @@ export class BoardValidator {
         totalEpics: 0,
         tasksWithoutStatus: 0,
         tasksWithInvalidStatus: 0,
+        tasksWithoutDescription: 0,
         invalidFiles: []
       }
     };
@@ -95,6 +96,9 @@ export class BoardValidator {
         if (validation.invalidStatus) {
           result.info.tasksWithInvalidStatus++;
         }
+        if (validation.missingDescription) {
+          result.info.tasksWithoutDescription++;
+        }
       } else if (entry.isDirectory()) {
         // Validate Epic
         const epicValidation = await this._validateEpic(entry.name);
@@ -112,6 +116,7 @@ export class BoardValidator {
           result.info.totalTasks += epicValidation.childCount;
           result.info.tasksWithoutStatus += epicValidation.childrenWithoutStatus;
           result.info.tasksWithInvalidStatus += epicValidation.childrenWithInvalidStatus;
+          result.info.tasksWithoutDescription += epicValidation.childrenWithoutDescription;
         } else {
           // Directory that is not an Epic
           result.warnings.push({
@@ -170,7 +175,8 @@ export class BoardValidator {
       warnings: [],
       childCount: 0,
       childrenWithoutStatus: 0,
-      childrenWithInvalidStatus: 0
+      childrenWithInvalidStatus: 0,
+      childrenWithoutDescription: 0
     };
 
     // Check if epic.md exists
@@ -215,6 +221,9 @@ export class BoardValidator {
         if (childValidation.invalidStatus) {
           result.childrenWithInvalidStatus++;
         }
+        if (childValidation.missingDescription) {
+          result.childrenWithoutDescription++;
+        }
       } else if (child.isDirectory()) {
         result.warnings.push({
           type: 'nested_directory',
@@ -234,7 +243,8 @@ export class BoardValidator {
       errors: [],
       warnings: [],
       missingStatus: false,
-      invalidStatus: false
+      invalidStatus: false,
+      missingDescription: false
     };
 
     let content;
@@ -254,9 +264,11 @@ export class BoardValidator {
 
     // Parse frontmatter
     let frontmatter;
+    let body;
     try {
       const parsed = parseFrontmatter(content);
       frontmatter = parsed.frontmatter;
+      body = parsed.body;
     } catch (error) {
       result.valid = false;
       result.errors.push({
@@ -268,6 +280,20 @@ export class BoardValidator {
         suggestion: 'Ensure frontmatter is valid YAML between --- delimiters'
       });
       return result;
+    }
+
+    // Check if body content exists after frontmatter
+    const trimmedBody = body.trim();
+    if (!trimmedBody || trimmedBody.length === 0) {
+      result.valid = false;
+      result.missingDescription = true;
+      result.errors.push({
+        type: 'empty_body',
+        message: `No description content after frontmatter: ${path.basename(filePath)}`,
+        path: filePath,
+        severity: 'high',
+        suggestion: 'Add task description, acceptance criteria, and instructions after the frontmatter'
+      });
     }
 
     // Check required fields
