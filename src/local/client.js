@@ -41,7 +41,8 @@ export class LocalBoardClient {
         const epicPath = path.join(this.boardDir, entry.name);
         const epicFile = path.join(epicPath, 'epic.md');
 
-        const epicTask = await this._parseTaskFile(epicFile, epicPath);
+        // For epic.md, parentId is null (it's a top-level task)
+        const epicTask = await this._parseTaskFile(epicFile, null);
         if (!epicTask) {
           continue;
         }
@@ -221,7 +222,8 @@ export class LocalBoardClient {
     if (isEpicFile) {
       taskId = parentFolder;
     } else if (parentId) {
-      taskId = `${parentFolder}/${fileName}`;
+      // parentId is already the epic ID (just the folder name), so use it directly
+      taskId = `${parentId}/${fileName}`;
     } else {
       taskId = fileName;
     }

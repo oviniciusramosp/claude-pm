@@ -37,7 +37,8 @@ const state = {
     status: 'stopped',
     startedAt: null,
     pid: null
-  }
+  },
+  fixTasks: new Map() // taskId -> { status: 'running'|'success'|'failed', startedAt: ISO string, error?: string }
 };
 
 const claudeChatState = {
@@ -1392,6 +1393,15 @@ app.get('/api/board', async (_req, res) => {
   }
 });
 
+app.get('/api/board/fix-status', (_req, res) => {
+  // Return current fix status for all tasks being fixed
+  const fixStatus = {};
+  for (const [taskId, status] of state.fixTasks.entries()) {
+    fixStatus[taskId] = status;
+  }
+  res.json({ ok: true, fixStatus });
+});
+
 app.get('/api/board/task-markdown', async (req, res) => {
   const taskId = String(req.query.taskId || '').trim();
   if (!taskId) {
@@ -1580,6 +1590,21 @@ app.post('/api/board/fix-task', async (req, res) => {
     return;
   }
 
+  // Check if this task is already being fixed
+  if (state.fixTasks.has(taskId)) {
+    const existingStatus = state.fixTasks.get(taskId);
+    if (existingStatus.status === 'running') {
+      res.status(409).json({ ok: false, message: `Task ${taskId} is already being fixed` });
+      return;
+    }
+  }
+
+  // Mark task as being fixed
+  state.fixTasks.set(taskId, {
+    status: 'running',
+    startedAt: new Date().toISOString()
+  });
+
   pushLog('info', LOG_SOURCE.panel, `Task fix requested for: ${taskId}`);
 
   const env = await readEnvPairs();
@@ -1744,6 +1769,14 @@ app.post('/api/board/fix-task', async (req, res) => {
         }
 
         pushLog('success', LOG_SOURCE.panel, `Epic fix completed: ${taskId} (${childTasks.length} children processed)`);
+
+        // Mark task as successfully fixed
+        state.fixTasks.set(taskId, {
+          status: 'success',
+          startedAt: state.fixTasks.get(taskId)?.startedAt,
+          completedAt: new Date().toISOString()
+        });
+
         res.json({
           ok: true,
           taskId,
@@ -1793,6 +1826,14 @@ app.post('/api/board/fix-task', async (req, res) => {
         }
 
         pushLog('success', LOG_SOURCE.panel, `Task fix completed successfully: ${taskId}`);
+
+        // Mark task as successfully fixed
+        state.fixTasks.set(taskId, {
+          status: 'success',
+          startedAt: state.fixTasks.get(taskId)?.startedAt,
+          completedAt: new Date().toISOString()
+        });
+
         res.json({
           ok: true,
           taskId,
@@ -1803,12 +1844,31 @@ app.post('/api/board/fix-task', async (req, res) => {
         });
       }
     } else {
+      const errorMsg = `Claude execution failed (exit code ${exitCode})`;
       pushLog('error', LOG_SOURCE.panel, `Task fix failed for ${taskId} (exit code ${exitCode}): ${stderr.slice(0, 200)}`);
-      res.status(500).json({ ok: false, message: `Claude execution failed (exit code ${exitCode})`, stderr: stderr.slice(0, 500) });
+
+      // Mark task as failed
+      state.fixTasks.set(taskId, {
+        status: 'failed',
+        startedAt: state.fixTasks.get(taskId)?.startedAt,
+        completedAt: new Date().toISOString(),
+        error: errorMsg
+      });
+
+      res.status(500).json({ ok: false, message: errorMsg, stderr: stderr.slice(0, 500) });
     }
   } catch (error) {
     const msg = error.message || String(error);
     pushLog('error', LOG_SOURCE.panel, `Task fix error for ${taskId}: ${msg}`);
+
+    // Mark task as failed
+    state.fixTasks.set(taskId, {
+      status: 'failed',
+      startedAt: state.fixTasks.get(taskId)?.startedAt,
+      completedAt: new Date().toISOString(),
+      error: msg
+    });
+
     res.status(500).json({ ok: false, message: msg });
   }
 });

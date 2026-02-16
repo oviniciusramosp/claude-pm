@@ -115,7 +115,7 @@ function AcDonut({ done, total }: { done: number; total: number }) {
   );
 }
 
-function BoardCard({ task, epic, allTasks, onClick, onFix, isFixing, isAnyFixing }: { task: BoardTask; epic: boolean; allTasks: BoardTask[]; onClick: () => void; onFix?: (taskId: string) => void; isFixing?: boolean; isAnyFixing?: boolean }) {
+function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStatuses }: { task: BoardTask; epic: boolean; allTasks: BoardTask[]; onClick: () => void; onFix?: (taskId: string) => void; fixStatus?: { status: string; startedAt?: string; completedAt?: string; error?: string }; allFixStatuses?: Record<string, { status: string; startedAt?: string; completedAt?: string; error?: string }> }) {
   const priorityColor = BOARD_PRIORITY_COLORS[task.priority] as any;
   const typeColor = BOARD_TYPE_COLORS[task.type] as any;
   const taskCode = extractTaskCode(task);
@@ -123,6 +123,9 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, isFixing, isAnyFixing
   const parentEpic = task.parentId ? allTasks.find((t) => t.id === task.parentId) : null;
   const parentEpicCode = parentEpic ? extractTaskCode(parentEpic) : null;
   const parentEpicInProgress = parentEpic && parentEpic.status.toLowerCase() === 'in progress';
+
+  const isFixing = fixStatus?.status === 'running';
+  const isAnyFixing = allFixStatuses && Object.values(allFixStatuses).some((s) => s.status === 'running');
 
   return (
     <div
@@ -208,8 +211,8 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, isFixing, isAnyFixing
         </div>
       )}
 
-      {/* Row 4: Agents + Model */}
-      {(task.agents.length > 0 || modelLabel) && (
+      {/* Row 4: Agents + Model (only for non-Epic tasks) */}
+      {!epic && (task.agents.length > 0 || modelLabel) && (
         <div className="mt-2 flex items-center gap-3 text-xs text-tertiary">
           {task.agents.length > 0 && (
             <div className="flex items-center gap-1 min-w-0">
@@ -248,9 +251,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [fixing, setFixing] = useState(false);
-  const [fixingTaskId, setFixingTaskId] = useState<string | null>(null);
-  const [selectedTask, setSelectedTask] = useState(null as BoardTask | null);
-  const [expandedEpics, setExpandedEpics] = useState(new Set<string>());
+  const [fixStatus, setFixStatus] = useState<Record<string, { status: string; startedAt?: string; completedAt?: string; error?: string }>>({});
+  const [selectedTask, setSelectedTask] = useState<BoardTask | null>(null);
+  const [expandedEpics, setExpandedEpics] = useState(() => new Set<string>());
   const mountedRef = useRef(true);
 
   const toggleEpic = useCallback((epicId: string) => {
@@ -261,6 +264,29 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
       return next;
     });
   }, []);
+
+  const fetchFixStatus = useCallback(
+    async () => {
+      try {
+        const url = `${apiBaseUrl}/api/board/fix-status`;
+        const response = await fetch(url, {
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (!mountedRef.current) return;
+
+        if (response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          if (payload.ok && payload.fixStatus) {
+            setFixStatus(payload.fixStatus);
+          }
+        }
+      } catch {
+        // Silently fail - fix status is not critical
+      }
+    },
+    [apiBaseUrl]
+  );
 
   const fetchBoard = useCallback(
     async (silent = false) => {
@@ -318,6 +344,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
         setTasks(payload.tasks || []);
         setLastRefreshed(new Date());
         setBoardError(null);
+
+        // Fetch fix status after loading tasks
+        await fetchFixStatus();
       } catch (err: any) {
         if (!mountedRef.current) return;
         const isDev = window.location.port === '5174';
@@ -385,8 +414,13 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   }, [apiBaseUrl, showToast, fetchBoard]);
 
   const handleFixTask = useCallback(async (taskId: string) => {
-    setFixingTaskId(taskId);
+    // Update local state optimistically
+    setFixStatus((prev: Record<string, { status: string; startedAt?: string; completedAt?: string; error?: string }>) => ({
+      ...prev,
+      [taskId]: { status: 'running', startedAt: new Date().toISOString() }
+    }));
     setFixingTaskIdProp?.(taskId);
+
     try {
       const response = await fetch(`${apiBaseUrl}/api/board/fix-task`, {
         method: 'POST',
@@ -396,19 +430,22 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         showToast(payload?.message || 'Fix task failed', 'danger');
+        // Fetch updated status from server
+        await fetchFixStatus();
         return;
       }
       showToast(`Task fix completed: ${taskId}`, 'success');
       await fetchBoard(true);
     } catch (err: any) {
       showToast(err.message || 'Fix task failed', 'danger');
+      // Fetch updated status from server
+      await fetchFixStatus();
     } finally {
       if (mountedRef.current) {
-        setFixingTaskId(null);
         setFixingTaskIdProp?.(null);
       }
     }
-  }, [apiBaseUrl, showToast, fetchBoard, setFixingTaskIdProp]);
+  }, [apiBaseUrl, showToast, fetchBoard, fetchFixStatus, setFixingTaskIdProp]);
 
   // Initial load + polling
   useEffect(() => {
@@ -540,7 +577,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
 
                       if (!isCollapsible) {
                         return col.tasks.map((task) => (
-                          <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} isFixing={fixingTaskId === task.id} isAnyFixing={fixingTaskId !== null} />
+                          <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} fixStatus={fixStatus[task.id]} allFixStatuses={fixStatus} />
                         ));
                       }
 
@@ -575,7 +612,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                             const expanded = expandedEpics.has(task.id);
                             return (
                               <div key={task.id} className="flex flex-col gap-2">
-                                <BoardCard task={task} epic allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} isFixing={fixingTaskId === task.id} isAnyFixing={fixingTaskId !== null} />
+                                <BoardCard task={task} epic allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} fixStatus={fixStatus[task.id]} allFixStatuses={fixStatus} />
                                 <button
                                   type="button"
                                   onClick={() => toggleEpic(task.id)}
@@ -587,14 +624,14 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                 {expanded && (
                                   <div className="ml-2 border-l-2 border-utility-purple-200 pl-2 flex flex-col gap-2">
                                     {children.map((child) => (
-                                      <BoardCard key={child.id} task={child} epic={false} allTasks={tasks} onClick={() => setSelectedTask(child)} onFix={handleFixTask} isFixing={fixingTaskId === child.id} isAnyFixing={fixingTaskId !== null} />
+                                      <BoardCard key={child.id} task={child} epic={false} allTasks={tasks} onClick={() => setSelectedTask(child)} onFix={handleFixTask} fixStatus={fixStatus[child.id]} allFixStatuses={fixStatus} />
                                     ))}
                                   </div>
                                 )}
                               </div>
                             );
                           }
-                          return <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} isFixing={fixingTaskId === task.id} isAnyFixing={fixingTaskId !== null} />;
+                          return <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} fixStatus={fixStatus[task.id]} allFixStatuses={fixStatus} />;
                         });
                     })()
                   )}
