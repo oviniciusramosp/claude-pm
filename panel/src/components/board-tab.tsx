@@ -153,14 +153,13 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
         </div>
       )}
 
-      {/* Row 2: Title + Fix button + AC chart */}
+      {/* Row 2: Title + AC chart + Fix button */}
       <div className="flex items-start gap-2">
         <p className="text-sm font-medium text-primary flex-1 min-w-0">
           {taskCode && <span className="text-tertiary font-mono mr-2">{taskCode}</span>}
           {task.name}
         </p>
         <div className="flex items-center gap-2 shrink-0">
-          {task.acTotal > 0 && <AcDonut done={task.acDone} total={task.acTotal} />}
           {onFix && (
             <button
               type="button"
@@ -192,6 +191,7 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
               )}
             </button>
           )}
+          {task.acTotal > 0 && <AcDonut done={task.acDone} total={task.acTotal} />}
         </div>
       </div>
 
