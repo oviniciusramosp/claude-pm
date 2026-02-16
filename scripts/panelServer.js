@@ -1625,23 +1625,30 @@ app.post('/api/board/fix-task', async (req, res) => {
     pushLog('info', LOG_SOURCE.panel, `Running Claude to verify and fix ACs for: ${taskId}`);
 
     const claudeModel = task.model || env.CLAUDE_DEFAULT_MODEL || 'claude-sonnet-4-5-20250929';
-    const args = ['code', '-m', claudeModel, '-q', prompt];
 
-    if (env.CLAUDE_CODE_OAUTH_TOKEN) {
-      args.push('--token', env.CLAUDE_CODE_OAUTH_TOKEN);
+    // Build command string (claude CLI uses shell command parsing)
+    let command = '/opt/homebrew/bin/claude --print';
+
+    if (claudeModel) {
+      command += ` --model ${claudeModel}`;
     }
 
     if (env.CLAUDE_FULL_ACCESS === 'true') {
-      args.push('--dangerously-disable-sandbox');
+      command += ' --dangerously-skip-permissions';
     }
+
+    // Escape single quotes in prompt and wrap in single quotes
+    const escapedPrompt = prompt.replace(/'/g, "'\\''");
+    command += ` '${escapedPrompt}'`;
 
     const spawnOpts = {
       cwd: claudeWorkdir,
       env: { ...process.env, ...env },
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: true
     };
 
-    const child = spawn('claude', args, spawnOpts);
+    const child = spawn(command, [], spawnOpts);
     let stdout = '';
     let stderr = '';
 
