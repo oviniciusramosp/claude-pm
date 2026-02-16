@@ -157,6 +157,7 @@ export class Orchestrator {
     this.halted = false;
     this.paused = true; // Start paused by default
     this.shutdownTimer = null; // Track pending shutdown
+    this.explicitEpicMode = false; // Track if we're running an explicit "Run Epic" command
   }
 
   async _recordTaskUsage(task, execution) {
@@ -227,7 +228,9 @@ export class Orchestrator {
         this.pendingMode = 'normal';
 
         if (mode === 'epic') {
+          this.explicitEpicMode = true; // Mark that we're in explicit "Run Epic" mode
           await this.reconcileEpic(reason);
+          this.explicitEpicMode = false;
         } else if (mode === 'task') {
           await this.reconcile(reason, 1);
         } else {
@@ -692,7 +695,7 @@ export class Orchestrator {
       await this.boardClient.updateTaskStatus(epic.id, this.config.board.statuses.inProgress);
       this.logger.info(`Epic moved to In Progress: "${taskLabel(epic)}"`);
 
-      await this.stampEpicChildrenStatuses(epic, tasks);
+      await this.stampEpicChildrenStatuses(epic);
     } else {
       this.logger.info(`Resuming In Progress Epic: "${taskLabel(epic)}"`);
     }
@@ -999,24 +1002,28 @@ export class Orchestrator {
     const finalEpicReasons = Array.from(new Set(reason.split(', '))).join(', ');
     this.logger.success(`Epic reconciliation finished (epic: "${taskLabel(epic)}", processed: ${processed}, reason: ${finalEpicReasons})`);
 
-    // If the epic was completed and moved to Done, schedule shutdown — but allow it to be cancelled
+    // If the epic was completed and moved to Done, schedule shutdown — but ONLY if this was an explicit "Run Epic" command
     const postCloseTasks = await this.boardClient.listTasks();
     const completedEpic = postCloseTasks.find(t => t.id === epic.id);
     if (completedEpic && normalize(completedEpic.status) === normalize(this.config.board.statuses.done)) {
-      this.logger.success(`Epic "${taskLabel(epic)}" completed successfully. Scheduling auto-shutdown.`);
+      if (this.explicitEpicMode) {
+        this.logger.success(`Epic "${taskLabel(epic)}" completed successfully. Scheduling auto-shutdown.`);
 
-      // Schedule shutdown with a grace period to allow cancellation if new work arrives
-      this.shutdownTimer = setTimeout(() => {
-        // Final check: verify no work is running or pending
-        if (this.running || this.pending || this.currentTaskId) {
-          this.logger.info('Auto-shutdown cancelled (work in progress)');
-          this.shutdownTimer = null;
-          return;
-        }
+        // Schedule shutdown with a grace period to allow cancellation if new work arrives
+        this.shutdownTimer = setTimeout(() => {
+          // Final check: verify no work is running or pending
+          if (this.running || this.pending || this.currentTaskId) {
+            this.logger.info('Auto-shutdown cancelled (work in progress)');
+            this.shutdownTimer = null;
+            return;
+          }
 
-        this.logger.info(`Auto-shutdown triggered by: epic-completion (epic: "${taskLabel(epic)}")`);
-        process.exit(0);
-      }, 3000); // 3 seconds grace period (increased from 1.5s for better safety)
+          this.logger.info(`Auto-shutdown triggered by: epic-completion (epic: "${taskLabel(epic)}")`);
+          process.exit(0);
+        }, 3000); // 3 seconds grace period (increased from 1.5s for better safety)
+      } else {
+        this.logger.success(`Epic "${taskLabel(epic)}" completed successfully.`);
+      }
     }
   }
 
@@ -1113,7 +1120,7 @@ export class Orchestrator {
     }
   }
 
-  async stampEpicChildrenStatuses(epic, previousTasks) {
+  async stampEpicChildrenStatuses(epic) {
     const freshTasks = await this.boardClient.listTasks();
     const children = freshTasks.filter(
       (t) => t.parentId === epic.id && !isEpicTask(t, freshTasks, this.config)
