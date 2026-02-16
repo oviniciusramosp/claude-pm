@@ -52,7 +52,9 @@ export function SidebarNav({
   setSidebarOpen: (open: boolean) => void;
 }) {
   const [runMenuOpen, setRunMenuOpen] = useState(false);
+  const [workMenuOpen, setWorkMenuOpen] = useState(false);
   const runMenuRef = useRef(null);
+  const workMenuRef = useRef(null);
 
   useEffect(() => {
     if (!runMenuOpen) return;
@@ -66,6 +68,19 @@ export function SidebarNav({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [runMenuOpen]);
+
+  useEffect(() => {
+    if (!workMenuOpen) return;
+
+    function handleClickOutside(e: MouseEvent) {
+      if (workMenuRef.current && !workMenuRef.current.contains(e.target as Node)) {
+        setWorkMenuOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [workMenuOpen]);
 
   return (
     <aside
@@ -204,22 +219,70 @@ export function SidebarNav({
         )}
 
         {apiRunning && (
-          <Button
-            size="sm"
-            color={isPaused ? "primary" : "secondary"}
-            iconLeading={isPaused ? PlayCircle : PauseCircle}
-            className="w-full justify-center"
-            isLoading={Boolean(busy.pause || busy.unpause)}
-            onPress={() => {
-              if (isPaused) {
-                runAction('unpause', '/api/automation/unpause', 'Working resumed');
-              } else {
-                runAction('pause', '/api/automation/pause', 'Working paused');
-              }
-            }}
-          >
-            {isPaused ? 'Start Working' : 'Stop Working'}
-          </Button>
+          isPaused ? (
+            <div className="relative" ref={workMenuRef}>
+              <div className="flex items-stretch">
+                <Button
+                  size="sm"
+                  color="primary"
+                  className="flex-1 justify-center rounded-r-none"
+                  iconLeading={PlayCircle}
+                  isLoading={Boolean(busy.unpause)}
+                  onPress={() => runAction('unpause', '/api/automation/unpause', 'Working resumed')}
+                >
+                  Start Working
+                </Button>
+                <Button
+                  size="sm"
+                  color="primary"
+                  className="!h-auto rounded-l-none border-l border-l-white/20 px-2"
+                  onPress={() => setWorkMenuOpen((prev) => !prev)}
+                  aria-label="Run options"
+                  aria-expanded={workMenuOpen}
+                >
+                  <Icon icon={ChevronDown} className={cx('size-4 transition-transform', workMenuOpen && 'rotate-180')} />
+                </Button>
+              </div>
+
+              {workMenuOpen && (
+                <div className="absolute left-0 right-0 z-50 mt-1 overflow-hidden rounded-sm border border-secondary bg-primary shadow-lg">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm font-medium text-secondary transition hover:bg-primary_hover"
+                    onClick={() => {
+                      setWorkMenuOpen(false);
+                      runAction('runTask', '/api/automation/run-task', 'Single-task run requested');
+                    }}
+                  >
+                    <Icon icon={PlayCircle} className="size-4 text-fg-quaternary" />
+                    <span>Run Task</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm font-medium text-secondary transition hover:bg-primary_hover"
+                    onClick={() => {
+                      setWorkMenuOpen(false);
+                      runAction('runEpic', '/api/automation/run-epic', 'Epic run requested');
+                    }}
+                  >
+                    <Icon icon={LayersThree01} className="size-4 text-fg-quaternary" />
+                    <span>Run Epic</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              color="secondary"
+              iconLeading={PauseCircle}
+              className="w-full justify-center"
+              isLoading={Boolean(busy.pause)}
+              onPress={() => runAction('pause', '/api/automation/pause', 'Working paused')}
+            >
+              Stop Working
+            </Button>
+          )
         )}
 
         <Button
