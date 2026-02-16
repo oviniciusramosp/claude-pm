@@ -27,12 +27,20 @@ function boolean(name, fallback) {
   return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
 }
 
+// Resolve CLAUDE_WORKDIR first, then use it as base for BOARD_DIR
+const claudeWorkdir = path.resolve(process.cwd(), process.env.CLAUDE_WORKDIR || '.');
+const boardDir = process.env.BOARD_DIR
+  ? (path.isAbsolute(process.env.BOARD_DIR)
+    ? process.env.BOARD_DIR
+    : path.resolve(claudeWorkdir, process.env.BOARD_DIR))
+  : path.resolve(claudeWorkdir, 'Board');
+
 export const config = {
   server: {
     port: number('PORT', 3000)
   },
   board: {
-    dir: path.resolve(process.cwd(), process.env.BOARD_DIR || 'Board'),
+    dir: boardDir,
     statuses: {
       notStarted: process.env.BOARD_STATUS_NOT_STARTED || 'Not Started',
       inProgress: process.env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
@@ -54,7 +62,7 @@ export const config = {
     timeoutMs: number('CLAUDE_TIMEOUT_MS', 75 * 60 * 1000),
     extraPrompt: process.env.CLAUDE_EXTRA_PROMPT || '',
     oauthToken: process.env.CLAUDE_CODE_OAUTH_TOKEN || '',
-    workdir: path.resolve(process.cwd(), process.env.CLAUDE_WORKDIR || '.'),
+    workdir: claudeWorkdir,
     streamOutput: boolean('CLAUDE_STREAM_OUTPUT', false),
     logPrompt: boolean('CLAUDE_LOG_PROMPT', true),
     fullAccess: boolean('CLAUDE_FULL_ACCESS', false),

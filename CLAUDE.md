@@ -13,16 +13,19 @@ Core flow:
 ## Board Structure
 Tasks live as `.md` files with YAML frontmatter inside the `Board/` directory. Status is determined by which folder a file lives in.
 
+**IMPORTANT**: The `Board/` directory MUST be located inside the `CLAUDE_WORKDIR` project directory (not in the Product Manager directory). This ensures Claude can read and update the same `.md` files that the orchestrator manages.
+
 ```
-Board/
-├── Not Started/
-│   ├── my-standalone-task.md
-│   └── Epic-1/
-│       ├── epic.md
-│       ├── us-001-login.md
-│       └── us-002-signup.md
-├── In Progress/
-└── Done/
+<CLAUDE_WORKDIR>/
+└── Board/
+    ├── Not Started/
+    │   ├── my-standalone-task.md
+    │   └── Epic-1/
+    │       ├── epic.md
+    │       ├── us-001-login.md
+    │       └── us-002-signup.md
+    ├── In Progress/
+    └── Done/
 ```
 
 ### Task file format
@@ -434,11 +437,14 @@ The Setup tab guides the user through configuring:
 After saving, the panel can restart the API service automatically.
 
 ### Board Setup
-Create your `Board/` directory with the three status folders:
+Create your `Board/` directory **inside the target project directory** (CLAUDE_WORKDIR) with the three status folders:
 ```bash
+cd <CLAUDE_WORKDIR>
 mkdir -p Board/Not\ Started Board/In\ Progress Board/Done
 ```
 Then add `.md` files with YAML frontmatter to `Board/Not Started/` to create tasks.
+
+**Why this matters**: Claude executes tasks in the project directory and updates the task `.md` files there. The orchestrator must read/write the same files to see AC completions and progress updates in real time.
 
 ### Validation
 From the Operations tab:
@@ -462,13 +468,13 @@ From the Operations tab:
 ## Configuration Reference
 
 ### Optional `.env` Values
-- `BOARD_DIR` - Path to the Board directory (default `Board`).
+- `BOARD_DIR` - Path to the Board directory, **resolved relative to `CLAUDE_WORKDIR`** (default `Board`). Can be absolute or relative. If relative, it's resolved from the project directory, not the Product Manager directory.
 - `BOARD_STATUS_NOT_STARTED` - Folder name for "Not Started" status (default `Not Started`).
 - `BOARD_STATUS_IN_PROGRESS` - Folder name for "In Progress" status (default `In Progress`).
 - `BOARD_STATUS_DONE` - Folder name for "Done" status (default `Done`).
 - `BOARD_TYPE_EPIC` - Type value that represents an Epic (default `Epic`).
 - `CLAUDE_CODE_OAUTH_TOKEN` - For non-interactive Claude auth.
-- `CLAUDE_WORKDIR` - Working directory for Claude execution (default `.`).
+- `CLAUDE_WORKDIR` - Working directory for Claude execution (default `.`). The `Board/` directory must be inside this directory.
 - `CLAUDE_FULL_ACCESS` - Skip Claude permission prompts (default `false`).
 - `CLAUDE_STREAM_OUTPUT` - Stream Claude output to logs (default `false`).
 - `CLAUDE_LOG_PROMPT` - Log prompts sent to Claude (default `true`).
@@ -551,13 +557,93 @@ refactor(board): extract frontmatter parser to separate module
 chore: bump dependencies to latest versions
 ```
 
-### Commit Workflow
-When committing changes:
-1. Stage only the relevant files (never use `git add -A` blindly).
-2. Bump the version in `package.json` with the appropriate level.
+### Commit Workflow — Commit After Every Change
+**CRITICAL**: You MUST create a commit after every meaningful change. Do NOT batch multiple changes into a single commit. Each logical change gets its own commit immediately after it is completed.
+
+**What counts as a "change":**
+- Adding, modifying, or deleting a feature, component, endpoint, or module.
+- Fixing a bug.
+- Refactoring code (even small refactors).
+- Updating configuration or documentation.
+- Adding or modifying tests.
+
+**Step-by-step for each commit:**
+1. Stage only the relevant files for this specific change (never use `git add -A` blindly).
+2. Bump the version in `package.json` with the appropriate level (`patch`, `minor`, or `major`) using `npm version <level> --no-git-tag-version`.
 3. Include the version bump in the same commit.
-4. Write a clear commit message describing **what** changed and **why**.
-5. If multiple unrelated changes exist, split them into separate commits.
+4. Write a commit message with **both title AND description body**:
+   - **Title**: concise conventional commit format (`type(scope): short description`), max ~72 chars.
+   - **Body**: explain **what** changed, **why** it changed, and any notable details. The body is mandatory — never commit with only a title.
+5. If you made multiple unrelated changes before committing, split them into separate commits — one per logical change.
+
+**Commit message format:**
+```
+type(scope): short description of the change
+
+Detailed explanation of what was changed and why. Include:
+- What files/modules were affected
+- The motivation or context for the change
+- Any trade-offs or decisions made
+- Breaking changes (if any)
+```
+
+**Example:**
+```
+feat(panel): add weekly usage chart widget
+
+Add a new WeeklyUsageWidget component that displays a bar chart of
+Claude API usage over the past 7 days. The chart uses the usageStore
+data and renders inside the sidebar. Chose a simple SVG-based chart
+to avoid adding a charting library dependency.
+```
+
+**Anti-patterns (do NOT do these):**
+- Committing with only a title and no body.
+- Batching 3+ unrelated changes into one commit.
+- Forgetting to bump the version before committing.
+- Using vague messages like "update code" or "fix stuff".
+
+## Proactive Knowledge Base Recording
+Claude MUST proactively record important changes and decisions in the project's knowledge base after every significant action. This ensures continuity across sessions and prevents knowledge loss.
+
+### What to Record
+Record any of the following **immediately** after they happen — do not wait until the end of a session:
+
+| Category | Examples | When to record |
+|----------|----------|----------------|
+| **Architectural decisions** | Chose SVG charts over Chart.js to avoid dependencies; switched from polling to SSE | After making the decision |
+| **New modules/files** | Created `src/acParser.js` for AC parsing logic | After creating the file |
+| **API/config changes** | Added `WATCHDOG_ENABLED` env var; changed default port | After the change is committed |
+| **Bug root causes** | Redirect loop caused by missing `return` after `res.redirect()` | After fixing the bug |
+| **Refactoring rationale** | Extracted frontmatter parser because 3 modules duplicated the logic | After the refactor |
+| **Breaking changes** | Changed task file format from JSON to YAML frontmatter | Immediately — high priority |
+| **Integration notes** | Panel SSE requires `Content-Type: text/event-stream` header | When discovered |
+| **Session progress** | Completed 3 of 5 epic children; remaining: us-004, us-005 | At end of session or at milestones |
+
+### How to Record
+Use the `spawner_remember` tool with the appropriate update type:
+
+1. **Decisions** — use `decision` with `what` and `why`:
+   ```
+   spawner_remember({ update: { decision: { what: "Use SVG for charts", why: "Avoid adding Chart.js dependency for a single widget" } } })
+   ```
+
+2. **Issues** — use `issue` with `description` and `status`:
+   ```
+   spawner_remember({ update: { issue: { description: "Panel SSE disconnects after 60s idle", status: "open" } } })
+   ```
+
+3. **Session summaries** — use `session_summary` at the end of each work session or after completing a major milestone:
+   ```
+   spawner_remember({ update: { session_summary: "Implemented git-tab with commit history, diff viewer, and branch display. Added CommitDetailModal for viewing full commit details. Version bumped to 0.15.0." } })
+   ```
+
+### Rules
+- **Be proactive**: Do not wait for the user to ask you to record something. If you made an important change, record it.
+- **Record immediately**: Log decisions and changes right after they happen, not at the end of the session.
+- **Be specific**: Include file names, config keys, and concrete details — not vague summaries.
+- **Record session progress**: At the end of every session (or when context is getting long), write a session summary listing what was accomplished and what remains.
+- **Record blockers**: If something is blocked or failed, record it as an open issue so the next session knows.
 
 ## Safety Rules
 - Never write real secrets into `.env.example`, `README.md`, or code.
@@ -574,21 +660,35 @@ When committing changes:
 ## Acceptance Criteria Tracking
 The system tracks Acceptance Criteria (ACs) defined as markdown checkboxes (`- [ ] ...`) in task files.
 
-### Incremental AC Updates
-When `CLAUDE_STREAM_OUTPUT=true`, Claude is instructed to emit `[AC_COMPLETE] <ac text>` markers as it completes each AC. The orchestrator detects these markers in real time and:
-1. Updates the task `.md` file immediately (checkbox `- [ ]` becomes `- [x]`).
-2. Logs `AC completed: "<ac text>"` to the Live Feed.
-3. The board donut chart updates on the next poll cycle.
+### Numbered AC System
+ACs are parsed from task markdown at prompt-build time and assigned stable 1-based indices (AC-1, AC-2, etc.). A **numbered reference table** is included in every task prompt so Claude can reference ACs by number instead of reproducing exact text. This eliminates text-matching failures.
+
+**Tracking format:**
+- Per-AC (during execution): `{"ac_complete": 3}` — standalone JSON on its own line
+- Final JSON: `{"status": "done", "summary": "...", ...}` — task completion (no `completed_acs` field)
+
+Each AC completion is a proper JSON event that the orchestrator parses and applies immediately.
+
+### Per-AC JSON Updates
+When `CLAUDE_STREAM_OUTPUT=true`, Claude emits `{"ac_complete": <number>}` JSON markers as it completes each AC. The orchestrator detects these markers in real time and:
+1. Parses the JSON and extracts the AC number.
+2. Maps the AC number to the corresponding checkbox position in the markdown file.
+3. Updates the task `.md` file immediately (checkbox `- [ ]` becomes `- [x]`).
+4. Logs `AC completed: AC-<number>` to the Live Feed.
+5. The board donut chart updates on the next poll cycle.
 
 If Claude fails mid-task, ACs already completed remain checked — progress is never lost.
 
-As a fallback, the `completed_acs` field in the final JSON contract is also used to mark any remaining checkboxes before moving the task to Done.
+As a fallback, the orchestrator also scans the entire stdout post-execution to collect any per-AC JSONs that may have been missed during streaming, and applies them before verification.
 
 ### AC Verification Gate
-After Claude finishes a task and all `completed_acs` checkboxes are marked, the orchestrator re-reads the task markdown and counts any remaining unchecked ACs (`- [ ]`). If any unchecked ACs remain, the task is **not moved to Done** — it stays in In Progress and is recorded as failed. This prevents tasks from being marked complete when Claude misses acceptance criteria.
+After Claude finishes a task and per-AC completions are applied, the orchestrator re-reads the task markdown and counts any remaining unchecked ACs (`- [ ]`). If any unchecked ACs remain, the task is **not moved to Done** — it stays in In Progress and is recorded as failed. This prevents tasks from being marked complete when Claude misses acceptance criteria.
+
+### Epic AC Verification
+Before closing an Epic (moving it to Done), the orchestrator reads each child task's markdown and verifies all ACs are checked. If any child has unchecked ACs, the Epic is blocked from closing and the offending children are logged. This runs before the optional Epic review step.
 
 ### CLAUDE.md Injection
-When `INJECT_CLAUDE_MD=true` (default), the automation injects a managed section into the **target project's** `CLAUDE.md` (at `CLAUDE_WORKDIR/CLAUDE.md`). This section contains AC tracking instructions, the JSON response format, and general rules. The managed section is delimited by `<!-- PRODUCT-MANAGER:START -->` and `<!-- PRODUCT-MANAGER:END -->` markers and is updated on every API startup. When injection is active, the task prompt skips these instructions to avoid duplication.
+When `INJECT_CLAUDE_MD=true` (default), the automation injects a managed section into the **target project's** `CLAUDE.md` (at `CLAUDE_WORKDIR/CLAUDE.md`). This section contains per-AC JSON tracking instructions, the final JSON response format, and general rules. The managed section is delimited by `<!-- PRODUCT-MANAGER:START -->` and `<!-- PRODUCT-MANAGER:END -->` markers and is updated on every API startup. When injection is active, the task prompt skips these instructions to avoid duplication.
 
 ### Board Donut Chart
 Each task card on the Board page displays a donut chart showing `done/total` ACs. The counts come from parsing `- [ ]` (unchecked) and `- [x]` (checked) lines in the task markdown body. The chart turns green when all ACs are complete.
@@ -610,7 +710,7 @@ Logs are streamed to the panel's Live Log Feed in real time. They are color-code
 Prefer concise, human-readable lines such as:
 - `INFO - Moved to In Progress: "S1.1 - Task Name"`
 - `SUCCESS - Moved to Done: "S1.1 - Task Name"`
-- `SUCCESS - AC completed: "Login page renders correctly"`
+- `SUCCESS - AC completed: AC-3`
 
 ## Project Structure
 ```
@@ -625,6 +725,7 @@ Product Manager/
 │   ├── selectTask.js       # Task picking & epic detection
 │   ├── claudeRunner.js     # Claude subprocess execution
 │   ├── claudeMdManager.js  # Managed CLAUDE.md injection into target project
+│   ├── acParser.js         # AC parsing, numbering, and reference resolution
 │   ├── promptBuilder.js    # Prompt generation
 │   ├── config.js           # Environment config parsing
 │   ├── logger.js           # Colored console output
