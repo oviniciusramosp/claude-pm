@@ -591,6 +591,29 @@ async function readEnvPairs() {
   }
 }
 
+/**
+ * Resolve BOARD_DIR relative to CLAUDE_WORKDIR (the project directory),
+ * not relative to the Product Manager directory. This ensures the panel
+ * reads/writes the same Board/ files that Claude updates during execution.
+ */
+function resolveBoardDir(env) {
+  const claudeWorkdir = path.resolve(cwd, env.CLAUDE_WORKDIR || '.');
+  const boardDirEnv = env.BOARD_DIR;
+
+  if (!boardDirEnv) {
+    // Default: Board/ inside the project directory
+    return path.resolve(claudeWorkdir, 'Board');
+  }
+
+  // If BOARD_DIR is absolute, use it as-is
+  if (path.isAbsolute(boardDirEnv)) {
+    return boardDirEnv;
+  }
+
+  // If BOARD_DIR is relative, resolve from project directory
+  return path.resolve(claudeWorkdir, boardDirEnv);
+}
+
 function normalizeEnvValue(rawValue) {
   if (rawValue === null || rawValue === undefined) {
     return '';
@@ -1329,7 +1352,7 @@ app.post('/api/automation/resume', async (_req, res) => {
 
 app.get('/api/board', async (_req, res) => {
   const env = await readEnvPairs();
-  const boardDir = path.resolve(cwd, env.BOARD_DIR || 'Board');
+  const boardDir = resolveBoardDir(env);
 
   const boardConfig = {
     board: {
@@ -1374,7 +1397,7 @@ app.get('/api/board/task-markdown', async (req, res) => {
   }
 
   const env = await readEnvPairs();
-  const boardDir = path.resolve(cwd, env.BOARD_DIR || 'Board');
+  const boardDir = resolveBoardDir(env);
 
   const boardConfig = {
     board: {
@@ -1402,7 +1425,7 @@ app.get('/api/board/task-markdown', async (req, res) => {
 
 app.post('/api/board/fix-order', async (_req, res) => {
   const env = await readEnvPairs();
-  const boardDir = path.resolve(cwd, env.BOARD_DIR || 'Board');
+  const boardDir = resolveBoardDir(env);
   const queueOrder = env.QUEUE_ORDER || 'alphabetical';
 
   const boardConfig = {
@@ -1623,6 +1646,215 @@ app.post('/api/automation/runtime', async (req, res) => {
     res.json(payload);
   } catch (error) {
     res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+// ── Usage endpoints ────────────────────────────────────────────────────
+
+function getISOWeekKey(date) {
+  const d = new Date(date);
+  d.setUTCHours(0, 0, 0, 0);
+  const dayOfWeek = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayOfWeek);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+}
+
+function readUsageFromDisk() {
+  const usagePath = path.join(cwd, '.data', 'usage.json');
+  const empty = {
+    ok: true,
+    totalTokens: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    taskCount: 0,
+    tasks: {}
+  };
+
+  try {
+    if (!fsSync.existsSync(usagePath)) return empty;
+    const raw = fsSync.readFileSync(usagePath, 'utf-8');
+    const data = JSON.parse(raw);
+    const weekKey = getISOWeekKey(new Date());
+    const week = data?.weeks?.[weekKey];
+    if (!week) return empty;
+
+    return {
+      ok: true,
+      weekKey,
+      inputTokens: week.inputTokens || 0,
+      outputTokens: week.outputTokens || 0,
+      cacheCreationInputTokens: week.cacheCreationInputTokens || 0,
+      cacheReadInputTokens: week.cacheReadInputTokens || 0,
+      totalTokens: week.totalTokens || 0,
+      totalCostUsd: week.totalCostUsd || 0,
+      taskCount: week.taskCount || 0,
+      tasks: week.tasks || {}
+    };
+  } catch {
+    return empty;
+  }
+}
+
+app.get('/api/usage/weekly', async (_req, res) => {
+  const baseUrl = getApiBaseUrl();
+
+  try {
+    const response = await fetch(`${baseUrl}/usage/weekly`, {
+      headers: getAutomationHeaders()
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok && payload.ok) {
+      res.json(payload);
+      return;
+    }
+  } catch {
+    // API unreachable — fall through to disk read
+  }
+
+  res.json(readUsageFromDisk());
+});
+
+// ── Git endpoints ──────────────────────────────────────────────────────
+
+function runGitCommand(args, workdir) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', args, {
+      cwd: workdir,
+      env: { ...process.env }
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+    child.on('error', (error) => { reject(error); });
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve(stdout);
+      } else {
+        const error = new Error(stderr.trim() || `git command failed with exit=${code}`);
+        error.exitCode = code;
+        reject(error);
+      }
+    });
+  });
+}
+
+// git log format: fields separated by RS (\x1E), records separated by GS (\x1D)
+// We use %x1E and %x1D as git format placeholders — git outputs the actual bytes.
+const GIT_LOG_FORMAT = '--format=%H%x1E%h%x1E%an%x1E%ae%x1E%aI%x1E%s%x1E%b%x1E%D%x1D';
+const GIT_FIELD_SEPARATOR = '\x1E';
+const GIT_RECORD_SEPARATOR = '\x1D';
+const CONVENTIONAL_COMMIT_REGEX = /^(\w+)(?:\(([^)]+)\))?!?:\s*(.+)$/;
+const TASK_ID_REGEX = /\[([A-Z0-9._-]+)\]\s*$/i;
+const CO_AUTHORED_CLAUDE_REGEX = /co-authored-by:.*(?:claude|anthropic)/i;
+
+function parseGitCommit(raw) {
+  const parts = raw.split(GIT_FIELD_SEPARATOR);
+  if (parts.length < 6) return null;
+
+  const [hash, shortHash, authorName, authorEmail, date, subject, body, refsRaw] = parts;
+  const trimmedBody = (body || '').trim();
+
+  const isAutomation = CO_AUTHORED_CLAUDE_REGEX.test(trimmedBody);
+
+  let conventional = null;
+  const conventionalMatch = subject.match(CONVENTIONAL_COMMIT_REGEX);
+  if (conventionalMatch) {
+    conventional = {
+      type: conventionalMatch[1],
+      scope: conventionalMatch[2] || null,
+      description: conventionalMatch[3]
+    };
+  }
+
+  const taskIdMatch = subject.match(TASK_ID_REGEX);
+
+  const refs = refsRaw
+    ? refsRaw.split(',').map((r) => r.trim()).filter(Boolean)
+    : [];
+
+  return {
+    hash,
+    shortHash,
+    authorName,
+    authorEmail,
+    date,
+    subject,
+    body: trimmedBody,
+    refs,
+    isAutomation,
+    conventional,
+    taskId: taskIdMatch ? taskIdMatch[1] : null
+  };
+}
+
+app.get('/api/git/log', async (req, res) => {
+  const env = await readEnvPairs();
+  const workdir = path.resolve(cwd, env.CLAUDE_WORKDIR || '.');
+
+  try {
+    await fs.access(workdir);
+  } catch {
+    res.status(400).json({
+      ok: false,
+      code: 'NO_WORKDIR',
+      message: 'CLAUDE_WORKDIR is not configured or the directory does not exist. Configure it in the Setup tab.'
+    });
+    return;
+  }
+
+  const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+  const offset = Math.max(Number(req.query.offset) || 0, 0);
+
+  try {
+    const [logOutput, branchOutput] = await Promise.all([
+      runGitCommand(['log', GIT_LOG_FORMAT, `-n`, String(limit), `--skip`, String(offset)], workdir),
+      runGitCommand(['rev-parse', '--abbrev-ref', 'HEAD'], workdir)
+    ]);
+
+    const records = logOutput
+      .split(GIT_RECORD_SEPARATOR)
+      .map((r) => r.trim())
+      .filter(Boolean);
+
+    const commits = records.map(parseGitCommit).filter(Boolean);
+    const branch = branchOutput.trim();
+
+    res.json({ ok: true, commits, branch });
+  } catch (error) {
+    const msg = error.message || String(error);
+    const isNotGit = msg.includes('not a git repository') || msg.includes('fatal:');
+
+    res.status(isNotGit ? 400 : 500).json({
+      ok: false,
+      code: isNotGit ? 'NOT_GIT_REPO' : 'GIT_ERROR',
+      message: isNotGit
+        ? 'The configured working directory is not a git repository.'
+        : `Git error: ${msg}`
+    });
+  }
+});
+
+app.get('/api/git/diff', async (req, res) => {
+  const hash = String(req.query.hash || '').trim();
+  if (!hash || !/^[a-f0-9]{4,40}$/i.test(hash)) {
+    res.status(400).json({ ok: false, message: 'A valid commit hash is required.' });
+    return;
+  }
+
+  const env = await readEnvPairs();
+  const workdir = path.resolve(cwd, env.CLAUDE_WORKDIR || '.');
+
+  try {
+    const stat = await runGitCommand(['show', '--stat', '--format=', hash], workdir);
+    res.json({ ok: true, stat: stat.trim() });
+  } catch (error) {
+    res.status(500).json({ ok: false, message: error.message || String(error) });
   }
 });
 
