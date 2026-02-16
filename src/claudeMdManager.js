@@ -109,11 +109,17 @@ export function generateManagedContent() {
   lines.push('');
   lines.push('| Field | Description |');
   lines.push('|-------|-------------|');
-  lines.push('| `status` | Use `"done"` only when implementation is complete. Use `"blocked"` if blocked. |');
+  lines.push('| `status` | Use `"done"` ONLY when ALL Acceptance Criteria are complete. Use `"blocked"` if blocked. |');
   lines.push('| `summary` | Concise description of what was accomplished. |');
   lines.push('| `notes` | Any important details, decisions, or context. |');
   lines.push('| `files` | Array of file paths that were created or modified. |');
   lines.push('| `tests` | Summary of test results or `"N/A"` if not applicable. |');
+  lines.push('');
+  lines.push('**CRITICAL COMPLETION GATE:**');
+  lines.push('');
+  lines.push('- BEFORE emitting final JSON with `"status":"done"`, verify ALL ACs are complete.');
+  lines.push('- The orchestrator will verify all AC checkboxes are checked. Incomplete ACs will cause task rejection.');
+  lines.push('- If you cannot complete an AC, use `"status":"blocked"` and explain in notes.');
   lines.push('');
   lines.push('**IMPORTANT:** The final JSON must contain a `"status"` field. Do NOT include `"ac_complete"` in this JSON.');
   lines.push('If you are blocked at any point, emit the final JSON immediately with `"status": "blocked"`.');
@@ -130,6 +136,9 @@ export function generateManagedContent() {
   lines.push('');
   lines.push('- Complete all Acceptance Criteria in the task.');
   lines.push('- Track EACH completed AC using `{"ac_complete": <number>}` JSON markers (see above).');
+  lines.push('- **BEFORE emitting final JSON:** Verify ALL ACs are complete. Re-read the AC list and confirm you emitted every AC number.');
+  lines.push('- If any AC is incomplete, DO NOT return `"done"` status. Complete the missing AC first.');
+  lines.push('- The orchestrator will verify all AC checkboxes are checked. Incomplete ACs will cause task rejection.');
   lines.push('- On successful completion, create a commit with a clear, objective message.');
   lines.push('- Never include secrets in code, commits, or logs.');
   lines.push('- All code must be written in English (variable names, function names, comments, log messages).');
