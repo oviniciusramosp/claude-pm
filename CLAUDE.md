@@ -503,6 +503,51 @@ From the Operations tab:
 - `WATCHDOG_MAX_WARNINGS` - Warnings before killing a task process (default `3`).
 - `WATCHDOG_MAX_CONSECUTIVE_FAILURES` - Same-task failures before halting the orchestrator (default `3`).
 - `GLOBAL_MAX_CONSECUTIVE_FAILURES` - Consecutive failures across all tasks before halting (default `5`). Catches systemic issues like broken auth or CLI.
+- `AUTO_RECOVERY_ENABLED` - Enable auto-recovery when tasks fail (default `true`). When enabled, the system attempts to analyze errors and fix underlying issues before retrying failed tasks.
+- `AUTO_RECOVERY_MAX_RETRIES` - Maximum recovery attempts per task before giving up (default `2`). Applies separately to tasks and epics.
+- `AUTO_RECOVERY_TIMEOUT_MS` - Timeout for recovery execution in milliseconds (default `300000` = 5 minutes).
+- `AUTO_RECOVERY_MODEL` - Model to use for recovery analysis (default `auto`). Valid values: `claude-opus-4-6`, `claude-sonnet-4-5-20250929`, `claude-haiku-4-5-20251001`, or `auto` (uses Opus for maximum intelligence).
+
+## Auto-Recovery System
+
+The auto-recovery system automatically attempts to fix failed tasks before marking them as permanently failed. When a task fails, the system:
+
+1. **Analyzes the failure** - Sends error logs and task context to Claude for analysis
+2. **Identifies root cause** - Claude determines what went wrong (missing file, syntax error, config issue, etc.)
+3. **Applies fixes** - Claude makes surgical changes to fix the underlying problem
+4. **Retries the task** - The orchestrator automatically retries the task after recovery
+
+### How It Works
+
+When a task returns `status !== "done"`:
+1. Check if recovery attempts are available (max 2 per task)
+2. If available, trigger auto-recovery with a specialized prompt
+3. Recovery Claude analyzes the error and fixes underlying issues
+4. If recovery succeeds, the task is retried automatically
+5. If recovery fails or limit is reached, task is marked as failed
+
+### Recovery Prompt
+
+The recovery prompt includes:
+- **Expected outcome**: Task instructions, Acceptance Criteria, required output format
+- **Actual outcome**: Error messages, execution logs, exit code
+- **Comparison**: Expected vs actual (AC tracking, file existence, build status, tests)
+- **Examples**: Common failure patterns and how to fix them
+
+### Configuration
+
+- **Model selection**: Use `AUTO_RECOVERY_MODEL=auto` (Opus) for best results, or set a specific model
+- **Retry limit**: Each task/epic can be recovered up to 2 times (configurable via `AUTO_RECOVERY_MAX_RETRIES`)
+- **Counter reset**: Recovery counters are cleared when a task/epic completes successfully
+- **Epic limit**: Epics have a separate recovery counter (also max 2 attempts)
+
+### Logs
+
+Recovery activity appears in the Live Feed with the `RECOVERY` prefix:
+- `⚠️ WARN - RECOVERY - Attempting auto-recovery for task "..." (attempt 1/2)`
+- `✅ SUCCESS - RECOVERY - Auto-recovery succeeded for task "...": <summary>`
+- `❌ ERROR - RECOVERY - Auto-recovery exhausted for task "..." after 2 attempt(s)`
+
 
 ## Code Standards
 - **All code must be written in English.** This includes variable names, function names, class names, comments, log messages, error messages, JSDoc annotations, and any other code artifacts. The only exception is user-facing UI text that is explicitly requested in another language.
