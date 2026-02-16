@@ -2032,6 +2032,75 @@ app.post('/api/board/fix-task', async (req, res) => {
   }
 });
 
+app.post('/api/board/update-status', async (req, res) => {
+  const { taskId, status } = req.body;
+
+  if (!taskId || typeof taskId !== 'string') {
+    res.status(400).json({ ok: false, message: 'taskId is required' });
+    return;
+  }
+
+  if (!status || typeof status !== 'string') {
+    res.status(400).json({ ok: false, message: 'status is required' });
+    return;
+  }
+
+  // Validate status value
+  const validStatuses = ['Not Started', 'In Progress', 'Done'];
+  if (!validStatuses.includes(status)) {
+    res.status(400).json({ ok: false, message: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
+    return;
+  }
+
+  pushLog('info', LOG_SOURCE.panel, `Updating task status: ${taskId} → ${status}`);
+
+  const env = await readEnvPairs();
+  const boardDir = resolveBoardDir(env);
+
+  const boardConfig = {
+    board: {
+      dir: boardDir,
+      statuses: {
+        notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+        inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+        done: env.BOARD_STATUS_DONE || 'Done'
+      },
+      typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
+    }
+  };
+
+  try {
+    const client = new LocalBoardClient(boardConfig);
+    await client.initialize();
+    const tasks = await client.listTasks();
+    const task = tasks.find((t) => t.id === taskId);
+
+    if (!task) {
+      pushLog('error', LOG_SOURCE.panel, `Task not found: ${taskId}`);
+      res.status(404).json({ ok: false, message: `Task not found: ${taskId}` });
+      return;
+    }
+
+    // Update task status
+    await client.updateTaskStatus(taskId, status);
+    pushLog('success', LOG_SOURCE.panel, `Task status updated: ${taskId} → ${status}`);
+
+    res.json({
+      ok: true,
+      taskId,
+      status,
+      message: `Task status updated to "${status}"`
+    });
+  } catch (error) {
+    const msg = error.message || String(error);
+    pushLog('error', LOG_SOURCE.panel, `Failed to update task status for ${taskId}: ${msg}`, {
+      stack: error.stack
+    });
+
+    res.status(500).json({ ok: false, message: msg });
+  }
+});
+
 function buildEpicFixPrompt(epicId, epicName, epicContent, epicFilePath, childTasks) {
   const childTasksList = childTasks
     .map((child) => `  - ${child.id}: ${child.name} (${child._filePath})`)

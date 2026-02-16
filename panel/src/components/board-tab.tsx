@@ -1,7 +1,7 @@
 // panel/src/components/board-tab.tsx
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Columns03, CpuChip01, Folder, RefreshCw01, Tool01, Users01 } from '@untitledui/icons';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, Columns03, CpuChip01, Folder, Plus, RefreshCw01, Tool01, Users01 } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { cx } from '@/utils/cx';
@@ -31,6 +31,7 @@ interface BoardError {
 }
 
 const COLUMN_HEADER_COLORS: Record<string, string> = {
+  missing_status: 'bg-utility-warning-50 text-utility-warning-700',
   not_started: 'bg-utility-gray-50 text-utility-gray-700',
   in_progress: 'bg-utility-brand-50 text-utility-brand-700',
   done: 'bg-utility-success-50 text-utility-success-700'
@@ -115,7 +116,74 @@ function AcDonut({ done, total }: { done: number; total: number }) {
   );
 }
 
-function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStatuses }: { task: BoardTask; epic: boolean; allTasks: BoardTask[]; onClick: () => void; onFix?: (taskId: string) => void; fixStatus?: { status: string; startedAt?: string; completedAt?: string; error?: string }; allFixStatuses?: Record<string, { status: string; startedAt?: string; completedAt?: string; error?: string }> }) {
+function AddStatusDropdown({ taskId, onAddStatus, disabled }: { taskId: string; onAddStatus: (taskId: string, status: string) => void; disabled?: boolean }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: any) {
+      if (dropdownRef.current && !(dropdownRef.current as any).contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isOpen]);
+
+  const statusOptions = [
+    { value: 'Not Started', label: 'Not Started', color: 'text-utility-gray-700' },
+    { value: 'In Progress', label: 'In Progress', color: 'text-utility-brand-700' },
+    { value: 'Done', label: 'Done', color: 'text-utility-success-700' }
+  ];
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={(e: any) => {
+          e.stopPropagation();
+          if (!disabled) setIsOpen(!isOpen);
+        }}
+        disabled={disabled}
+        className={cx(
+          'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition',
+          disabled
+            ? 'bg-utility-gray-100 text-utility-gray-400 cursor-not-allowed'
+            : 'bg-utility-brand-50 text-utility-brand-700 hover:bg-utility-brand-100 border border-utility-brand-200'
+        )}
+        title="Add status to this task"
+      >
+        <Plus className="size-3" />
+        <span>Add Status</span>
+      </button>
+      {isOpen && (
+        <div className="absolute top-full left-0 z-50 mt-1 w-40 rounded-lg border border-secondary bg-primary shadow-lg">
+          {statusOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={(e: any) => {
+                e.stopPropagation();
+                onAddStatus(taskId, option.value);
+                setIsOpen(false);
+              }}
+              className={cx(
+                'w-full px-3 py-2 text-left text-sm transition hover:bg-primary_hover first:rounded-t-lg last:rounded-b-lg',
+                option.color
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStatuses, showAddStatus, onAddStatus, addingStatus }: { task: BoardTask; epic: boolean; allTasks: BoardTask[]; onClick: () => void; onFix?: (taskId: string) => void; fixStatus?: { status: string; startedAt?: string; completedAt?: string; error?: string }; allFixStatuses?: Record<string, { status: string; startedAt?: string; completedAt?: string; error?: string }>; showAddStatus?: boolean; onAddStatus?: (taskId: string, status: string) => void; addingStatus?: boolean }) {
   const priorityColor = BOARD_PRIORITY_COLORS[task.priority] as any;
   const typeColor = BOARD_TYPE_COLORS[task.type] as any;
   const taskCode = extractTaskCode(task);
@@ -163,7 +231,7 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
           {onFix && (
             <button
               type="button"
-              onClick={(e) => {
+              onClick={(e: any) => {
                 e.stopPropagation();
                 if (!isAnyFixing) {
                   onFix(task.id);
@@ -194,6 +262,13 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
           {task.acTotal > 0 && <AcDonut done={task.acDone} total={task.acTotal} />}
         </div>
       </div>
+
+      {/* Row 2.5: Add Status button (only in Missing Status column) */}
+      {showAddStatus && onAddStatus && (
+        <div className="mt-2">
+          <AddStatusDropdown taskId={task.id} onAddStatus={onAddStatus} disabled={addingStatus} />
+        </div>
+      )}
 
       {/* Row 3: Type + Priority */}
       {(task.type || task.priority) && (
@@ -254,6 +329,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const [fixStatus, setFixStatus] = useState<Record<string, { status: string; startedAt?: string; completedAt?: string; error?: string }>>({});
   const [selectedTask, setSelectedTask] = useState<BoardTask | null>(null);
   const [expandedEpics, setExpandedEpics] = useState(() => new Set<string>());
+  const [addingStatus, setAddingStatus] = useState(false);
   const mountedRef = useRef(true);
 
   const toggleEpic = useCallback((epicId: string) => {
@@ -447,6 +523,30 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
     }
   }, [apiBaseUrl, showToast, fetchBoard, fetchFixStatus, setFixingTaskIdProp]);
 
+  const handleAddStatus = useCallback(async (taskId: string, status: string) => {
+    setAddingStatus(true);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/board/update-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, status })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        showToast(payload?.message || 'Failed to update task status', 'danger');
+        return;
+      }
+      showToast(`Status updated to "${status}"`, 'success');
+      await fetchBoard(true);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update task status', 'danger');
+    } finally {
+      if (mountedRef.current) {
+        setAddingStatus(false);
+      }
+    }
+  }, [apiBaseUrl, showToast, fetchBoard]);
+
   // Initial load + polling
   useEffect(() => {
     mountedRef.current = true;
@@ -468,7 +568,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const columns = useMemo(() => {
     return BOARD_COLUMNS.map((col) => ({
       ...col,
-      tasks: tasks.filter((t) => t.status.toLowerCase() === col.statusMatch)
+      tasks: col.statusMatch === null
+        ? tasks.filter((t: BoardTask) => !t.status || t.status.trim() === '')
+        : tasks.filter((t: BoardTask) => t.status && t.status.toLowerCase() === col.statusMatch)
     }));
   }, [tasks]);
 
@@ -540,7 +642,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
 
       {/* Board columns */}
       {showBoard && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3" style={{ height: 'calc(100vh - 220px)' }}>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4" style={{ height: 'calc(100vh - 220px)' }}>
           {columns.map((col) => (
             <div
               key={col.key}
@@ -574,10 +676,23 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                   ) : (
                     (() => {
                       const isCollapsible = col.key === 'not_started' || col.key === 'done';
+                      const isMissingStatus = col.key === 'missing_status';
 
                       if (!isCollapsible) {
                         return col.tasks.map((task) => (
-                          <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} fixStatus={fixStatus[task.id]} allFixStatuses={fixStatus} />
+                          <BoardCard
+                            key={task.id}
+                            task={task}
+                            epic={isEpic(task, tasks)}
+                            allTasks={tasks}
+                            onClick={() => setSelectedTask(task)}
+                            onFix={handleFixTask}
+                            fixStatus={fixStatus[task.id]}
+                            allFixStatuses={fixStatus}
+                            showAddStatus={isMissingStatus}
+                            onAddStatus={isMissingStatus ? handleAddStatus : undefined}
+                            addingStatus={addingStatus}
+                          />
                         ));
                       }
 
@@ -612,7 +727,18 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                             const expanded = expandedEpics.has(task.id);
                             return (
                               <div key={task.id} className="flex flex-col gap-2">
-                                <BoardCard task={task} epic allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} fixStatus={fixStatus[task.id]} allFixStatuses={fixStatus} />
+                                <BoardCard
+                                  task={task}
+                                  epic
+                                  allTasks={tasks}
+                                  onClick={() => setSelectedTask(task)}
+                                  onFix={handleFixTask}
+                                  fixStatus={fixStatus[task.id]}
+                                  allFixStatuses={fixStatus}
+                                  showAddStatus={isMissingStatus}
+                                  onAddStatus={isMissingStatus ? handleAddStatus : undefined}
+                                  addingStatus={addingStatus}
+                                />
                                 <button
                                   type="button"
                                   onClick={() => toggleEpic(task.id)}
@@ -624,14 +750,40 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                 {expanded && (
                                   <div className="ml-2 border-l-2 border-utility-purple-200 pl-2 flex flex-col gap-2">
                                     {children.map((child) => (
-                                      <BoardCard key={child.id} task={child} epic={false} allTasks={tasks} onClick={() => setSelectedTask(child)} onFix={handleFixTask} fixStatus={fixStatus[child.id]} allFixStatuses={fixStatus} />
+                                      <BoardCard
+                                        key={child.id}
+                                        task={child}
+                                        epic={false}
+                                        allTasks={tasks}
+                                        onClick={() => setSelectedTask(child)}
+                                        onFix={handleFixTask}
+                                        fixStatus={fixStatus[child.id]}
+                                        allFixStatuses={fixStatus}
+                                        showAddStatus={isMissingStatus}
+                                        onAddStatus={isMissingStatus ? handleAddStatus : undefined}
+                                        addingStatus={addingStatus}
+                                      />
                                     ))}
                                   </div>
                                 )}
                               </div>
                             );
                           }
-                          return <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} fixStatus={fixStatus[task.id]} allFixStatuses={fixStatus} />;
+                          return (
+                            <BoardCard
+                              key={task.id}
+                              task={task}
+                              epic={isEpic(task, tasks)}
+                              allTasks={tasks}
+                              onClick={() => setSelectedTask(task)}
+                              onFix={handleFixTask}
+                              fixStatus={fixStatus[task.id]}
+                              allFixStatuses={fixStatus}
+                              showAddStatus={isMissingStatus}
+                              onAddStatus={isMissingStatus ? handleAddStatus : undefined}
+                              addingStatus={addingStatus}
+                            />
+                          );
                         });
                     })()
                   )}

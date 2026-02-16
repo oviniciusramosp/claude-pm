@@ -243,6 +243,7 @@ export const TOAST_TONE_CLASSES: Record<string, string> = {
 export const PROCESS_ACTION_BUTTON_CLASS = 'w-24 justify-center';
 
 export const BOARD_COLUMNS = [
+  { key: 'missing_status', label: 'Missing Status', statusMatch: null },
   { key: 'not_started', label: 'Not Started', statusMatch: 'not started' },
   { key: 'in_progress', label: 'In Progress', statusMatch: 'in progress' },
   { key: 'done', label: 'Done', statusMatch: 'done' }
