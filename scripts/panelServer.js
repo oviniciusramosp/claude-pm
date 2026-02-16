@@ -1388,6 +1388,54 @@ app.post('/api/automation/resume', async (_req, res) => {
   }
 });
 
+app.post('/api/automation/pause', async (_req, res) => {
+  const baseUrl = getApiBaseUrl();
+  try {
+    await ensureApiRunning();
+    const response = await fetch(`${baseUrl}/pause`, {
+      method: 'POST',
+      headers: getAutomationHeaders()
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      pushLog('warn', LOG_SOURCE.panel, `Pause failed (${response.status})`);
+      res.status(response.status).json({ ok: false, payload });
+      return;
+    }
+
+    pushLog('success', LOG_SOURCE.panel, 'Orchestrator paused successfully');
+    res.json({ ok: true, payload });
+  } catch (error) {
+    pushLog('error', LOG_SOURCE.panel, `Pause error: ${error.message}`);
+    res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.post('/api/automation/unpause', async (_req, res) => {
+  const baseUrl = getApiBaseUrl();
+  try {
+    await ensureApiRunning();
+    const response = await fetch(`${baseUrl}/unpause`, {
+      method: 'POST',
+      headers: getAutomationHeaders()
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      pushLog('warn', LOG_SOURCE.panel, `Unpause failed (${response.status})`);
+      res.status(response.status).json({ ok: false, payload });
+      return;
+    }
+
+    pushLog('success', LOG_SOURCE.panel, 'Orchestrator unpaused successfully');
+    res.json({ ok: true, payload });
+  } catch (error) {
+    pushLog('error', LOG_SOURCE.panel, `Unpause error: ${error.message}`);
+    res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
 app.get('/api/board', async (_req, res) => {
   const env = await readEnvPairs();
   const boardDir = resolveBoardDir(env);
