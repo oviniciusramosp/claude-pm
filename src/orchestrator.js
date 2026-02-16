@@ -323,7 +323,7 @@ export class Orchestrator {
 
       this.currentTaskId = task.id;
       this.currentTaskName = taskLabel(task);
-      this.logger.info(`Claude is working on: "${taskLabel(task)}" | model: ${task.model || 'default'}`);
+      this.logger.info(`Claude is working on: "${taskLabel(task)}" | model: ${this.config.claude.modelOverride || task.model || 'default'}`);
 
       const { signal } = this.watchdog.start(task);
       const executionStartTime = Date.now();
@@ -426,7 +426,8 @@ export class Orchestrator {
         this.claudeCompletedTaskIds.set(task.id, Date.now());
 
         let finalExecution = execution;
-        const shouldReview = this.config.claude.opusReviewEnabled && !isOpusModel(task.model);
+        const effectiveModel = this.config.claude.modelOverride || task.model;
+        const shouldReview = this.config.claude.opusReviewEnabled && !isOpusModel(effectiveModel);
 
         if (shouldReview) {
           try {
@@ -619,7 +620,7 @@ export class Orchestrator {
 
       this.currentTaskId = task.id;
       this.currentTaskName = taskLabel(task);
-      this.logger.info(`Claude is working on: "${taskLabel(task)}" | model: ${task.model || 'default'}`);
+      this.logger.info(`Claude is working on: "${taskLabel(task)}" | model: ${this.config.claude.modelOverride || task.model || 'default'}`);
 
       const { signal } = this.watchdog.start(task);
       const executionStartTime = Date.now();
@@ -722,7 +723,8 @@ export class Orchestrator {
         this.claudeCompletedTaskIds.set(task.id, Date.now());
 
         let finalExecution = execution;
-        const shouldReview = this.config.claude.opusReviewEnabled && !isOpusModel(task.model);
+        const effectiveChildModel = this.config.claude.modelOverride || task.model;
+        const shouldReview = this.config.claude.opusReviewEnabled && !isOpusModel(effectiveChildModel);
 
         if (shouldReview) {
           try {

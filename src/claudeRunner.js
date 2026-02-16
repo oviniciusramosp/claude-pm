@@ -284,10 +284,10 @@ function parseJsonFromOutput(stdout) {
   }
 }
 
-function buildCommand(config, task) {
+function buildCommand(config, task, overrideModel) {
   let cmd = FIXED_CLAUDE_COMMAND;
 
-  const model = config.claude.modelOverride || task.model;
+  const model = overrideModel || config.claude.modelOverride || task.model;
   if (model) {
     cmd += ` --model ${model}`;
   }
@@ -321,14 +321,14 @@ function summarizeCommandOutput(stderr, stdout) {
   return `${line.slice(0, 320)}...`;
 }
 
-export function runClaudeTask(task, prompt, config, { signal, onAcComplete } = {}) {
+export function runClaudeTask(task, prompt, config, { signal, onAcComplete, overrideModel } = {}) {
   return new Promise((resolve, reject) => {
     const commandEnv = { ...process.env };
     if (config.claude.oauthToken) {
       commandEnv.CLAUDE_CODE_OAUTH_TOKEN = config.claude.oauthToken;
     }
 
-    const command = buildCommand(config, task);
+    const command = buildCommand(config, task, overrideModel);
 
     const child = spawn(command, {
       shell: true,
