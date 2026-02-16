@@ -18,7 +18,6 @@ import {
   extractModelFromMessage,
   formatModelLabel
 } from '../utils/log-helpers';
-import { CLAUDE_MODELS } from '../constants';
 import { Icon } from './icon';
 import { SourceAvatar } from './source-avatar';
 import type { LogEntry, OrchestratorState, TaskContractData } from '../types';
@@ -167,8 +166,6 @@ export function FeedTab({
   logFeedRef,
   chatDraft,
   setChatDraft,
-  selectedModel,
-  setSelectedModel,
   sendClaudeChatMessage,
   copyLiveFeedMessage,
   busy,
@@ -178,8 +175,6 @@ export function FeedTab({
   logFeedRef: RefObject<HTMLDivElement | null>;
   chatDraft: string;
   setChatDraft: (value: string) => void;
-  selectedModel: string;
-  setSelectedModel: (value: string) => void;
   sendClaudeChatMessage: () => void;
   copyLiveFeedMessage: (message: string) => void;
   busy: Record<string, any>;
@@ -226,7 +221,10 @@ export function FeedTab({
           const currentSourceKey = resolveLogSourceKey(line.source, line.message);
           const prevLine = index > 0 ? logs[index - 1] : null;
           const prevSourceKey = prevLine ? resolveLogSourceKey(prevLine.source, prevLine.message) : null;
+          const nextLine = index < logs.length - 1 ? logs[index + 1] : null;
+          const nextSourceKey = nextLine ? resolveLogSourceKey(nextLine.source, nextLine.message) : null;
           const isGroupContinuation = currentSourceKey === prevSourceKey;
+          const isLastInGroup = currentSourceKey !== nextSourceKey;
 
           return (
             <div
@@ -240,9 +238,9 @@ export function FeedTab({
                 )}
               >
                 {!isOutgoing ? (
-                  isGroupContinuation
-                    ? <span className="size-8 shrink-0" aria-hidden="true" />
-                    : <SourceAvatar sourceMeta={sourceMeta} />
+                  isLastInGroup
+                    ? <SourceAvatar sourceMeta={sourceMeta} />
+                    : <span className="size-8 shrink-0" aria-hidden="true" />
                 ) : null}
 
                 <div
@@ -302,9 +300,9 @@ export function FeedTab({
                 </div>
 
                 {isOutgoing ? (
-                  isGroupContinuation
-                    ? <span className="size-8 shrink-0" aria-hidden="true" />
-                    : <SourceAvatar sourceMeta={sourceMeta} />
+                  isLastInGroup
+                    ? <SourceAvatar sourceMeta={sourceMeta} />
+                    : <span className="size-8 shrink-0" aria-hidden="true" />
                 ) : null}
               </div>
             </div>
@@ -331,30 +329,6 @@ export function FeedTab({
       </div>
 
       <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <Icon icon={CpuChip01} className="size-4 text-tertiary" />
-          <label htmlFor="model-select" className="text-xs font-medium text-secondary">
-            Model
-          </label>
-          <select
-            id="model-select"
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
-            disabled={Boolean(busy.chat)}
-            className={cx(
-              'flex-1 rounded-sm border border-secondary bg-primary px-2 py-1 text-xs text-primary outline-hidden transition-shadow',
-              'focus:ring-2 focus:ring-brand',
-              Boolean(busy.chat) && 'cursor-not-allowed bg-disabled_subtle text-disabled'
-            )}
-          >
-            {CLAUDE_MODELS.map((model) => (
-              <option key={model.value} value={model.value}>
-                {model.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
         <div
           className={cx(
             'flex items-end gap-2 rounded-lg bg-primary p-2 shadow-xs ring-1 ring-primary ring-inset transition-shadow duration-100 ease-linear',
