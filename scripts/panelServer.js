@@ -1610,9 +1610,13 @@ app.post('/api/board/fix-task', async (req, res) => {
       return;
     }
 
-    // Read task markdown content
-    const taskFilePath = path.join(claudeWorkdir, boardDir, task.path);
-    const taskContent = await fs.readFile(taskFilePath, 'utf-8');
+    // Read task markdown content using the internal _filePath
+    if (!task._filePath) {
+      pushLog('error', LOG_SOURCE.panel, `Task has no file path: ${taskId}`);
+      res.status(500).json({ ok: false, message: `Task has no file path: ${taskId}` });
+      return;
+    }
+    const taskContent = await fs.readFile(task._filePath, 'utf-8');
 
     // Build prompt for Claude to verify and fix ACs
     const prompt = buildFixTaskPrompt(taskId, task.name, taskContent);
