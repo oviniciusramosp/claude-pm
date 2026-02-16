@@ -114,7 +114,7 @@ function AcDonut({ done, total }: { done: number; total: number }) {
   );
 }
 
-function BoardCard({ task, epic, allTasks, onClick, onFix }: { task: BoardTask; epic: boolean; allTasks: BoardTask[]; onClick: () => void; onFix?: (taskId: string) => void }) {
+function BoardCard({ task, epic, allTasks, onClick, onFix, isFixing }: { task: BoardTask; epic: boolean; allTasks: BoardTask[]; onClick: () => void; onFix?: (taskId: string) => void; isFixing?: boolean }) {
   const priorityColor = BOARD_PRIORITY_COLORS[task.priority] as any;
   const typeColor = BOARD_TYPE_COLORS[task.type] as any;
   const taskCode = extractTaskCode(task);
@@ -136,19 +136,29 @@ function BoardCard({ task, epic, allTasks, onClick, onFix }: { task: BoardTask; 
           : 'border-secondary'
       )}
     >
-      {/* Fix button (hover only) */}
+      {/* Fix button (hover only) or loading spinner */}
       {onFix && (
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            onFix(task.id);
+            if (!isFixing) {
+              onFix(task.id);
+            }
           }}
-          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity rounded-md p-1.5 bg-utility-brand-50 hover:bg-utility-brand-100 border border-utility-brand-200 shadow-sm z-10"
-          title="Fix ACs with Claude"
+          disabled={isFixing}
+          className={cx(
+            'absolute top-2 right-2 transition-opacity rounded-md p-1.5 bg-utility-brand-50 hover:bg-utility-brand-100 border border-utility-brand-200 shadow-sm z-10',
+            isFixing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          )}
+          title={isFixing ? 'Fixing ACs...' : 'Fix ACs with Claude'}
           aria-label="Fix acceptance criteria"
         >
-          <Tool01 className="size-3.5 text-utility-brand-600" />
+          {isFixing ? (
+            <RefreshCw01 className="size-3.5 text-utility-brand-600 animate-spin" />
+          ) : (
+            <Tool01 className="size-3.5 text-utility-brand-600" />
+          )}
         </button>
       )}
       {/* Row 1: Epic reference + donut chart */}
@@ -233,8 +243,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [fixing, setFixing] = useState(false);
+  const [fixingTaskId, setFixingTaskId] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState(null as BoardTask | null);
-  const [expandedEpics, setExpandedEpics] = useState<Set<string>>(new Set());
+  const [expandedEpics, setExpandedEpics] = useState(new Set<string>());
   const mountedRef = useRef(true);
 
   const toggleEpic = useCallback((epicId: string) => {
@@ -369,6 +380,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   }, [apiBaseUrl, showToast, fetchBoard]);
 
   const handleFixTask = useCallback(async (taskId: string) => {
+    setFixingTaskId(taskId);
     try {
       const response = await fetch(`${apiBaseUrl}/api/board/fix-task`, {
         method: 'POST',
@@ -380,10 +392,14 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
         showToast(payload?.message || 'Fix task failed', 'danger');
         return;
       }
-      showToast(`Task fix initiated: ${taskId}`, 'success');
+      showToast(`Task fix completed: ${taskId}`, 'success');
       await fetchBoard(true);
     } catch (err: any) {
       showToast(err.message || 'Fix task failed', 'danger');
+    } finally {
+      if (mountedRef.current) {
+        setFixingTaskId(null);
+      }
     }
   }, [apiBaseUrl, showToast, fetchBoard]);
 
@@ -517,7 +533,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
 
                       if (!isCollapsible) {
                         return col.tasks.map((task) => (
-                          <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} />
+                          <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} isFixing={fixingTaskId === task.id} />
                         ));
                       }
 
@@ -552,7 +568,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                             const expanded = expandedEpics.has(task.id);
                             return (
                               <div key={task.id} className="flex flex-col gap-2">
-                                <BoardCard task={task} epic allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} />
+                                <BoardCard task={task} epic allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} isFixing={fixingTaskId === task.id} />
                                 <button
                                   type="button"
                                   onClick={() => toggleEpic(task.id)}
@@ -564,14 +580,14 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                 {expanded && (
                                   <div className="ml-2 border-l-2 border-utility-purple-200 pl-2 flex flex-col gap-2">
                                     {children.map((child) => (
-                                      <BoardCard key={child.id} task={child} epic={false} allTasks={tasks} onClick={() => setSelectedTask(child)} onFix={handleFixTask} />
+                                      <BoardCard key={child.id} task={child} epic={false} allTasks={tasks} onClick={() => setSelectedTask(child)} onFix={handleFixTask} isFixing={fixingTaskId === child.id} />
                                     ))}
                                   </div>
                                 )}
                               </div>
                             );
                           }
-                          return <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} />;
+                          return <BoardCard key={task.id} task={task} epic={isEpic(task, tasks)} allTasks={tasks} onClick={() => setSelectedTask(task)} onFix={handleFixTask} isFixing={fixingTaskId === task.id} />;
                         });
                     })()
                   )}
