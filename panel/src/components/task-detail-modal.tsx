@@ -132,13 +132,6 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl }: TaskDetailM
                 </div>
               )}
 
-              {!loading && !error && !markdown && (
-                <div className="rounded-lg border border-dashed border-secondary bg-secondary p-8 text-center">
-                  <p className="text-sm font-medium text-tertiary">No description yet</p>
-                  <p className="mt-1 text-xs text-quaternary">This task file only contains metadata. The description will be added when the task starts.</p>
-                </div>
-              )}
-
               {!loading && !error && renderedHtml && (
                 <div
                   className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-primary prose-p:text-secondary prose-li:text-secondary prose-strong:text-primary prose-a:text-brand-primary [&_input[type=checkbox]]:mr-2 [&_input[type=checkbox]]:accent-utility-success-500"

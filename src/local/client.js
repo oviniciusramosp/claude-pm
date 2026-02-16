@@ -95,8 +95,7 @@ export class LocalBoardClient {
     }
 
     const content = await fs.readFile(task._filePath, 'utf8');
-    const { body } = parseFrontmatter(content);
-    return body;
+    return content;
   }
 
   async updateCheckboxes(taskId, completedAcs) {
