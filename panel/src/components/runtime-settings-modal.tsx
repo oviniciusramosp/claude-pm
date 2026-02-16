@@ -1,6 +1,6 @@
 // panel/src/components/runtime-settings-modal.tsx
 
-import { Activity, File03, Cpu02 } from '@untitledui/icons';
+import { Activity, File03, CpuChip02 } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { Toggle } from '@/components/base/toggle/toggle';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
@@ -42,7 +42,7 @@ export function RuntimeSettingsModal({
             <div className="mt-4 space-y-4 rounded-lg border border-secondary bg-secondary p-4">
               <div className="space-y-2">
                 <label htmlFor="model-override" className="flex items-center gap-2 text-sm font-medium text-secondary">
-                  <Icon icon={Cpu02} className="size-4" />
+                  <Icon icon={CpuChip02} className="size-4" />
                   Claude Model
                 </label>
                 <select
