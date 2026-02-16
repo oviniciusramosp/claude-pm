@@ -137,6 +137,7 @@ export class Orchestrator {
     this.claudeCompletedTaskIds = new Map();
     this.watchdog = new Watchdog({ config, logger });
     this.halted = false;
+    this.paused = true; // Start paused by default
   }
 
   async _recordTaskUsage(task, execution) {
@@ -152,6 +153,10 @@ export class Orchestrator {
   schedule(reason, options = {}) {
     if (this.halted) {
       this.logger.warn('Orchestrator halted. Ignoring schedule request.');
+      return;
+    }
+
+    if (this.paused) {
       return;
     }
 
@@ -219,8 +224,29 @@ export class Orchestrator {
       currentTaskName: this.currentTaskName,
       queuedReasons: this.pendingReasons,
       halted: this.halted,
+      paused: this.paused,
       mode: this.pendingMode
     };
+  }
+
+  pause() {
+    if (this.paused) {
+      return false;
+    }
+
+    this.paused = true;
+    this.logger.info('Orchestrator paused. Task execution will not start until resumed.');
+    return true;
+  }
+
+  unpause() {
+    if (!this.paused) {
+      return false;
+    }
+
+    this.paused = false;
+    this.logger.info('Orchestrator resumed. Task execution can now proceed.');
+    return true;
   }
 
   resume() {

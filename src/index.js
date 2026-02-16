@@ -151,6 +151,34 @@ app.post('/resume', (req, res) => {
   res.json({ ok: true, message: 'Orchestrator resumed' });
 });
 
+app.post('/pause', (req, res) => {
+  if (!checkManualToken(req, res)) {
+    return;
+  }
+
+  const paused = orchestrator.pause();
+  if (!paused) {
+    res.status(409).json({ ok: false, message: 'Orchestrator is already paused' });
+    return;
+  }
+
+  res.json({ ok: true, message: 'Orchestrator paused' });
+});
+
+app.post('/unpause', (req, res) => {
+  if (!checkManualToken(req, res)) {
+    return;
+  }
+
+  const unpaused = orchestrator.unpause();
+  if (!unpaused) {
+    res.status(409).json({ ok: false, message: 'Orchestrator is already running' });
+    return;
+  }
+
+  res.json({ ok: true, message: 'Orchestrator resumed. Task execution can now proceed.' });
+});
+
 app.get('/settings/runtime', (req, res) => {
   if (!checkManualToken(req, res)) {
     return;
