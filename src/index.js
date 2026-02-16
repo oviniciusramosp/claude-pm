@@ -1,9 +1,11 @@
+import path from 'node:path';
 import express from 'express';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { LocalBoardClient } from './local/client.js';
 import { Orchestrator } from './orchestrator.js';
 import { RunStore } from './runStore.js';
+import { UsageStore } from './usageStore.js';
 import { syncClaudeMd } from './claudeMdManager.js';
 const app = express();
 
@@ -12,11 +14,15 @@ app.use(express.json({ limit: '2mb' }));
 const boardClient = new LocalBoardClient(config);
 await boardClient.initialize();
 const runStore = new RunStore(config.state.runStorePath);
+const usageStore = new UsageStore(
+  path.resolve(process.cwd(), process.env.USAGE_STORE_PATH || '.data/usage.json')
+);
 const orchestrator = new Orchestrator({
   config,
   logger,
   boardClient,
-  runStore
+  runStore,
+  usageStore
 });
 
 if (config.claude.injectClaudeMd) {
@@ -135,7 +141,8 @@ app.get('/settings/runtime', (req, res) => {
   res.json({
     claude: {
       streamOutput: Boolean(config.claude.streamOutput),
-      logPrompt: Boolean(config.claude.logPrompt)
+      logPrompt: Boolean(config.claude.logPrompt),
+      modelOverride: config.claude.modelOverride || ''
     }
   });
 });
@@ -150,17 +157,47 @@ app.post('/settings/runtime', (req, res) => {
   config.claude.streamOutput = parseBooleanValue(claude.streamOutput, config.claude.streamOutput);
   config.claude.logPrompt = parseBooleanValue(claude.logPrompt, config.claude.logPrompt);
 
+  if (typeof claude.modelOverride === 'string') {
+    config.claude.modelOverride = claude.modelOverride;
+  }
+
   logger.info(
-    `Runtime settings updated (streamOutput=${config.claude.streamOutput}, logPrompt=${config.claude.logPrompt})`
+    `Runtime settings updated (streamOutput=${config.claude.streamOutput}, logPrompt=${config.claude.logPrompt}, modelOverride=${config.claude.modelOverride || 'auto'})`
   );
 
   res.json({
     ok: true,
     claude: {
       streamOutput: Boolean(config.claude.streamOutput),
-      logPrompt: Boolean(config.claude.logPrompt)
+      logPrompt: Boolean(config.claude.logPrompt),
+      modelOverride: config.claude.modelOverride || ''
     }
   });
+});
+
+app.get('/usage/weekly', async (req, res) => {
+  if (!checkManualToken(req, res)) {
+    return;
+  }
+
+  try {
+    const summary = await usageStore.getWeeklySummary();
+
+    res.json({
+      ok: true,
+      weekKey: summary.weekKey,
+      inputTokens: summary.inputTokens,
+      outputTokens: summary.outputTokens,
+      cacheCreationInputTokens: summary.cacheCreationInputTokens,
+      cacheReadInputTokens: summary.cacheReadInputTokens,
+      totalTokens: summary.totalTokens,
+      totalCostUsd: summary.totalCostUsd,
+      taskCount: summary.taskCount,
+      tasks: summary.tasks
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, message: error.message });
+  }
 });
 
 app.post('/sync-claude-md', (req, res) => {

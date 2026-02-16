@@ -57,6 +57,7 @@ export type ToastState = Toast[];
 export interface RuntimeSettings {
   streamOutput: boolean;
   logPrompt: boolean;
+  modelOverride: string;
 }
 
 export interface LogSourceMeta {
@@ -104,4 +105,35 @@ export interface BoardTask {
   lastEditedTime: string;
   acTotal: number;
   acDone: number;
+}
+
+export interface WeeklyUsageData {
+  ok: boolean;
+  weekKey?: string;
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationInputTokens?: number;
+  cacheReadInputTokens?: number;
+  totalCostUsd?: number;
+  taskCount: number;
+  tasks: Record<string, { totalTokens: number; taskName: string }>;
+}
+
+export interface GitCommit {
+  hash: string;
+  shortHash: string;
+  authorName: string;
+  authorEmail: string;
+  date: string;
+  subject: string;
+  body: string;
+  refs: string[];
+  isAutomation: boolean;
+  conventional: {
+    type: string;
+    scope: string | null;
+    description: string;
+  } | null;
+  taskId: string | null;
 }

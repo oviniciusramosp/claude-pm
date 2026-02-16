@@ -58,6 +58,7 @@ export const config = {
     streamOutput: boolean('CLAUDE_STREAM_OUTPUT', false),
     logPrompt: boolean('CLAUDE_LOG_PROMPT', true),
     fullAccess: boolean('CLAUDE_FULL_ACCESS', false),
+    modelOverride: process.env.CLAUDE_MODEL_OVERRIDE || '',
     opusReviewEnabled: boolean('OPUS_REVIEW_ENABLED', false),
     epicReviewEnabled: boolean('EPIC_REVIEW_ENABLED', false),
     forceTestCreation: boolean('FORCE_TEST_CREATION', false),

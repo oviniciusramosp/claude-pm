@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import { resolveAcRef } from './acParser.js';
+
 const FIXED_CLAUDE_COMMAND = '/opt/homebrew/bin/claude --print';
 
 function isLikelyTaskContract(line) {
@@ -64,7 +66,43 @@ function extractToolUseProgress(event) {
   return toolBlocks.map(formatToolProgress);
 }
 
-const AC_COMPLETE_MARKER = '[AC_COMPLETE] ';
+const LEGACY_AC_MARKER = '[AC_COMPLETE] ';
+
+function parseAcCompleteJson(text) {
+  const trimmed = (text || '').trim();
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+    return null;
+  }
+  if (!trimmed.includes('"ac_complete"')) {
+    return null;
+  }
+  if (trimmed.includes('"status"')) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (
+      parsed &&
+      typeof parsed.ac_complete === 'number' &&
+      Number.isInteger(parsed.ac_complete) &&
+      parsed.ac_complete > 0
+    ) {
+      return parsed.ac_complete;
+    }
+  } catch {
+    // Not valid JSON
+  }
+  return null;
+}
+
+function isAcCompleteJson(line) {
+  const trimmed = (line || '').trim();
+  return (
+    trimmed.startsWith('{') &&
+    trimmed.includes('"ac_complete"') &&
+    !trimmed.includes('"status"')
+  );
+}
 
 function extractAcCompletions(event) {
   if (!event || event.role !== 'assistant') {
@@ -82,10 +120,19 @@ function extractAcCompletions(event) {
     const lines = block.text.split('\n');
     for (const line of lines) {
       const trimmed = line.trim();
-      if (trimmed.startsWith(AC_COMPLETE_MARKER)) {
-        const acText = trimmed.slice(AC_COMPLETE_MARKER.length).trim();
-        if (acText) {
-          completed.push(acText);
+
+      // New format: per-AC JSON
+      const acNumber = parseAcCompleteJson(trimmed);
+      if (acNumber !== null) {
+        completed.push({ type: 'numbered', index: acNumber });
+        continue;
+      }
+
+      // Legacy fallback: [AC_COMPLETE] AC-<number>
+      if (trimmed.startsWith(LEGACY_AC_MARKER)) {
+        const acRaw = trimmed.slice(LEGACY_AC_MARKER.length).trim();
+        if (acRaw) {
+          completed.push(resolveAcRef(acRaw));
         }
       }
     }
@@ -96,10 +143,79 @@ function extractAcCompletions(event) {
 
 function extractAcFromPlainLine(line) {
   const trimmed = (line || '').trim();
-  if (trimmed.startsWith(AC_COMPLETE_MARKER)) {
-    const acText = trimmed.slice(AC_COMPLETE_MARKER.length).trim();
-    return acText || null;
+
+  // New format: per-AC JSON
+  const acNumber = parseAcCompleteJson(trimmed);
+  if (acNumber !== null) {
+    return { type: 'numbered', index: acNumber };
   }
+
+  // Legacy fallback: [AC_COMPLETE] AC-<number>
+  if (trimmed.startsWith(LEGACY_AC_MARKER)) {
+    const acRaw = trimmed.slice(LEGACY_AC_MARKER.length).trim();
+    return acRaw ? resolveAcRef(acRaw) : null;
+  }
+
+  return null;
+}
+
+function collectAcCompletionsFromStdout(stdout, isStreamJson) {
+  const results = [];
+  if (!stdout) {
+    return results;
+  }
+
+  const lines = stdout.trim().split('\n').filter(Boolean);
+
+  for (const line of lines) {
+    if (isStreamJson) {
+      const event = parseJsonLine(line);
+      if (!event || event.role !== 'assistant') {
+        continue;
+      }
+      const content = Array.isArray(event.content) ? event.content : [];
+      for (const block of content) {
+        if (block.type !== 'text' || !block.text) {
+          continue;
+        }
+        const textLines = block.text.split('\n');
+        for (const textLine of textLines) {
+          const acNum = parseAcCompleteJson(textLine.trim());
+          if (acNum !== null) {
+            results.push(acNum);
+          }
+        }
+      }
+    } else {
+      const acNum = parseAcCompleteJson(line.trim());
+      if (acNum !== null) {
+        results.push(acNum);
+      }
+    }
+  }
+
+  return [...new Set(results)];
+}
+
+function extractUsageFromStreamJson(stdout) {
+  const lines = (stdout || '').trim().split('\n').filter(Boolean);
+
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const event = parseJsonLine(lines[i]);
+    if (!event || event.type !== 'result' || !event.usage) {
+      continue;
+    }
+
+    const u = event.usage;
+    return {
+      inputTokens: u.input_tokens || 0,
+      outputTokens: u.output_tokens || 0,
+      cacheCreationInputTokens: u.cache_creation_input_tokens || 0,
+      cacheReadInputTokens: u.cache_read_input_tokens || 0,
+      totalCostUsd: event.total_cost_usd || 0
+    };
+  }
+
   return null;
 }
 
@@ -149,6 +265,11 @@ function parseJsonFromOutput(stdout) {
       continue;
     }
 
+    // Skip per-AC completion markers
+    if (line.includes('"ac_complete"') && !line.includes('"status"')) {
+      continue;
+    }
+
     try {
       return JSON.parse(line);
     } catch {
@@ -163,10 +284,10 @@ function parseJsonFromOutput(stdout) {
   }
 }
 
-function buildCommand(config, task, overrideModel) {
+function buildCommand(config, task) {
   let cmd = FIXED_CLAUDE_COMMAND;
 
-  const model = overrideModel || task.model;
+  const model = config.claude.modelOverride || task.model;
   if (model) {
     cmd += ` --model ${model}`;
   }
@@ -200,14 +321,14 @@ function summarizeCommandOutput(stderr, stdout) {
   return `${line.slice(0, 320)}...`;
 }
 
-export function runClaudeTask(task, prompt, config, { signal, overrideModel, onAcComplete } = {}) {
+export function runClaudeTask(task, prompt, config, { signal, onAcComplete } = {}) {
   return new Promise((resolve, reject) => {
     const commandEnv = { ...process.env };
     if (config.claude.oauthToken) {
       commandEnv.CLAUDE_CODE_OAUTH_TOKEN = config.claude.oauthToken;
     }
 
-    const command = buildCommand(config, task, overrideModel);
+    const command = buildCommand(config, task);
 
     const child = spawn(command, {
       shell: true,
@@ -268,7 +389,8 @@ export function runClaudeTask(task, prompt, config, { signal, overrideModel, onA
               if (onAcComplete) {
                 const acs = extractAcCompletions(event);
                 for (const ac of acs) {
-                  process.stdout.write(`[PM_AC_COMPLETE] ${ac}\n`);
+                  const label = ac.type === 'numbered' ? `AC-${ac.index}` : ac.text;
+                  process.stdout.write(`[PM_AC_COMPLETE] ${label}\n`);
                   onAcComplete(ac);
                 }
               }
@@ -279,13 +401,14 @@ export function runClaudeTask(task, prompt, config, { signal, overrideModel, onA
           if (onAcComplete) {
             const ac = extractAcFromPlainLine(line);
             if (ac) {
-              process.stdout.write(`[PM_AC_COMPLETE] ${ac}\n`);
+              const label = ac.type === 'numbered' ? `AC-${ac.index}` : ac.text;
+              process.stdout.write(`[PM_AC_COMPLETE] ${label}\n`);
               onAcComplete(ac);
               continue;
             }
           }
 
-          if (isLikelyTaskContract(line)) {
+          if (isLikelyTaskContract(line) || isAcCompleteJson(line)) {
             continue;
           }
           process.stdout.write(line + '\n');
@@ -313,7 +436,7 @@ export function runClaudeTask(task, prompt, config, { signal, overrideModel, onA
       if (signal) signal.removeEventListener('abort', onAbort);
 
       if (config.claude.streamOutput && streamLineBuffer.trim()) {
-        if (!isLikelyTaskContract(streamLineBuffer)) {
+        if (!isLikelyTaskContract(streamLineBuffer) && !isAcCompleteJson(streamLineBuffer)) {
           process.stdout.write(streamLineBuffer + '\n');
         }
         streamLineBuffer = '';
@@ -337,7 +460,8 @@ export function runClaudeTask(task, prompt, config, { signal, overrideModel, onA
         notes: parsed.notes || '',
         files: Array.isArray(parsed.files) ? parsed.files : [],
         tests: parsed.tests || '',
-        completedAcs: Array.isArray(parsed.completed_acs) ? parsed.completed_acs : [],
+        collectedAcIndices: collectAcCompletionsFromStdout(stdout, streamJsonDetected),
+        usage: streamJsonDetected ? extractUsageFromStreamJson(stdout) : null,
         stdout,
         stderr
       });

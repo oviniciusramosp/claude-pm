@@ -28,6 +28,7 @@ import { SidebarNav } from './components/sidebar-nav';
 import { SetupTab } from './components/setup-tab';
 import { FeedTab } from './components/feed-tab';
 import { BoardTab } from './components/board-tab';
+import { GitTab } from './components/git-tab';
 import { SaveConfirmModal } from './components/save-confirm-modal';
 import { RuntimeSettingsModal } from './components/runtime-settings-modal';
 import { ErrorDetailModal } from './components/error-detail-modal';
@@ -39,7 +40,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
   const [activeTab, setActiveTab] = useState(NAV_TAB_KEYS.setup);
   const [status, setStatus] = useState(null);
   const [logs, setLogs] = useState([]);
-  const [runtimeSettings, setRuntimeSettings] = useState({ streamOutput: false, logPrompt: true });
+  const [runtimeSettings, setRuntimeSettings] = useState({ streamOutput: false, logPrompt: true, modelOverride: '' });
   const [toasts, setToasts] = useState([]);
   const [busy, setBusy] = useState({});
   const [saveConfirm, setSaveConfirm] = useState({ open: false, changedKeys: [] });
@@ -195,11 +196,20 @@ export function App({ mode = 'light', setMode = () => {} }) {
     setRuntimeSettings(parseRuntimeSettingsPayload(payload));
   }, [callApi]);
 
+  const loadWeeklyUsage = useCallback(async () => {
+    try {
+      const payload = await callApi('/api/usage/weekly');
+      setWeeklyUsage(payload);
+    } catch {
+      // Silent failure — widget just shows empty state
+    }
+  }, [callApi]);
+
   useEffect(() => {
     let canceled = false;
 
     async function bootstrap() {
-      const results = await Promise.allSettled([loadConfig(), loadLogs(), loadRuntimeSettings(), refreshStatus()]);
+      const results = await Promise.allSettled([loadConfig(), loadLogs(), loadRuntimeSettings(), refreshStatus(), loadWeeklyUsage()]);
       if (canceled) return;
       const failed = results.filter((r) => r.status === 'rejected');
       if (failed.length === results.length) {
@@ -228,6 +238,10 @@ export function App({ mode = 'light', setMode = () => {} }) {
         ) {
           setBoardRefreshTrigger((prev) => prev + 1);
         }
+
+        if (msg.startsWith('Moved to Done:') || msg.startsWith('Epic moved to Done')) {
+          loadWeeklyUsage().catch(() => {});
+        }
       } catch {
         // Ignore malformed event.
       }
@@ -241,12 +255,17 @@ export function App({ mode = 'light', setMode = () => {} }) {
       refreshStatus().catch(() => {});
     }, 5000);
 
+    const usageInterval = setInterval(() => {
+      loadWeeklyUsage().catch(() => {});
+    }, 60000);
+
     return () => {
       canceled = true;
       clearInterval(interval);
+      clearInterval(usageInterval);
       events.close();
     };
-  }, [apiBaseUrl, appendLog, loadConfig, loadLogs, loadRuntimeSettings, refreshStatus, showToast]);
+  }, [apiBaseUrl, appendLog, loadConfig, loadLogs, loadRuntimeSettings, loadWeeklyUsage, refreshStatus, showToast]);
 
   const runAction = useCallback(
     async (key, endpoint, successMessage) => {
@@ -378,7 +397,8 @@ export function App({ mode = 'light', setMode = () => {} }) {
           body: JSON.stringify({
             claude: {
               streamOutput: next.streamOutput,
-              logPrompt: next.logPrompt
+              logPrompt: next.logPrompt,
+              modelOverride: next.modelOverride
             }
           })
         });
@@ -387,6 +407,39 @@ export function App({ mode = 'light', setMode = () => {} }) {
         showToast('Runtime Claude settings updated.', 'success');
       } catch (error) {
         showToast(`Could not update runtime settings: ${error.message}`, 'danger');
+      } finally {
+        setBusy((prev) => ({ ...prev, [busyKey]: false }));
+      }
+    },
+    [callApi, runtimeSettings, showToast]
+  );
+
+  const updateModelOverride = useCallback(
+    async (model) => {
+      const busyKey = 'runtime_modelOverride';
+      setBusy((prev) => ({ ...prev, [busyKey]: true }));
+
+      try {
+        const next = {
+          ...runtimeSettings,
+          modelOverride: model
+        };
+
+        await callApi('/api/automation/runtime', {
+          method: 'POST',
+          body: JSON.stringify({
+            claude: {
+              streamOutput: next.streamOutput,
+              logPrompt: next.logPrompt,
+              modelOverride: next.modelOverride
+            }
+          })
+        });
+
+        setRuntimeSettings(next);
+        showToast('Claude model setting updated.', 'success');
+      } catch (error) {
+        showToast(`Could not update model setting: ${error.message}`, 'danger');
       } finally {
         setBusy((prev) => ({ ...prev, [busyKey]: false }));
       }
@@ -549,7 +602,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
         <div className="flex items-center gap-3 border-b border-secondary bg-primary/90 px-4 py-3 backdrop-blur-xl lg:hidden">
           <button
             type="button"
-            className="rounded-lg p-1.5 text-tertiary transition hover:bg-primary_hover hover:text-secondary"
+            className="rounded-sm p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary"
             onClick={() => setSidebarOpen(true)}
             aria-label="Open navigation"
           >
@@ -584,6 +637,12 @@ export function App({ mode = 'light', setMode = () => {} }) {
               refreshTrigger={boardRefreshTrigger}
               onShowErrorDetail={(title, message) => setErrorModal({ open: true, title, message })}
             />
+          ) : activeTab === NAV_TAB_KEYS.git ? (
+            <GitTab
+              apiBaseUrl={apiBaseUrl}
+              showToast={showToast}
+              refreshTrigger={boardRefreshTrigger}
+            />
           ) : (
             <FeedTab
               logs={logs}
@@ -613,6 +672,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
         runtimeSettings={runtimeSettings}
         busy={busy}
         updateRuntimeSetting={updateRuntimeSetting}
+        updateModelOverride={updateModelOverride}
       />
 
       <ErrorDetailModal

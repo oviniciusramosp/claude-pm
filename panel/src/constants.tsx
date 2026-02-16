@@ -138,13 +138,15 @@ export const LABEL_BY_KEY = Object.fromEntries([...TEXT_FIELD_CONFIG, ...TOGGLE_
 export const NAV_TAB_KEYS = {
   setup: 'setup',
   feed: 'feed',
-  board: 'board'
+  board: 'board',
+  git: 'git'
 } as const;
 
 export const SIDEBAR_NAV_ITEMS = [
   { key: NAV_TAB_KEYS.setup, label: 'Setup', icon: Settings01 },
   { key: NAV_TAB_KEYS.feed, label: 'Feed', icon: TerminalBrowser },
-  { key: NAV_TAB_KEYS.board, label: 'Board', icon: Columns03 }
+  { key: NAV_TAB_KEYS.board, label: 'Board', icon: Columns03 },
+  { key: NAV_TAB_KEYS.git, label: 'Git', icon: GitCommit }
 ] as const;
 
 export const CLAUDE_CHAT_MAX_CHARS = 12000;
@@ -237,9 +239,31 @@ export const BOARD_TYPE_COLORS: Record<string, string> = {
 
 export const BOARD_POLL_INTERVAL_MS = 30_000;
 
+export const GIT_POLL_INTERVAL_MS = 30_000;
+
+export const GIT_CONVENTIONAL_TYPE_COLORS: Record<string, string> = {
+  feat: 'brand',
+  fix: 'error',
+  refactor: 'purple',
+  docs: 'blue',
+  style: 'gray',
+  perf: 'orange',
+  test: 'indigo',
+  chore: 'gray',
+  ci: 'gray-blue',
+  build: 'gray-blue'
+};
+
 export const FEED_TIMESTAMP_FORMATTER = new Intl.DateTimeFormat('pt-BR', {
   hour: '2-digit',
   minute: '2-digit',
   second: '2-digit',
   hour12: false
 });
+
+export const CLAUDE_MODELS = [
+  { value: '', label: 'Automatic (use task model)', description: 'Uses the model specified in each task' },
+  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6', description: 'Most capable, best for complex tasks' },
+  { value: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5', description: 'Balanced performance and speed' },
+  { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', description: 'Fast and cost-effective' }
+] as const;

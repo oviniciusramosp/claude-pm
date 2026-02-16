@@ -74,7 +74,7 @@ export function SidebarNav({
       )}
     >
       {/* Header */}
-      <div className="flex items-center gap-2.5 px-5 pb-4 pt-5">
+      <div className="flex items-center gap-3 px-5 pb-4 pt-5">
         <Icon icon={Asterisk02} className="size-6 shrink-0 text-brand-primary" />
         <div className="min-w-0">
           <h1 className="m-0 truncate text-md font-semibold text-primary">PM Automation</h1>
@@ -95,7 +95,7 @@ export function SidebarNav({
               aria-current={isActive ? 'page' : undefined}
               title={isDisabled ? 'Configuration required' : undefined}
               className={cx(
-                'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition',
+                'flex w-full items-center gap-3 rounded-sm px-3 py-2 text-sm font-medium transition',
                 isDisabled
                   ? 'cursor-not-allowed text-disabled opacity-50'
                   : isActive
@@ -115,10 +115,10 @@ export function SidebarNav({
       <div className="mx-4 mt-5 border-t border-secondary" />
 
       {/* Controls */}
-      <div className="mt-4 space-y-2.5 px-3">
+      <div className="mt-4 space-y-3 px-3">
         <div className="flex items-center gap-2 px-3">
           <p className="m-0 text-[11px] font-semibold uppercase tracking-wider text-quaternary">Controls</p>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <StatusBadge
               color={appError ? 'error' : apiRunning ? 'success' : 'gray'}
               connectionState={apiRunning ? 'active' : 'inactive'}
@@ -163,7 +163,7 @@ export function SidebarNav({
               <Button
                 size="sm"
                 color="primary"
-                className="!h-auto rounded-l-none border-l border-l-white/20 px-1.5"
+                className="!h-auto rounded-l-none border-l border-l-white/20 px-2"
                 onPress={() => setRunMenuOpen((prev) => !prev)}
                 aria-label="Run options"
                 aria-expanded={runMenuOpen}
@@ -173,7 +173,7 @@ export function SidebarNav({
             </div>
 
             {runMenuOpen && (
-              <div className="absolute left-0 right-0 z-50 mt-1 overflow-hidden rounded-lg border border-secondary bg-primary shadow-lg">
+              <div className="absolute left-0 right-0 z-50 mt-1 overflow-hidden rounded-sm border border-secondary bg-primary shadow-lg">
                 <button
                   type="button"
                   className="flex w-full items-center gap-2 px-3 py-2 text-sm font-medium text-secondary transition hover:bg-primary_hover"
@@ -216,7 +216,7 @@ export function SidebarNav({
       <div className="flex-1" />
 
       {/* Footer */}
-      <div className="px-3 pb-2">
+      <div className="px-3 pb-3">
         <button
           type="button"
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-tertiary transition hover:bg-primary_hover hover:text-secondary"
