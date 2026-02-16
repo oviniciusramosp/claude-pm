@@ -1571,6 +1571,127 @@ app.post('/api/board/fix-order', async (_req, res) => {
   }
 });
 
+app.post('/api/board/fix-task', async (req, res) => {
+  const { taskId } = req.body;
+
+  if (!taskId || typeof taskId !== 'string') {
+    res.status(400).json({ ok: false, message: 'taskId is required' });
+    return;
+  }
+
+  pushLog('info', LOG_SOURCE.panel, `Task fix requested for: ${taskId}`);
+
+  const env = await readEnvPairs();
+  const boardDir = resolveBoardDir(env);
+  const claudeWorkdir = env.CLAUDE_WORKDIR || '.';
+
+  const boardConfig = {
+    board: {
+      dir: boardDir,
+      statuses: {
+        notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+        inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+        done: env.BOARD_STATUS_DONE || 'Done'
+      },
+      typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
+    }
+  };
+
+  try {
+    const client = new LocalBoardClient(boardConfig);
+    await client.initialize();
+    const tasks = await client.listTasks();
+    const task = tasks.find((t) => t.id === taskId);
+
+    if (!task) {
+      pushLog('error', LOG_SOURCE.panel, `Task not found: ${taskId}`);
+      res.status(404).json({ ok: false, message: `Task not found: ${taskId}` });
+      return;
+    }
+
+    // Read task markdown content
+    const taskFilePath = path.join(claudeWorkdir, boardDir, task.path);
+    const taskContent = await fs.readFile(taskFilePath, 'utf-8');
+
+    // Build prompt for Claude to verify and fix ACs
+    const prompt = buildFixTaskPrompt(taskId, task.name, taskContent);
+
+    // Execute Claude in one-shot mode
+    pushLog('info', LOG_SOURCE.panel, `Running Claude to verify and fix ACs for: ${taskId}`);
+
+    const claudeModel = task.model || env.CLAUDE_DEFAULT_MODEL || 'claude-sonnet-4-5-20250929';
+    const args = ['code', '-m', claudeModel, '-q', prompt];
+
+    if (env.CLAUDE_CODE_OAUTH_TOKEN) {
+      args.push('--token', env.CLAUDE_CODE_OAUTH_TOKEN);
+    }
+
+    if (env.CLAUDE_FULL_ACCESS === 'true') {
+      args.push('--dangerously-disable-sandbox');
+    }
+
+    const spawnOpts = {
+      cwd: claudeWorkdir,
+      env: { ...process.env, ...env },
+      stdio: ['ignore', 'pipe', 'pipe']
+    };
+
+    const child = spawn('claude', args, spawnOpts);
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout?.on('data', (chunk) => {
+      const text = chunk.toString();
+      stdout += text;
+      if (env.CLAUDE_STREAM_OUTPUT === 'true') {
+        pushLog('info', LOG_SOURCE.claude, text.trim());
+      }
+    });
+
+    child.stderr?.on('data', (chunk) => {
+      const text = chunk.toString();
+      stderr += text;
+    });
+
+    const exitCode = await new Promise((resolve) => {
+      child.on('close', resolve);
+    });
+
+    if (exitCode === 0) {
+      pushLog('success', LOG_SOURCE.panel, `Task fix completed successfully: ${taskId}`);
+      res.json({ ok: true, taskId, summary: 'ACs verified and updated by Claude' });
+    } else {
+      pushLog('error', LOG_SOURCE.panel, `Task fix failed for ${taskId} (exit code ${exitCode})`);
+      res.status(500).json({ ok: false, message: `Claude execution failed (exit code ${exitCode})`, stderr: stderr.slice(0, 500) });
+    }
+  } catch (error) {
+    const msg = error.message || String(error);
+    pushLog('error', LOG_SOURCE.panel, `Task fix error for ${taskId}: ${msg}`);
+    res.status(500).json({ ok: false, message: msg });
+  }
+});
+
+function buildFixTaskPrompt(taskId, taskName, taskContent) {
+  return `You are verifying acceptance criteria for task "${taskName}" (${taskId}).
+
+The task file content is shown below. Your goal is to:
+1. Read the task acceptance criteria (markdown checkboxes: \`- [ ]\` or \`- [x]\`)
+2. Determine which acceptance criteria have been completed by examining the codebase
+3. Update the task file to check off (\`- [x]\`) any completed ACs
+
+**IMPORTANT**:
+- Only mark an AC as complete if the code/implementation clearly satisfies it
+- If unsure, leave the AC unchecked
+- After updating the file, output a brief summary of what you found
+
+Task file content:
+\`\`\`
+${taskContent}
+\`\`\`
+
+Now examine the codebase and update the task file with accurate AC completion status.`;
+}
+
 app.post('/api/claude/chat', async (req, res) => {
   const message = String(req.body?.message || '').trim();
   const model = req.body?.model || '';
