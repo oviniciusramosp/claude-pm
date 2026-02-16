@@ -1853,9 +1853,43 @@ app.post('/api/board/fix-task', async (req, res) => {
       pushLog('error', LOG_SOURCE.claude, text.trim());
     });
 
+    // Add timeout for Claude execution (5 minutes for AC fix)
+    const AC_FIX_TIMEOUT_MS = 300000; // 5 minutes
+    let timeoutId;
+    let timedOut = false;
+
     const exitCode = await new Promise((resolve) => {
       child.on('close', resolve);
+
+      timeoutId = setTimeout(() => {
+        timedOut = true;
+        pushLog('error', LOG_SOURCE.panel, `Task fix timeout for ${taskId} (${AC_FIX_TIMEOUT_MS}ms exceeded)`);
+        child.kill('SIGTERM');
+        setTimeout(() => {
+          if (!child.killed) {
+            child.kill('SIGKILL');
+          }
+        }, 5000);
+      }, AC_FIX_TIMEOUT_MS);
     });
+
+    clearTimeout(timeoutId);
+
+    if (timedOut) {
+      const errorMsg = `Task fix timed out after ${AC_FIX_TIMEOUT_MS / 1000}s`;
+      pushLog('error', LOG_SOURCE.panel, `${errorMsg}: ${taskId}`);
+
+      // Mark task as failed
+      state.fixTasks.set(taskId, {
+        status: 'failed',
+        startedAt: state.fixTasks.get(taskId)?.startedAt,
+        completedAt: new Date().toISOString(),
+        error: errorMsg
+      });
+
+      res.status(504).json({ ok: false, message: errorMsg });
+      return;
+    }
 
     if (exitCode === 0) {
       if (isEpic) {
