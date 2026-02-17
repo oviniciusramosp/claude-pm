@@ -33,8 +33,22 @@ import { SaveConfirmModal } from './components/save-confirm-modal';
 import { RuntimeSettingsModal } from './components/runtime-settings-modal';
 import { ErrorDetailModal } from './components/error-detail-modal';
 import { DebugErrorsModal } from './components/debug-errors-modal';
+import { AuthProvider, useAuth } from './contexts/auth-context';
+import { LoginPage } from './components/login-page';
 
 export function App({ mode = 'light', setMode = () => {} }) {
+  const apiBaseUrl = useMemo(resolveApiBaseUrl, []);
+
+  return (
+    <AuthProvider apiBaseUrl={apiBaseUrl}>
+      <AppInner mode={mode} setMode={setMode} apiBaseUrl={apiBaseUrl} />
+    </AuthProvider>
+  );
+}
+
+function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
+  const { user, loading } = useAuth();
+  const [serverInfo, setServerInfo] = useState(null);
   const [config, setConfig] = useState(buildInitialConfig);
   const [savedConfig, setSavedConfig] = useState(buildInitialConfig);
   const [activeTab, setActiveTab] = useState(NAV_TAB_KEYS.setup);
@@ -59,7 +73,6 @@ export function App({ mode = 'light', setMode = () => {} }) {
   const logFeedRef = useRef(null);
   const didResolveInitialTabRef = useRef(false);
 
-  const apiBaseUrl = useMemo(resolveApiBaseUrl, []);
   const currentMode = mode || 'light';
   const isDark = currentMode === 'dark';
   const validationMap = useMemo(() => {
@@ -94,6 +107,14 @@ export function App({ mode = 'light', setMode = () => {} }) {
       setServiceErrors((prev) => (prev.app ? { ...prev, app: null } : prev));
     }
   }, [apiRunning]);
+
+  // Fetch server info to check if auth is enabled
+  useEffect(() => {
+    fetch(`${apiBaseUrl}/api/server/info`)
+      .then((res) => res.json())
+      .then((data) => setServerInfo(data))
+      .catch(() => {});
+  }, [apiBaseUrl]);
 
   const onThemeToggle = useCallback(() => {
     setMode(isDark ? 'light' : 'dark');
@@ -545,6 +566,20 @@ export function App({ mode = 'light', setMode = () => {} }) {
     }));
   }, []);
 
+  // Show loading state while checking auth or fetching server info
+  if (loading || !serverInfo) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-primary">
+        <div className="text-tertiary">Loading...</div>
+      </div>
+    );
+  }
+
+  // Show login page if auth required and not authenticated
+  if (serverInfo.authEnabled && !user) {
+    return <LoginPage isDark={isDark} />;
+  }
+
   return (
     <div
       className={cx(
@@ -596,6 +631,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
         onDebugClick={() => setDebugModalOpen(true)}
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
+        serverInfo={serverInfo}
       />
 
       <main className="flex h-screen max-w-[100vw] flex-1 flex-col overflow-x-hidden lg:ml-[280px] lg:max-w-[calc(100vw-280px)]">

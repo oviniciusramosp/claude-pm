@@ -9,6 +9,7 @@ import { SIDEBAR_NAV_ITEMS } from '../constants';
 import { Icon } from './icon';
 import { StatusBadge } from './status-badge';
 import { AccessMenu } from './access-menu';
+import { UserMenu } from './user-menu';
 
 export function SidebarNav({
   activeTab,
@@ -31,7 +32,8 @@ export function SidebarNav({
   unreadFeedCount,
   onDebugClick,
   sidebarOpen,
-  setSidebarOpen
+  setSidebarOpen,
+  serverInfo
 }: {
   activeTab: string;
   setActiveTab: (tab: string) => void;
@@ -54,6 +56,7 @@ export function SidebarNav({
   onDebugClick: () => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
+  serverInfo?: any;
 }) {
   const [workMenuOpen, setWorkMenuOpen] = useState(false);
   const [accessMenuOpen, setAccessMenuOpen] = useState(false);
@@ -308,6 +311,8 @@ export function SidebarNav({
           <Icon icon={isDark ? Sun : Moon01} className="size-5" />
           <span>{isDark ? 'Light Mode' : 'Dark Mode'}</span>
         </button>
+
+        {serverInfo?.authEnabled && <UserMenu compact />}
       </div>
     </aside>
   );

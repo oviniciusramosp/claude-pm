@@ -7,10 +7,16 @@ import readline from 'node:readline';
 import process from 'node:process';
 import dotenv from 'dotenv';
 import express from 'express';
+import cookieParser from 'cookie-parser';
+import passport from 'passport';
+import rateLimit from 'express-rate-limit';
 import { LocalBoardClient } from '../src/local/client.js';
 import { isEpicTask, sortCandidates } from '../src/selectTask.js';
 import { parseFrontmatter } from '../src/local/frontmatter.js';
 import { generateStoryFileName } from '../src/local/helpers.js';
+import { configurePassport, getEnabledProviders } from '../src/auth/passport-config.js';
+import { generateToken, getCookieOptions } from '../src/auth/jwt.js';
+import { requireAuth, optionalAuth } from '../src/auth/middleware.js';
 
 dotenv.config();
 
@@ -83,6 +89,10 @@ function startCloudflaredTunnel() {
         tunnelState.url = match[0];
         tunnelState.status = 'active';
         console.log(`🌐 Cloudflare Tunnel active: ${tunnelState.url}`);
+        // Reconfigure Passport with tunnel URL for OAuth callbacks
+        if (isPublicMode) {
+          configurePassport(tunnelState.url);
+        }
       }
     });
 
@@ -93,6 +103,10 @@ function startCloudflaredTunnel() {
         tunnelState.url = match[0];
         tunnelState.status = 'active';
         console.log(`🌐 Cloudflare Tunnel active: ${tunnelState.url}`);
+        // Reconfigure Passport with tunnel URL for OAuth callbacks
+        if (isPublicMode) {
+          configurePassport(tunnelState.url);
+        }
       }
     });
 
@@ -215,6 +229,23 @@ const CLAUDE_RAW_NOISE_PATTERNS = [
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
+app.use(cookieParser());
+app.use(passport.initialize());
+
+// Configure Passport with OAuth strategies (only in public mode)
+if (isPublicMode) {
+  // Note: callbackBaseUrl will be updated once tunnel URL is available
+  const callbackBaseUrl = `http://localhost:${panelPort}`;
+  configurePassport(callbackBaseUrl);
+}
+
+// Rate limiting for auth routes
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 requests per window
+  message: 'Too many authentication attempts, please try again later'
+});
+
 app.use('/panel', express.static(panelDistPath));
 
 function pushLog(level, source, message, extra) {
@@ -1383,6 +1414,63 @@ app.get('/panel/*', (req, res, next) => {
   });
 });
 
+// ── Auth Routes ────────────────────────────────────────────────────
+
+// OAuth initiation
+app.get('/auth/login/:provider', authLimiter, (req, res, next) => {
+  const { provider } = req.params;
+  const enabledProviders = getEnabledProviders();
+
+  if (!enabledProviders.includes(provider)) {
+    return res.status(400).json({ error: `Provider ${provider} is not configured` });
+  }
+
+  passport.authenticate(provider, { session: false })(req, res, next);
+});
+
+// GitHub OAuth callback
+app.get('/auth/github/callback', authLimiter, passport.authenticate('github', { session: false }), (req, res) => {
+  const token = generateToken(req.user);
+  res.cookie('pm_auth_token', token, getCookieOptions());
+
+  // Redirect to original requested page or default to /panel/feed
+  const returnTo = req.query.state || '/panel/feed';
+  const safeReturnTo = returnTo.startsWith('/panel/') ? returnTo : '/panel/feed';
+  res.redirect(safeReturnTo);
+});
+
+// Google OAuth callback
+app.get('/auth/google/callback', authLimiter, passport.authenticate('google', { session: false }), (req, res) => {
+  const token = generateToken(req.user);
+  res.cookie('pm_auth_token', token, getCookieOptions());
+
+  // Redirect to original requested page or default to /panel/feed
+  const returnTo = req.query.state || '/panel/feed';
+  const safeReturnTo = returnTo.startsWith('/panel/') ? returnTo : '/panel/feed';
+  res.redirect(safeReturnTo);
+});
+
+// Logout
+app.post('/auth/logout', (req, res) => {
+  res.clearCookie('pm_auth_token');
+  res.json({ success: true });
+});
+
+// Current user info
+app.get('/api/auth/user', optionalAuth, (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ authenticated: false });
+  }
+  res.json({ authenticated: true, user: req.user });
+});
+
+// Available auth providers
+app.get('/api/auth/providers', (_req, res) => {
+  res.json({ providers: getEnabledProviders() });
+});
+
+// ── Server Info & API Routes ───────────────────────────────────────
+
 app.get('/api/server/info', (_req, res) => {
   const lanIp = getLocalNetworkIp();
   res.json({
@@ -1390,8 +1478,22 @@ app.get('/api/server/info', (_req, res) => {
     lanUrl: lanIp ? `http://${lanIp}:${panelPort}` : null,
     tunnelUrl: tunnelState.url,
     tunnelStatus: tunnelState.status,
-    tunnelError: tunnelState.error
+    tunnelError: tunnelState.error,
+    isPublicMode,
+    authEnabled: isPublicMode,
+    authProviders: isPublicMode ? getEnabledProviders() : []
   });
+});
+
+// Protect all /api/* routes (except /api/auth/* which handle their own auth)
+app.use('/api', (req, res, next) => {
+  // Skip auth check for auth-related endpoints
+  if (req.path.startsWith('/auth/') || req.path === '/server/info') {
+    return next();
+  }
+
+  // Apply auth middleware
+  requireAuth(isPublicMode)(req, res, next);
 });
 
 app.get('/api/status', async (_req, res) => {

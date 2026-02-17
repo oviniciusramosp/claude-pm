@@ -473,7 +473,68 @@ Click the **"PM Automation"** header in the sidebar to see the QR code and acces
 - Install `cloudflared`: `brew install cloudflared`
 - No account or configuration needed — uses Cloudflare's free quick tunnel feature
 
-**Backend endpoint:** `GET /api/server/info` returns `{ localUrl, lanUrl, tunnelUrl, tunnelStatus, tunnelError }`.
+**Backend endpoint:** `GET /api/server/info` returns `{ localUrl, lanUrl, tunnelUrl, tunnelStatus, tunnelError, isPublicMode, authEnabled, authProviders }`.
+
+### Authentication (Public Mode)
+
+When the panel runs in public mode (`npm run panel:public`), OAuth authentication protects the panel from unauthorized access. **Authentication is disabled in local mode** to preserve development convenience.
+
+#### Setup
+
+1. **Generate JWT secret:**
+   ```bash
+   openssl rand -base64 32
+   ```
+   Add to `.env`: `JWT_SECRET=<generated-secret>`
+
+2. **Configure OAuth provider (GitHub or Google):**
+
+   **GitHub:**
+   - Go to [GitHub OAuth Apps](https://github.com/settings/developers)
+   - Create new OAuth app
+   - Homepage URL: `http://localhost:4100`
+   - Callback URL: `http://localhost:4100/auth/github/callback`
+   - Copy Client ID and Secret to `.env` as `OAUTH_GITHUB_CLIENT_ID` and `OAUTH_GITHUB_CLIENT_SECRET`
+
+   **Google:**
+   - Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+   - Create OAuth 2.0 Client ID
+   - Authorized JavaScript origins: `http://localhost:4100`
+   - Authorized redirect URIs: `http://localhost:4100/auth/google/callback`
+   - Copy Client ID and Secret to `.env` as `OAUTH_GOOGLE_CLIENT_ID` and `OAUTH_GOOGLE_CLIENT_SECRET`
+
+3. **Optional: Restrict by email:**
+   ```bash
+   AUTH_ALLOWED_EMAILS=you@example.com,teammate@example.com
+   ```
+
+#### How It Works
+
+- **Local mode** (`npm run panel`): No authentication required
+- **Public mode** (`npm run panel:public`): All `/api/*` endpoints require JWT cookie (except `/api/auth/*` and `/api/server/info`)
+- Users log in via OAuth (GitHub or Google)
+- JWT stored in httpOnly cookie with sameSite=strict (expires in 7 days by default)
+- User info (name, email, avatar) shown in sidebar
+- Logout clears cookie and redirects to login page
+
+#### Cloudflare Tunnel Callbacks
+
+Cloudflare quick tunnels generate random URLs on each restart. You must update your OAuth app's callback URL to match the tunnel URL shown in the terminal when you start the panel with `npm run panel:public`.
+
+**Example:**
+- Local callback: `http://localhost:4100/auth/github/callback`
+- Tunnel callback: `https://random-name.trycloudflare.com/auth/github/callback`
+
+**Note:** Cloudflare Tunnel URLs are ephemeral — they change on each restart. For production use, consider a [named Cloudflare tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) or static domain.
+
+#### Security Features
+
+- **httpOnly cookies**: Prevents XSS attacks from stealing tokens
+- **sameSite=strict**: Basic CSRF protection
+- **Rate limiting**: 10 authentication attempts per 15 minutes
+- **Email whitelist**: Optional team access control
+- **Redirect validation**: Prevents open redirect attacks
+- **Mode-based enforcement**: Auth only required in public mode
 
 ### Panel Architecture
 - **Frontend**: React + Tailwind CSS + Base UI components, built with Vite (`panel/src/`).

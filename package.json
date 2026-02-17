@@ -1,6 +1,6 @@
 {
   "name": "product-manager-automation",
-  "version": "1.53.7",
+  "version": "1.54.0",
   "description": "Product Manager automation with local file-based board + Claude Code",
   "type": "module",
   "engines": {
@@ -23,9 +23,15 @@
     "@react-stately/utils": "^3.11.0",
     "@tailwindcss/typography": "^0.5.19",
     "@untitledui/icons": "^0.0.21",
+    "cookie-parser": "^1.4.7",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
+    "express-rate-limit": "^8.2.1",
+    "jsonwebtoken": "^9.0.3",
     "marked": "^17.0.2",
+    "passport": "^0.7.0",
+    "passport-github2": "^0.1.12",
+    "passport-google-oauth20": "^2.0.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.4",
     "react-aria-components": "^1.15.1",
