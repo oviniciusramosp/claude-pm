@@ -163,7 +163,7 @@ function ProgressiveLogBubble({
 
           {expanded ? (
             <div className="relative mt-2">
-              <pre className="m-0 max-h-[400px] overflow-auto rounded-sm bg-primary/50 p-3 text-xs leading-relaxed text-current">
+              <pre className="m-0 max-h-[400px] max-w-full overflow-auto whitespace-pre-wrap break-words rounded-sm bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3">
                 {expandableContent}
               </pre>
               <Button
@@ -213,7 +213,7 @@ function ExpandablePrompt({
 
       {expanded ? (
         <div className="relative">
-          <pre className="m-0 max-h-[400px] overflow-auto rounded-sm bg-primary/50 p-3 text-xs leading-relaxed text-current">
+          <pre className="m-0 max-h-[400px] max-w-full overflow-auto whitespace-pre-wrap break-words rounded-sm bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3">
             {content}
           </pre>
           <Button
@@ -480,7 +480,7 @@ export function FeedTab({
   }, [logs, logFeedRef]);
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col gap-3 rounded-xl border border-secondary bg-primary p-3 shadow-sm sm:gap-4 sm:p-4">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden rounded-xl border border-secondary bg-primary p-3 shadow-sm sm:gap-4 sm:p-4">
       <div className="space-y-1">
         <h2 className="m-0 inline-flex items-center gap-2 text-lg font-semibold text-primary sm:text-xl">
           <Icon icon={TerminalBrowser} className="size-5" />
@@ -508,7 +508,7 @@ export function FeedTab({
 
       <div
         ref={logFeedRef}
-        className="min-h-0 flex-1 space-y-2 overflow-auto rounded-lg border border-secondary bg-secondary p-3"
+        className="min-h-0 min-w-0 flex-1 space-y-2 overflow-y-auto overflow-x-hidden rounded-lg border border-secondary bg-secondary p-2 sm:p-3"
       >
         {groupedLogs.map((item, index) => {
           // Check if this is a progressive log group
@@ -536,7 +536,7 @@ export function FeedTab({
               >
                 <div
                   className={cx(
-                    'flex w-full max-w-[min(95%,900px)] items-end gap-2',
+                    'flex w-full min-w-0 max-w-[min(95%,900px)] items-end gap-2',
                     isOutgoing ? 'justify-end' : 'justify-start'
                   )}
                 >
@@ -548,7 +548,7 @@ export function FeedTab({
 
                   <div
                     className={cx(
-                      'group/msg max-w-[min(86%,760px)] rounded-xl px-4 py-3 shadow-xs',
+                      'group/msg min-w-0 max-w-[min(86%,760px)] rounded-xl px-3 py-2.5 shadow-xs sm:px-4 sm:py-3',
                       isOutgoing ? 'rounded-br-sm' : 'rounded-bl-sm',
                       logToneClasses(level, sourceMeta.side, sourceMeta.directClaude, 'progressive-log', true),
                       'ring-1 ring-brand/45'
@@ -609,7 +609,7 @@ export function FeedTab({
             >
               <div
                 className={cx(
-                  'flex w-full max-w-[min(95%,900px)] items-end gap-2',
+                  'flex w-full min-w-0 max-w-[min(95%,900px)] items-end gap-2',
                   isOutgoing ? 'justify-end' : 'justify-start'
                 )}
               >
@@ -621,7 +621,7 @@ export function FeedTab({
 
                 <div
                   className={cx(
-                    'group/msg max-w-[min(86%,760px)] rounded-xl px-4 py-3 shadow-xs',
+                    'group/msg min-w-0 max-w-[min(86%,760px)] rounded-xl px-3 py-2.5 shadow-xs sm:px-4 sm:py-3',
                     isOutgoing ? 'rounded-br-sm' : 'rounded-bl-sm',
                     logToneClasses(level, sourceMeta.side, sourceMeta.directClaude, specialBubble, validationReport?.valid ?? true),
                     specialBubble === 'validation-report'
