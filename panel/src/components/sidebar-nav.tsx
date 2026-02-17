@@ -114,7 +114,7 @@ export function SidebarNav({
               <Icon icon={item.icon} className="size-5" />
               <span>{item.label}</span>
               {showBadge ? (
-                <span className="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-utility-brand-600 text-[11px] font-bold text-white dark:bg-utility-brand-800 dark:text-utility-brand-300">
+                <span className="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-primary-solid text-[11px] font-bold text-primary">
                   {unreadFeedCount > 99 ? '99+' : unreadFeedCount}
                 </span>
               ) : null}
@@ -133,7 +133,7 @@ export function SidebarNav({
           <div className="flex items-center gap-2">
             <Tooltip
               title={appError ? "App Error" : apiRunning ? "App Running" : "App Stopped"}
-              description={appError ? "Click to view error details" : apiRunning ? "Panel is connected and operational" : "Panel is not running"}
+              description={appError ? "Click to view error details" : apiRunning ? "Panel is connected and operational" : "Automation API is not running"}
             >
               <TooltipTrigger className={appError ? "cursor-pointer" : "cursor-default"}>
                 <StatusBadge
@@ -277,7 +277,7 @@ export function SidebarNav({
           <Icon icon={AlertOctagon} className="size-5" />
           <span>Debug Errors</span>
           {errorCount > 0 ? (
-            <span className="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-utility-error-600 text-[11px] font-bold text-white dark:bg-utility-error-800 dark:text-utility-error-300">
+            <span className="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-primary-solid text-[11px] font-bold text-primary">
               {errorCount > 99 ? '99+' : errorCount}
             </span>
           ) : null}
