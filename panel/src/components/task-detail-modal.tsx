@@ -715,15 +715,15 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
               </div>
             </div>
           </div>
+          <DiscardConfirmOverlay
+            open={confirmCloseOpen}
+            reviewing={reviewing}
+            onKeepEditing={() => setConfirmCloseOpen(false)}
+            onDiscard={handleConfirmDiscard}
+          />
         </Dialog>
       </Modal>
     </ModalOverlay>
-    <DiscardConfirmOverlay
-      open={confirmCloseOpen}
-      reviewing={reviewing}
-      onKeepEditing={() => setConfirmCloseOpen(false)}
-      onDiscard={handleConfirmDiscard}
-    />
     </>
   );
 }

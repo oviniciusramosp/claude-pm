@@ -554,15 +554,15 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
               </Button>
             </div>
           </div>
+          <DiscardConfirmOverlay
+            open={confirmCloseOpen}
+            reviewing={reviewing}
+            onKeepEditing={() => setConfirmCloseOpen(false)}
+            onDiscard={handleConfirmDiscard}
+          />
         </Dialog>
       </Modal>
     </ModalOverlay>
-    <DiscardConfirmOverlay
-      open={confirmCloseOpen}
-      reviewing={reviewing}
-      onKeepEditing={() => setConfirmCloseOpen(false)}
-      onDiscard={handleConfirmDiscard}
-    />
     </>
   );
 }
