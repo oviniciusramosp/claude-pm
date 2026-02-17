@@ -107,7 +107,7 @@ function formatModelName(model: string): string | null {
   return model;
 }
 
-function AcDonut({ done, total }: { done: number; total: number }) {
+function AcDonut({ done, total, label = 'ACs' }: { done: number; total: number; label?: string }) {
   const size = 20;
   const stroke = 2.5;
   const radius = (size - stroke) / 2;
@@ -117,7 +117,7 @@ function AcDonut({ done, total }: { done: number; total: number }) {
   const allDone = done === total;
 
   return (
-    <div className="shrink-0" title={`${done}/${total} ACs completed`}>
+    <div className="shrink-0" title={`${done}/${total} ${label} completed`}>
       <svg width={size} height={size} className="-rotate-90">
         <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={stroke} className="text-quaternary/40" />
         <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={stroke} strokeDasharray={circumference} strokeDashoffset={dashOffset} strokeLinecap="round" className={allDone ? 'text-utility-success-500' : 'text-utility-brand-500'} />
@@ -222,6 +222,14 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
   const isFixing = fixStatus?.status === 'running';
   const isAnyFixing = allFixStatuses && Object.values(allFixStatuses).some((s) => s.status === 'running');
 
+  // For epics, calculate progress based on child tasks with status "Done"
+  const progressDone = epic
+    ? allTasks.filter((t) => t.parentId === task.id && t.status?.toLowerCase() === 'done').length
+    : task.acDone;
+  const progressTotal = epic
+    ? allTasks.filter((t) => t.parentId === task.id).length
+    : task.acTotal;
+
   return (
     <div
       role="button"
@@ -290,7 +298,7 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
               )}
             </button>
           )}
-          {task.acTotal > 0 && <AcDonut done={task.acDone} total={task.acTotal} />}
+          {progressTotal > 0 && <AcDonut done={progressDone} total={progressTotal} label={epic ? 'tasks' : 'ACs'} />}
         </div>
       </div>
 

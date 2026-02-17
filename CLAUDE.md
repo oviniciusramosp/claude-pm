@@ -440,12 +440,42 @@ When the panel starts the automation API (via the Start button or auto-start), i
 - **Sidebar Navigation** - Persistent left sidebar with page navigation, process controls (start/stop API, run queue, status badges), runtime settings access, and theme toggle.
 - **Setup Page** - Form-based configuration wizard with validation and help tooltips for all `.env` values (Claude token, working directory, runtime toggles).
 - **Feed Page** - Real-time streaming of all logs via SSE, color-coded by level and source (Panel, API, Claude, Chat), plus Claude chat input. AC completions appear as success messages in real time.
-- **Board Page** - Kanban board with three columns (Not Started, In Progress, Done). Each task card shows a **donut chart** indicating Acceptance Criteria progress (completed/total). The board polls every 30s and refreshes on SSE events.
+- **Board Page** - Kanban board with three columns (Not Started, In Progress, Done). Each task card shows a **donut chart** indicating Acceptance Criteria progress (completed/total). The board polls every 30s and refreshes on SSE events. Supports drag-and-drop, inline task creation/editing/deletion, and AI-assisted features (see below).
+- **Review with Claude** - Inside the task create and edit modals, a "Review with Claude" button sends the task content to Claude Sonnet for optimization. Claude improves the description, acceptance criteria, technical tasks, and tests following Anthropic's prompt engineering best practices. Includes undo support and cancel-on-close.
+- **Generate Stories from Epic** - After creating an Epic, a "Generate" button appears next to the manual "+" add button on Epic cards. Claude reads the Epic description and automatically generates user story `.md` files with full acceptance criteria, technical tasks, tests, and dependencies. Capped at 15 stories per generation.
+- **Unsaved Changes Protection** - Both create and edit modals guard against accidental data loss. If the user has unsaved changes (or a review is in progress), closing the modal triggers a confirmation overlay. Users can choose to keep editing or discard changes. In-progress reviews are cancelled via AbortController when the user confirms closing.
 - **Theme Toggle** - Light/dark mode with OS preference detection (in sidebar footer).
 
 ### Panel Architecture
 - **Frontend**: React + Tailwind CSS + Base UI components, built with Vite (`panel/src/`).
 - **Backend**: Express server (`scripts/panelServer.js`) on port 4100 that manages child processes, streams logs via SSE, and proxies config/process/chat APIs.
+
+### AI-Assisted Features (Panel)
+
+The panel provides two Claude-powered features to help write better tasks:
+
+#### Review with Claude
+Available in both the **Create Task** and **Edit Task** modals via the "Review with Claude" button. When clicked:
+1. The task content (name + body) is sent to `POST /api/board/review-task`.
+2. The backend builds a structured prompt following Anthropic's prompt engineering best practices and sends it to Claude Sonnet (`claude-sonnet-4-5-20250929`) with a 2-minute timeout.
+3. Claude returns an optimized task body with improved acceptance criteria, technical tasks, tests, dependencies, and standard completion criteria.
+4. The optimized body replaces the current content in the editor.
+
+**Undo**: After a review, an "Undo Review" button appears. Clicking it reverts the body to its pre-review state.
+
+**Cancel**: If the user closes the modal while a review is in progress, the fetch is cancelled via AbortController and a neutral "Review cancelled" toast is shown.
+
+#### Generate Stories from Epic
+Available on **Epic cards** on the Board tab via the "Generate" button (next to the manual "+" add button). When clicked:
+1. The Epic's markdown is read and its description is sent to `POST /api/board/generate-stories`.
+2. The backend builds a prompt that instructs Claude to analyze the Epic and produce user stories.
+3. Claude Sonnet generates up to 15 user stories, each with: name, priority, full markdown body (acceptance criteria, technical tasks, tests, dependencies, standard completion criteria).
+4. Each story is saved as a `.md` file inside the Epic's folder using `slugFromTitle()` for the filename.
+5. The Epic auto-expands on the board and the board refreshes.
+
+**Concurrency**: Only one generation can run at a time (all Generate buttons are disabled during generation). A 3-minute timeout is used for the Claude call.
+
+**Existing children**: The prompt includes existing child task names to avoid generating duplicate stories.
 
 ## First-Time Setup
 Setup is done through the visual panel at `http://localhost:4100`.
@@ -824,6 +854,10 @@ Product Manager/
 │       │   ├── sidebar-nav.tsx       # Sidebar navigation + process controls
 │       │   ├── setup-tab.tsx         # Setup configuration form
 │       │   ├── feed-tab.tsx          # Live feed + Claude chat
+│       │   ├── board-tab.tsx         # Kanban board with drag-and-drop + AI generation
+│       │   ├── create-task-modal.tsx  # Task creation modal with Review & undo
+│       │   ├── task-detail-modal.tsx  # Task detail/edit modal with Review & undo
+│       │   ├── discard-confirm-overlay.tsx # Unsaved changes confirmation overlay
 │       │   ├── save-confirm-modal.tsx    # Save confirmation dialog
 │       │   └── runtime-settings-modal.tsx # Runtime settings dialog
 │       ├── utils/
