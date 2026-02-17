@@ -3,7 +3,7 @@
 import React, { type RefObject, useLayoutEffect, useState, useMemo } from 'react';
 import { ChevronDown, ChevronRight, Copy01, CpuChip01, Send01, TerminalBrowser, Check, ChevronSelectorVertical } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
-import { Tooltip } from './base/tooltip/tooltip';
+import { Tooltip, TooltipTrigger } from './base/tooltip/tooltip';
 import { cx } from '@/utils/cx';
 import {
   normalizeLogLevel,
@@ -772,35 +772,36 @@ export function FeedTab({
               isChatDisabled && 'cursor-not-allowed text-disabled'
             )}
           />
-          <Tooltip
-            title={
-              claudeWorking
-                ? 'Claude is busy'
-                : fixingTaskId
-                  ? 'Claude is busy'
-                  : 'Send message'
-            }
-            description={
-              claudeWorking
-                ? `Currently executing: ${orchestratorState?.currentTaskName || orchestratorState?.currentTaskId}`
-                : fixingTaskId
-                  ? `Fixing acceptance criteria for: ${fixingTaskId}`
-                  : undefined
-            }
-            delay={300}
-            isDisabled={!isChatDisabled}
-          >
+          {isChatDisabled ? (
+            <Tooltip
+              title="Claude is busy"
+              description={
+                claudeWorking
+                  ? `Currently executing: ${orchestratorState?.currentTaskName || orchestratorState?.currentTaskId}`
+                  : fixingTaskId
+                    ? `Fixing acceptance criteria for: ${fixingTaskId}`
+                    : 'Processing a request...'
+              }
+              delay={200}
+            >
+              <TooltipTrigger className="shrink-0">
+                <span className="inline-flex rounded-xs bg-disabled p-2 shadow-xs cursor-not-allowed">
+                  <Icon icon={Send01} className="size-4 text-fg-disabled" />
+                </span>
+              </TooltipTrigger>
+            </Tooltip>
+          ) : (
             <Button
               size="sm"
               color="primary"
               iconLeading={Send01}
               className="shrink-0 rounded-xs p-2! [&_svg]:!size-4"
               isLoading={Boolean(busy.chat)}
-              isDisabled={!chatDraft.trim() || isChatDisabled}
+              isDisabled={!chatDraft.trim()}
               onPress={sendClaudeChatMessage}
               aria-label="Send"
             />
-          </Tooltip>
+          )}
         </div>
       </div>
     </section>
