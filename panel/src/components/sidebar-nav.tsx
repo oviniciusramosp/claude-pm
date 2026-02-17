@@ -133,7 +133,7 @@ export function SidebarNav({
           <div className="flex items-center gap-2">
             <Tooltip
               title={appError ? "App Error" : apiRunning ? "App Running" : "App Stopped"}
-              description={appError ? "Click to view error details" : apiRunning ? "Panel is connected and operational" : "Automation API is not running"}
+              description={appError ? "Click to view error details" : apiRunning ? "Automation is connected and operational" : "Automation is not running"}
             >
               <TooltipTrigger className={appError ? "cursor-pointer" : "cursor-default"}>
                 <StatusBadge
@@ -147,7 +147,7 @@ export function SidebarNav({
             </Tooltip>
             <Tooltip
               title={apiError ? "API Error" : apiHealthStatus.connectionState === 'active' ? "API Connected" : "API Disconnected"}
-              description={apiError ? "Click to view error details" : apiHealthStatus.connectionState === 'active' ? "Automation API is healthy and responding" : "Automation API is not responding"}
+              description={apiError ? "Click to view error details" : apiHealthStatus.connectionState === 'active' ? "API is healthy and responding" : "API is not responding"}
             >
               <TooltipTrigger className={apiError ? "cursor-pointer" : "cursor-default"}>
                 <StatusBadge
