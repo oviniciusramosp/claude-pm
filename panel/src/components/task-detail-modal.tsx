@@ -2,13 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { marked } from 'marked';
-import { CpuChip01, Edit05, File06, Trash01, Users01, X } from '@untitledui/icons';
+import { AlertTriangle, CpuChip01, Edit05, File06, Stars01, Trash01, Users01, X } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
 import { BOARD_PRIORITY_COLORS, BOARD_TYPE_COLORS, CLAUDE_MODELS } from '../constants';
 import type { BoardTask } from '../types';
+
+interface ModalError {
+  message: string;
+  details: string;
+}
 
 // --- Shared form constants ---
 const TYPE_OPTIONS = ['UserStory', 'Epic', 'Bug', 'Chore', 'Discovery'] as const;
@@ -62,9 +67,10 @@ interface TaskDetailModalProps {
   showToast: (message: string, color?: 'success' | 'warning' | 'danger' | 'neutral') => void;
   onSaved?: () => void;
   onDeleted?: () => void;
+  onShowErrorDetail?: (title: string, message: string) => void;
 }
 
-export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, onSaved, onDeleted }: TaskDetailModalProps) {
+export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, onSaved, onDeleted, onShowErrorDetail }: TaskDetailModalProps) {
   const [markdown, setMarkdown] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,6 +86,10 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
   const [editBody, setEditBody] = useState('');
   const [extraFrontmatter, setExtraFrontmatter] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+
+  // Action error (save/delete)
+  const [actionError, setActionError] = useState<ModalError | null>(null);
 
   // Delete
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -117,8 +127,10 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
       fetchMarkdown(task.id);
     }
     setEditing(false);
+    setReviewing(false);
     setConfirmDelete(false);
     setDeleteEpicFolder(true);
+    setActionError(null);
     if (confirmTimerRef.current) {
       clearTimeout(confirmTimerRef.current);
       confirmTimerRef.current = null;
@@ -175,17 +187,38 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
     if (editAgents) fields.agents = editAgents;
 
     const newContent = serializeFrontmatter(fields) + '\n\n' + editBody;
+    const url = `${apiBaseUrl}/api/board/task-markdown`;
+    const requestBody = { taskId: task.id, content: newContent };
 
     setSaving(true);
+    setActionError(null);
     try {
-      const response = await fetch(`${apiBaseUrl}/api/board/task-markdown`, {
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId: task.id, content: newContent })
+        body: JSON.stringify(requestBody)
       });
-      const payload = await response.json().catch(() => ({}));
+      const contentType = response.headers.get('content-type') || '';
+      const isJson = contentType.includes('application/json');
+      const rawText = await response.text();
+      const payload = isJson ? (() => { try { return JSON.parse(rawText); } catch { return {}; } })() : {};
+
       if (!response.ok) {
-        showToast(payload?.message || 'Failed to save', 'danger');
+        const msg = payload?.message || `Failed to save (HTTP ${response.status})`;
+        setActionError({
+          message: msg,
+          details: [
+            `URL:          POST ${url}`,
+            `Task ID:      ${task.id}`,
+            `HTTP Status:  ${response.status} ${response.statusText}`,
+            `Content-Type: ${contentType || '(empty)'}`,
+            '',
+            '--- Response Body ---',
+            isJson ? JSON.stringify(payload, null, 2) : rawText.slice(0, 2000),
+            '',
+            `Timestamp:    ${new Date().toISOString()}`
+          ].join('\n')
+        });
         return;
       }
       showToast('Task saved', 'success');
@@ -193,11 +226,88 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
       setMarkdown(newContent);
       onSaved?.();
     } catch (err: any) {
-      showToast(err.message || 'Failed to save', 'danger');
+      const msg = err.message || 'Failed to save';
+      setActionError({
+        message: msg,
+        details: [
+          `URL:          POST ${url}`,
+          `Task ID:      ${task.id}`,
+          `Error:        ${msg}`,
+          `Type:         ${err.name || 'Unknown'}`,
+          '',
+          err.stack ? `--- Stack ---\n${err.stack}` : '',
+          `Timestamp:    ${new Date().toISOString()}`
+        ].filter(Boolean).join('\n')
+      });
     } finally {
       setSaving(false);
     }
   }, [task, editName, editPriority, editType, editStatus, editModel, editAgents, editBody, extraFrontmatter, apiBaseUrl, showToast, onSaved]);
+
+  const handleReview = useCallback(async () => {
+    if (!editBody.trim()) {
+      showToast('Add task content before reviewing', 'warning');
+      return;
+    }
+
+    setReviewing(true);
+    setActionError(null);
+
+    const url = `${apiBaseUrl}/api/board/review-task`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editName.trim(),
+          priority: editPriority,
+          type: editType,
+          status: editStatus,
+          model: editModel || undefined,
+          agents: editAgents || undefined,
+          body: editBody.trim()
+        })
+      });
+
+      const contentType = response.headers.get('content-type') || '';
+      const isJson = contentType.includes('application/json');
+      const rawText = await response.text();
+      const payload = isJson ? (() => { try { return JSON.parse(rawText); } catch { return {}; } })() : {};
+
+      if (!response.ok) {
+        const msg = payload?.message || `Review failed (HTTP ${response.status})`;
+        setActionError({
+          message: msg,
+          details: [
+            `URL:          POST ${url}`,
+            `HTTP Status:  ${response.status} ${response.statusText}`,
+            `Content-Type: ${contentType || '(empty)'}`,
+            '',
+            '--- Response Body ---',
+            isJson ? JSON.stringify(payload, null, 2) : rawText.slice(0, 2000),
+            '',
+            `Timestamp:    ${new Date().toISOString()}`
+          ].join('\n')
+        });
+        return;
+      }
+
+      if (payload.improvedBody) {
+        setEditBody(payload.improvedBody);
+        showToast(payload.summary || 'Task reviewed and improved', 'success');
+      } else {
+        showToast('Review completed but no changes suggested', 'neutral');
+      }
+    } catch (err: any) {
+      setActionError({
+        message: err.message || 'Review failed',
+        details: `Error: ${err.message}\nTimestamp: ${new Date().toISOString()}`
+      });
+    } finally {
+      setReviewing(false);
+    }
+  }, [editName, editPriority, editType, editStatus, editModel, editAgents, editBody, apiBaseUrl, showToast]);
 
   const handleDeleteClick = useCallback(() => {
     if (confirmDelete) {
@@ -213,23 +323,60 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
 
   const handleDelete = useCallback(async () => {
     if (!task) return;
+    const url = `${apiBaseUrl}/api/board/task`;
+    const requestBody = { taskId: task.id, deleteEpicFolder: isEpic ? deleteEpicFolder : false };
+
     setDeleting(true);
+    setActionError(null);
     try {
-      const response = await fetch(`${apiBaseUrl}/api/board/task`, {
+      const response = await fetch(url, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId: task.id, deleteEpicFolder: isEpic ? deleteEpicFolder : false })
+        body: JSON.stringify(requestBody)
       });
-      const payload = await response.json().catch(() => ({}));
+      const contentType = response.headers.get('content-type') || '';
+      const isJson = contentType.includes('application/json');
+      const rawText = await response.text();
+      const payload = isJson ? (() => { try { return JSON.parse(rawText); } catch { return {}; } })() : {};
+
       if (!response.ok) {
-        showToast(payload?.message || 'Failed to delete', 'danger');
+        const msg = payload?.message || `Failed to delete (HTTP ${response.status})`;
+        setActionError({
+          message: msg,
+          details: [
+            `URL:          DELETE ${url}`,
+            `Task ID:      ${task.id}`,
+            `HTTP Status:  ${response.status} ${response.statusText}`,
+            `Content-Type: ${contentType || '(empty)'}`,
+            '',
+            '--- Request Body ---',
+            JSON.stringify(requestBody, null, 2),
+            '',
+            '--- Response Body ---',
+            isJson ? JSON.stringify(payload, null, 2) : rawText.slice(0, 2000),
+            '',
+            `Timestamp:    ${new Date().toISOString()}`
+          ].join('\n')
+        });
         return;
       }
       showToast(`Deleted "${task.name}"`, 'success');
       onDeleted?.();
       onClose();
     } catch (err: any) {
-      showToast(err.message || 'Failed to delete', 'danger');
+      const msg = err.message || 'Failed to delete';
+      setActionError({
+        message: msg,
+        details: [
+          `URL:          DELETE ${url}`,
+          `Task ID:      ${task.id}`,
+          `Error:        ${msg}`,
+          `Type:         ${err.name || 'Unknown'}`,
+          '',
+          err.stack ? `--- Stack ---\n${err.stack}` : '',
+          `Timestamp:    ${new Date().toISOString()}`
+        ].filter(Boolean).join('\n')
+      });
     } finally {
       setDeleting(false);
       setConfirmDelete(false);
@@ -397,6 +544,30 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
               )}
             </div>
 
+            {/* Action error banner */}
+            {actionError && (
+              <div className="mx-6 mb-0 mt-0 rounded-lg border border-error-primary bg-utility-error-50 px-4 py-3">
+                <div className="flex items-start gap-2">
+                  <Icon icon={AlertTriangle} className="size-4 shrink-0 text-error-primary mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-error-primary">{actionError.message}</p>
+                    {onShowErrorDetail && (
+                      <button
+                        type="button"
+                        onClick={() => onShowErrorDetail(
+                          editing ? 'Save Task Error' : 'Delete Task Error',
+                          actionError.details
+                        )}
+                        className="mt-1 text-xs font-medium text-error-primary underline hover:no-underline"
+                      >
+                        View Details
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Footer */}
             <div className="flex items-center border-t border-secondary px-6 py-3">
               {/* Left side: Delete */}
@@ -429,10 +600,20 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
               <div className="ml-auto flex items-center gap-2">
                 {editing ? (
                   <>
-                    <Button size="md" color="secondary" onPress={handleCancelEdit} isDisabled={saving}>
+                    <Button size="md" color="secondary" onPress={handleCancelEdit} isDisabled={saving || reviewing}>
                       Cancel
                     </Button>
-                    <Button size="md" color="primary" onPress={handleSave} isLoading={saving}>
+                    <Button
+                      size="md"
+                      color="secondary"
+                      onPress={handleReview}
+                      isLoading={reviewing}
+                      isDisabled={saving || !editBody.trim()}
+                      iconLeading={<Stars01 className="size-4" />}
+                    >
+                      Review with Claude
+                    </Button>
+                    <Button size="md" color="primary" onPress={handleSave} isLoading={saving} isDisabled={reviewing}>
                       Save
                     </Button>
                   </>

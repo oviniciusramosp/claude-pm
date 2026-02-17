@@ -44,6 +44,9 @@ const state = {
 const claudeChatState = {
   running: false
 };
+const reviewTaskState = {
+  running: false
+};
 const LOG_SOURCE = {
   panel: 'panel',
   claude: 'claude',
@@ -836,11 +839,11 @@ function buildClaudePromptCommand(model) {
   return command;
 }
 
-function runClaudePrompt(prompt, model) {
+function runClaudePrompt(prompt, model, customTimeoutMs) {
   return new Promise((resolve, reject) => {
     const command = buildClaudePromptCommand(model);
     const workdir = path.resolve(cwd, process.env.CLAUDE_WORKDIR || '.');
-    const timeoutMs = resolveClaudeTimeoutMs();
+    const timeoutMs = customTimeoutMs || resolveClaudeTimeoutMs();
     const commandEnv = {
       ...process.env
     };
@@ -2455,6 +2458,154 @@ app.post('/api/claude/chat', async (req, res) => {
     res.status(500).json({ ok: false, message: error.message });
   } finally {
     claudeChatState.running = false;
+  }
+});
+
+// ── Review Task with Claude ───────────────────────────────────────────
+
+function buildReviewTaskPrompt({ name, priority, type, status, model, agents, body }) {
+  const taskType = type || 'UserStory';
+  const taskPriority = priority || 'P1';
+  const taskModel = model || '(default)';
+  const taskAgents = agents || '(none)';
+
+  return `You are an expert prompt engineer and product manager reviewing a task file for a Claude Code automation system.
+
+<context>
+This task will be executed by Claude Code (an AI coding assistant). Claude reads the task file, follows the instructions, implements the acceptance criteria, and reports completion via JSON. The quality of the task file directly determines execution success.
+</context>
+
+<task_metadata>
+- Name: ${name}
+- Type: ${taskType}
+- Priority: ${taskPriority}
+- Status: ${status || 'Not Started'}
+- Model: ${taskModel}
+- Agents: ${taskAgents}
+</task_metadata>
+
+<current_task_body>
+${body}
+</current_task_body>
+
+<review_instructions>
+Review this task and produce an improved version. Follow these quality criteria:
+
+1. **Acceptance Criteria Quality**:
+   - Each AC must be a markdown checkbox: \`- [ ] Description\`
+   - Each AC must be testable, specific, and unambiguous
+   - Avoid vague ACs like "works correctly" — specify exact behavior
+   - Include edge cases and error handling ACs when relevant
+   - Number of ACs should be proportional to task complexity (typically 4-10)
+
+2. **Task Description Clarity**:
+   - Include a clear user story or problem statement at the top
+   - For UserStory: use "As a [role], I want [goal] so that [benefit]"
+   - For Bug: include what happens (actual), what should happen (expected), reproduction steps
+   - For Chore: describe the operational goal clearly
+
+3. **Technical Tasks Section**:
+   - Break implementation into numbered, sequential steps
+   - Reference specific file paths when possible (e.g., "Create \`src/components/LoginForm.tsx\`")
+   - Each step should be actionable by Claude Code
+   - Include command-line steps when relevant (e.g., "Run \`npm install react-hook-form\`")
+
+4. **Tests Section**:
+   - Specify test file path (e.g., "\`__tests__/LoginForm.test.tsx\`")
+   - List specific test cases to write
+   - Include edge case tests
+   - For infrastructure/chore tasks, state "N/A — no business logic to test"
+
+5. **Dependencies Section**:
+   - List any prerequisites or blocking tasks
+   - Mention required APIs, packages, or configuration
+   - State "None" if there are no dependencies
+
+6. **Standard Completion Criteria**:
+   - Include checkboxes for: tests passing, TypeScript compilation, linting
+   - Include a commit message suggestion following conventional commits: \`feat|fix|chore(scope): description\`
+
+7. **Prompt Optimization for Claude Code**:
+   - Instructions must be explicit — Claude Code executes literally
+   - Avoid ambiguous language ("consider", "maybe", "if possible")
+   - Use imperative language ("Create", "Add", "Implement", "Run")
+   - Structure content with clear markdown headers (##)
+   - If the task involves modifying existing files, specify which files and what changes
+</review_instructions>
+
+<output_format>
+Return your response as a JSON object with this exact structure:
+
+{"improvedBody": "The complete improved markdown body (everything after the YAML frontmatter). Use \\n for newlines.", "summary": "A 1-2 sentence summary of what was improved"}
+
+IMPORTANT:
+- Return ONLY the JSON object, no markdown code blocks around it
+- The "improvedBody" must be the complete task body — do not omit sections
+- Preserve any existing content that is already good
+- Do not invent acceptance criteria unrelated to the task
+- Keep the same task intent and scope — improve quality, not scope
+- Use literal \\n for newlines inside the JSON string values
+</output_format>`;
+}
+
+function parseReviewResponse(reply) {
+  const text = String(reply || '').trim();
+
+  // Try to extract JSON from the response (may be wrapped in code blocks)
+  const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  const jsonStr = codeBlockMatch ? codeBlockMatch[1].trim() : text;
+
+  try {
+    const parsed = JSON.parse(jsonStr);
+    return {
+      improvedBody: parsed.improvedBody || parsed.improved_body || text,
+      summary: parsed.summary || 'Review completed'
+    };
+  } catch {
+    // If Claude didn't return valid JSON, treat the entire reply as the improved body
+    return {
+      improvedBody: text,
+      summary: 'Review completed (raw response)'
+    };
+  }
+}
+
+const REVIEW_TIMEOUT_MS = 120000; // 2 minutes
+
+app.post('/api/board/review-task', async (req, res) => {
+  const { name, priority, type, status, model, agents, body, reviewModel } = req.body;
+
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    res.status(400).json({ ok: false, message: 'Task name is required for review.' });
+    return;
+  }
+
+  if (!body || typeof body !== 'string' || !body.trim()) {
+    res.status(400).json({ ok: false, message: 'Task body is required for review.' });
+    return;
+  }
+
+  if (reviewTaskState.running) {
+    res.status(409).json({ ok: false, message: 'A review is already in progress. Please wait.' });
+    return;
+  }
+
+  reviewTaskState.running = true;
+  pushLog('info', LOG_SOURCE.panel, `Task review requested: "${name.trim()}"`);
+
+  try {
+    const prompt = buildReviewTaskPrompt({ name: name.trim(), priority, type, status, model, agents, body: body.trim() });
+    const selectedModel = reviewModel || 'claude-sonnet-4-5-20250929';
+    const { reply } = await runClaudePrompt(prompt, selectedModel, REVIEW_TIMEOUT_MS);
+    const parsed = parseReviewResponse(reply);
+
+    pushLog('success', LOG_SOURCE.panel, `Task review completed: "${name.trim()}" — ${parsed.summary}`);
+    res.json({ ok: true, improvedBody: parsed.improvedBody, summary: parsed.summary });
+  } catch (error) {
+    pushLog('error', LOG_SOURCE.panel, `Task review failed: ${error.message}`);
+    res.status(500).json({ ok: false, message: error.message });
+  } finally {
+    reviewTaskState.running = false;
   }
 });
 
