@@ -393,6 +393,29 @@ function createProcessLogForwarder({ fallbackLevel = 'info', onLog }) {
   const safeOnLog = typeof onLog === 'function' ? onLog : () => {};
   let activePromptBlock = null;
 
+  // Buffer for unstructured lines (e.g. Node.js stack traces on stderr).
+  // Lines arriving within UNSTRUCTURED_DEBOUNCE_MS of each other are grouped
+  // into a single log message instead of producing one bubble per line.
+  const UNSTRUCTURED_DEBOUNCE_MS = 150;
+  let unstructuredBuffer = [];
+  let unstructuredTimer = null;
+  let unstructuredLevel = null;
+
+  function flushUnstructuredBuffer() {
+    if (unstructuredTimer) {
+      clearTimeout(unstructuredTimer);
+      unstructuredTimer = null;
+    }
+    if (unstructuredBuffer.length === 0) {
+      return;
+    }
+    const joined = unstructuredBuffer.join('\n');
+    const level = unstructuredLevel || normalizeUiLogLevel(fallbackLevel);
+    unstructuredBuffer = [];
+    unstructuredLevel = null;
+    safeOnLog({ level, message: joined, fromLogger: false });
+  }
+
   function emitPromptBlock() {
     if (!activePromptBlock) {
       return;
@@ -417,6 +440,7 @@ function createProcessLogForwarder({ fallbackLevel = 'info', onLog }) {
     const promptHeader = parsePromptBlockHeader(cleanRaw);
 
     if (promptHeader) {
+      flushUnstructuredBuffer();
       emitPromptBlock();
       activePromptBlock = {
         title: promptHeader,
@@ -445,12 +469,30 @@ function createProcessLogForwarder({ fallbackLevel = 'info', onLog }) {
       return;
     }
 
-    safeOnLog(parsed);
+    // Structured lines (from our logger, AC markers, progress markers) are
+    // emitted immediately — flush any pending unstructured buffer first.
+    if (parsed.fromLogger || parsed.isAcComplete || parsed.isToolUse) {
+      flushUnstructuredBuffer();
+      safeOnLog(parsed);
+      return;
+    }
+
+    // Unstructured lines: buffer and debounce so multi-line output (like
+    // stack traces) is emitted as a single log message.
+    if (!unstructuredLevel) {
+      unstructuredLevel = parsed.level;
+    }
+    unstructuredBuffer.push(parsed.message);
+    if (unstructuredTimer) {
+      clearTimeout(unstructuredTimer);
+    }
+    unstructuredTimer = setTimeout(flushUnstructuredBuffer, UNSTRUCTURED_DEBOUNCE_MS);
   }
 
   return {
     handleLine,
     flush() {
+      flushUnstructuredBuffer();
       emitPromptBlock();
     }
   };
