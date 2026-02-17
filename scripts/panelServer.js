@@ -3017,7 +3017,7 @@ function buildFixEpicStoriesPrompt({ epicName, stories }) {
 
     return `Story ${i + 1}: ${s.name || '(no name)'}
 File: ${s.fileName}
-Issues: ${issues.join(', ')}
+Issues: ${issues.length > 0 ? issues.join(', ') : 'none (content OK, needs ordering)'}
 
 Current frontmatter:
 ---
@@ -3034,13 +3034,15 @@ ${s.body?.slice(0, 500) || '(empty)'}
 `;
   }).join('\n---\n\n');
 
-  return `You are a senior product manager and prompt engineering expert. Your job is to fix incomplete or malformed user stories in an Epic AND organize them in the correct logical order.
+  return `You are a senior product manager and prompt engineering expert. Your job is to fix and reorder ALL user stories in an Epic.
 
 <epic_name>${epicName}</epic_name>
 
-<stories_to_fix>
+<total_stories>${stories.length}</total_stories>
+
+<all_stories>
 ${storiesList}
-</stories_to_fix>
+</all_stories>
 
 <instructions>
 CRITICAL FIRST STEP: Before fixing individual stories, analyze all stories together and determine the LOGICAL EXECUTION ORDER. Consider:
@@ -3091,10 +3093,10 @@ Once you've determined the correct order, proceed with fixing each story:
    - If missing type: set \`type: UserStory\`
    - If missing priority: analyze the story and assign P0 (critical), P1 (high), P2 (medium), or P3 (low)
 
-2. Return a JSON array with the fixed stories IN THE CORRECT LOGICAL ORDER (the order they should be executed in). The array order determines the final sequential numbering (first story = S{epic}-1, second = S{epic}-2, etc.).
+2. IMPORTANT: Return ALL ${stories.length} stories in the JSON array, not just the ones with issues. Every story must appear in the output, in the CORRECT LOGICAL ORDER (the order they should be executed in). The array order determines the final sequential numbering (first story = S{epic}-1, second = S{epic}-2, etc.).
 
-Each story must have:
-   - fileName: the corrected filename (S{epic}-{story}-{slug} format)
+Each story object must include the ORIGINAL fileName (so the system can match it to the file on disk) plus the fixed fields:
+   - fileName: the ORIGINAL filename from the input (e.g., "${stories[0]?.fileName || 'example-story'}" — this is used for matching, NOT the new name)
    - name: the story title
    - priority: P0, P1, P2, or P3
    - type: UserStory
@@ -3120,23 +3122,28 @@ Return ONLY a JSON array in this exact format (no markdown, no code blocks, no e
 </output_format>
 
 Important rules:
+- You MUST return ALL ${stories.length} stories. Do NOT skip any.
 - ANALYZE ALL STORIES FIRST to determine the logical execution order
+- The fileName field must contain the ORIGINAL filename from the input (used for matching to the file on disk)
 - Keep existing good content when possible (don't regenerate everything if only a few fields are missing)
 - Ensure all acceptance criteria use checkbox format: \`- [ ] ...\`
 - Use proper escaping for newlines in the JSON body field
-- The fileName field must match the array position: first item = S{epic}-1-{slug}, second = S{epic}-2-{slug}, etc.
 - Return ONLY valid JSON, nothing else
 
 Example of reordering:
 Input stories (random order):
-  - "Add user profile page" (current: s1-3-profile.md)
-  - "Implement logout" (current: s1-1-logout.md)
-  - "Setup authentication" (current: s1-2-auth.md)
+  - "Add user profile page" (file: s1-3-profile)
+  - "Implement logout" (file: s1-1-logout)
+  - "Setup authentication" (file: s1-2-auth)
 
-Logical order (setup → features → polish):
-  1. Setup authentication → S1-1-setup-authentication
-  2. Add user profile page → S1-2-add-user-profile-page
-  3. Implement logout → S1-3-implement-logout`;
+Output (sorted by logical order, fileName = ORIGINAL name for matching):
+[
+  { "fileName": "s1-2-auth", "name": "Setup authentication", ... },
+  { "fileName": "s1-3-profile", "name": "Add user profile page", ... },
+  { "fileName": "s1-1-logout", "name": "Implement logout", ... }
+]
+
+The system will rename them to S1-1, S1-2, S1-3 based on array position.`;
 }
 
 function parseFixEpicStoriesResponse(reply) {
@@ -3322,7 +3329,7 @@ app.post('/api/board/fix-epic-stories', async (req, res) => {
     const { frontmatter: epicFields } = parseFrontmatter(epicMarkdown);
     const epicName = (epicFields && epicFields.name) || epicId;
 
-    // Find all children
+    // Find ALL children (not just broken ones — Claude needs all to determine order)
     const allTasks = await client.listTasks();
     const children = allTasks.filter((t) => t.parentId === epicId);
 
@@ -3331,8 +3338,8 @@ app.post('/api/board/fix-epic-stories', async (req, res) => {
       return;
     }
 
-    // Validate each story and identify issues
-    const storiesToFix = [];
+    // Gather info for ALL children
+    const allStories = [];
     for (const child of children) {
       const childMarkdown = await client.getTaskMarkdown(child.id);
       if (!childMarkdown) continue;
@@ -3340,7 +3347,6 @@ app.post('/api/board/fix-epic-stories', async (req, res) => {
       const { frontmatter, body } = parseFrontmatter(childMarkdown);
       const fileName = child.id.split('/').pop();
 
-      // Check what's missing
       const hasTitle = !!(frontmatter?.name && frontmatter.name.trim());
       const hasNumber = /^s\d+-\d+/i.test(fileName || '');
       const hasContent = !!(body && body.trim().length >= 20);
@@ -3350,79 +3356,146 @@ app.post('/api/board/fix-epic-stories', async (req, res) => {
       const hasType = !!(frontmatter?.type);
       const hasPriority = !!(frontmatter?.priority);
 
-      const hasIssues = !hasTitle || !hasNumber || !hasContent || !hasAcs || !hasModel || !hasAgents || !hasType || !hasPriority;
-
-      if (hasIssues) {
-        storiesToFix.push({
-          id: child.id,
-          name: child.name,
-          fileName,
-          frontmatter,
-          body,
-          hasTitle,
-          hasNumber,
-          hasContent,
-          hasAcs,
-          hasModel,
-          hasAgents,
-          hasType,
-          hasPriority
-        });
-      }
+      allStories.push({
+        id: child.id,
+        name: child.name,
+        fileName,
+        frontmatter,
+        body,
+        hasTitle,
+        hasNumber,
+        hasContent,
+        hasAcs,
+        hasModel,
+        hasAgents,
+        hasType,
+        hasPriority
+      });
     }
 
-    if (storiesToFix.length === 0) {
-      res.json({ ok: true, message: 'All stories are complete. No fixes needed.', fixed: 0 });
+    if (allStories.length === 0) {
+      res.json({ ok: true, message: 'No stories found.', fixed: 0 });
       return;
     }
 
-    // Build prompt and call Claude
+    // Build prompt with ALL stories and call Claude
     const prompt = buildFixEpicStoriesPrompt({
       epicName,
-      stories: storiesToFix
+      stories: allStories
     });
 
     const { reply } = await runClaudePrompt(prompt, 'claude-sonnet-4-5-20250929', GENERATE_STORIES_TIMEOUT_MS);
     const fixedStories = parseFixEpicStoriesResponse(reply);
 
-    // Update each story
+    // Phase 1: Update content for each story
     const fixed = [];
     let failed = 0;
 
-    for (const story of fixedStories) {
-      try {
-        // Find the original story by matching fileName
-        const originalStory = storiesToFix.find((s) => s.fileName === story.fileName || s.name === story.name);
-        if (!originalStory) {
-          pushLog('warn', LOG_SOURCE.panel, `Could not find original story for "${story.name}"`);
-          failed++;
-          continue;
-        }
+    // Build a mapping: original index → fixed story, matched by fileName or name
+    const matchedPairs = [];
+    for (let i = 0; i < fixedStories.length; i++) {
+      const story = fixedStories[i];
+      // Match by original fileName first, then by name
+      const original = allStories.find((s) => s.fileName === story.fileName)
+        || allStories.find((s) => s.name === story.name);
 
-        // Update the task
+      if (!original) {
+        pushLog('warn', LOG_SOURCE.panel, `Could not match fixed story "${story.name}" to an existing file`);
+        failed++;
+        continue;
+      }
+
+      matchedPairs.push({ original, fixed: story, newIndex: i });
+    }
+
+    // Update content for matched stories
+    for (const { original, fixed: story } of matchedPairs) {
+      try {
         await client.updateTask(
-          originalStory.id,
+          original.id,
           {
             name: story.name,
             priority: story.priority,
             type: story.type,
-            status: originalStory.frontmatter?.status || 'Not Started',
+            status: original.frontmatter?.status || 'Not Started',
             model: story.model,
             agents: story.agents
           },
           story.body
         );
-
-        fixed.push({ id: originalStory.id, name: story.name });
       } catch (err) {
-        pushLog('warn', LOG_SOURCE.panel, `Failed to fix story "${story.name}": ${err.message}`);
+        pushLog('warn', LOG_SOURCE.panel, `Failed to update story "${story.name}": ${err.message}`);
         failed++;
       }
     }
 
-    const summary = `Fixed ${fixed.length} of ${storiesToFix.length} stories for "${epicName}"${failed > 0 ? ` (${failed} failed)` : ''}`;
+    // Phase 2: Rename files to correct sequential names
+    // We need to use temp names first to avoid conflicts (e.g., renaming A→B when B exists)
+    const { generateStoryFileName } = await import('../src/local/helpers.js');
+
+    // Refresh task index after content updates
+    await client.listTasks();
+
+    // Step 2a: Rename all files to temporary names
+    const renameOps = [];
+    for (const { original, fixed: story, newIndex } of matchedPairs) {
+      const correctFileName = generateStoryFileName(epicId, newIndex, story.name) + '.md';
+      const currentFileName = original.fileName + '.md';
+
+      if (currentFileName === correctFileName) {
+        fixed.push({ id: original.id, name: story.name, fileName: correctFileName });
+        continue; // Already has the correct name
+      }
+
+      renameOps.push({
+        currentId: original.id,
+        currentFileName: currentFileName,
+        tempFileName: `_temp_fix_${newIndex}_${Date.now()}.md`,
+        correctFileName,
+        storyName: story.name
+      });
+    }
+
+    // Rename to temp names first
+    for (const op of renameOps) {
+      try {
+        const result = await client.renameTask(op.currentId, op.tempFileName);
+        if (result.renamed) {
+          op.tempId = result.newId;
+        } else {
+          op.tempId = op.currentId;
+        }
+      } catch (err) {
+        pushLog('warn', LOG_SOURCE.panel, `Failed to temp-rename "${op.currentFileName}": ${err.message}`);
+        op.tempId = op.currentId;
+        op.skipFinalRename = true;
+        failed++;
+      }
+    }
+
+    // Refresh index after temp renames
+    if (renameOps.length > 0) {
+      await client.listTasks();
+    }
+
+    // Rename from temp names to final correct names
+    for (const op of renameOps) {
+      if (op.skipFinalRename) continue;
+      try {
+        const result = await client.renameTask(op.tempId, op.correctFileName);
+        if (result.renamed) {
+          pushLog('info', LOG_SOURCE.panel, `Renamed "${op.currentFileName}" → "${op.correctFileName}"`);
+          fixed.push({ id: result.newId, name: op.storyName, fileName: op.correctFileName });
+        }
+      } catch (err) {
+        pushLog('warn', LOG_SOURCE.panel, `Failed to rename "${op.tempFileName}" → "${op.correctFileName}": ${err.message}`);
+        failed++;
+      }
+    }
+
+    const summary = `Fixed ${fixed.length} of ${allStories.length} stories for "${epicName}"${failed > 0 ? ` (${failed} failed)` : ''}`;
     pushLog('success', LOG_SOURCE.claude, summary);
-    res.json({ ok: true, fixed: fixed.length, total: storiesToFix.length, failed });
+    res.json({ ok: true, fixed: fixed.length, total: allStories.length, failed });
   } catch (error) {
     pushLog('error', LOG_SOURCE.claude, `Story fix failed: ${error.message}`);
     res.status(500).json({ ok: false, message: error.message });

@@ -213,6 +213,30 @@ export class LocalBoardClient {
     this._invalidateIndex();
   }
 
+  async renameTask(taskId, newFileName) {
+    const task = await this._findTaskById(taskId);
+    if (!task) {
+      throw new Error(`Task not found: ${taskId}`);
+    }
+
+    const oldPath = task._filePath;
+    const dir = path.dirname(oldPath);
+    const cleanName = newFileName.endsWith('.md') ? newFileName : `${newFileName}.md`;
+    const newPath = path.join(dir, cleanName);
+
+    if (oldPath === newPath) {
+      return { oldId: taskId, newId: taskId, renamed: false };
+    }
+
+    await fs.rename(oldPath, newPath);
+    this._invalidateIndex();
+
+    const baseName = cleanName.replace(/\.md$/, '');
+    const newId = task.parentId ? `${task.parentId}/${baseName}` : baseName;
+
+    return { oldId: taskId, newId, renamed: true };
+  }
+
   async deleteTask(taskId, { deleteEpicFolder = false } = {}) {
     const task = await this._findTaskById(taskId);
     if (!task) {
