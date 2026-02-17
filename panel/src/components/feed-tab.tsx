@@ -123,7 +123,7 @@ function ProgressiveLogBubble({
           ) : null}
         </div>
         <div className="flex-1">
-          <p className="m-0 text-sm font-medium leading-5 text-current">{message}</p>
+          <p className="m-0 text-xs font-medium leading-4 text-current sm:text-sm sm:leading-5">{message}</p>
         </div>
       </div>
 
@@ -148,7 +148,7 @@ function ProgressiveLogBubble({
         <div>
           <button
             type="button"
-            className="m-0 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left text-sm font-medium leading-5 text-current hover:opacity-80"
+            className="m-0 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left text-xs font-medium leading-4 text-current hover:opacity-80 sm:text-sm sm:leading-5"
             onClick={() => setExpanded((prev) => !prev)}
             aria-expanded={expanded}
           >
@@ -198,7 +198,7 @@ function ExpandablePrompt({
     <div className="space-y-2">
       <button
         type="button"
-        className="m-0 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left text-sm font-medium leading-5 text-current hover:opacity-80"
+        className="m-0 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left text-xs font-medium leading-4 text-current hover:opacity-80 sm:text-sm sm:leading-5"
         onClick={() => setExpanded((prev) => !prev)}
         aria-expanded={expanded}
       >
@@ -261,7 +261,7 @@ function ExpandableTaskResult({
 
   if (!hasDetails) {
     return (
-      <p className="m-0 whitespace-pre-wrap break-words text-sm leading-5 text-current">
+      <p className="m-0 whitespace-pre-wrap break-words text-xs leading-4 text-current sm:text-sm sm:leading-5">
         {statusLabel}{badge}
       </p>
     );
@@ -271,7 +271,7 @@ function ExpandableTaskResult({
     <div className="space-y-2">
       <button
         type="button"
-        className="m-0 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left text-sm font-medium leading-5 text-current hover:opacity-80"
+        className="m-0 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left text-xs font-medium leading-4 text-current hover:opacity-80 sm:text-sm sm:leading-5"
         onClick={() => setExpanded((prev) => !prev)}
         aria-expanded={expanded}
       >
@@ -353,7 +353,7 @@ ${report.hasMoreWarnings ? `  ... and ${report.totalWarnings - report.warnings.l
   if (!hasDetails) {
     return (
       <div className="space-y-2">
-        <p className="m-0 text-sm font-medium leading-5 text-current">{statusLabel}</p>
+        <p className="m-0 text-xs font-medium leading-4 text-current sm:text-sm sm:leading-5">{statusLabel}</p>
         <p className="m-0 text-xs text-current/75">
           📊 {report.summary.totalTasks} task{report.summary.totalTasks === 1 ? '' : 's'}, {report.summary.totalEpics} epic{report.summary.totalEpics === 1 ? '' : 's'}
         </p>
@@ -365,7 +365,7 @@ ${report.hasMoreWarnings ? `  ... and ${report.totalWarnings - report.warnings.l
     <div className="space-y-2">
       <button
         type="button"
-        className="m-0 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left text-sm font-medium leading-5 text-current hover:opacity-80"
+        className="m-0 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left text-xs font-medium leading-4 text-current hover:opacity-80 sm:text-sm sm:leading-5"
         onClick={() => setExpanded((prev) => !prev)}
         aria-expanded={expanded}
       >
@@ -652,7 +652,7 @@ export function FeedTab({
                       onCopy={copyLiveFeedMessage}
                     />
                   ) : (
-                    <p className="m-0 whitespace-pre-wrap break-words text-sm leading-5 text-current">{displayMessage}</p>
+                    <p className="m-0 whitespace-pre-wrap break-words text-xs leading-4 text-current sm:text-sm sm:leading-5">{displayMessage}</p>
                   )}
 
                   {modelLabel ? (
@@ -706,7 +706,7 @@ export function FeedTab({
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            <span className="text-sm font-medium text-brand-primary">
+            <span className="text-xs font-medium text-brand-primary sm:text-sm">
               Claude is working on: &quot;{orchestratorState?.currentTaskName || orchestratorState?.currentTaskId}&quot;
             </span>
           </div>
@@ -774,7 +774,7 @@ export function FeedTab({
                 }
               }}
               className={cx(
-                'min-w-0 flex-1 resize-none bg-transparent py-1 pl-2 text-md text-primary outline-hidden placeholder:text-placeholder',
+                'min-w-0 flex-1 resize-none bg-transparent py-1 pl-2 text-sm text-primary outline-hidden placeholder:text-placeholder sm:text-md',
                 isChatDisabled && 'cursor-not-allowed text-disabled'
               )}
             />

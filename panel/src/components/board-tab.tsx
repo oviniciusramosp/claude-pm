@@ -246,7 +246,7 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
       onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; onDragStart?.(); }}
       onDragEnd={() => onDragEnd?.()}
       className={cx(
-        'group relative cursor-pointer rounded-lg border bg-primary p-3 shadow-xs transition hover:shadow-md hover:border-brand-solid',
+        'group relative cursor-pointer rounded-lg border bg-primary p-2.5 shadow-xs transition hover:shadow-md hover:border-brand-solid sm:p-3',
         epic ? 'border-l-4 border-l-utility-purple-500 border-secondary'
           : parentEpicInProgress ? 'border-utility-brand-200'
           : 'border-secondary',
@@ -268,7 +268,7 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
 
       {/* Row 2: Title + AC chart + Fix button */}
       <div className="flex items-start gap-2">
-        <p className="text-sm font-medium text-primary flex-1 min-w-0">
+        <p className="text-xs font-medium text-primary flex-1 min-w-0 sm:text-sm">
           {taskCode && <span className="text-tertiary font-mono mr-2">{taskCode}</span>}
           {task.name}
         </p>
