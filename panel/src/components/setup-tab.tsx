@@ -59,13 +59,13 @@ export function SetupTab({
   let stepNumber = 0;
 
   return (
-    <section className="rounded-xl border border-secondary bg-primary p-5 shadow-sm">
+    <section className="rounded-xl border border-secondary bg-primary p-3 shadow-sm sm:p-5">
       <div className="space-y-2">
-        <h2 className="m-0 inline-flex items-center gap-2 text-xl font-semibold text-primary">
+        <h2 className="m-0 inline-flex items-center gap-2 text-lg font-semibold text-primary sm:text-xl">
           <Icon icon={Settings01} className="size-5" />
-          Setup Configuration
+          Setup
         </h2>
-        <p className="m-0 text-sm text-tertiary">
+        <p className="m-0 hidden text-sm text-tertiary sm:block">
           Follow the steps below to configure your automation. These values are persisted in your local <code>.env</code> file.
         </p>
       </div>
@@ -101,8 +101,8 @@ export function SetupTab({
                   const hasInlineActions = isSecretField || field.folderPicker;
 
                   return (
-                    <div key={field.key} className="rounded-lg border border-secondary bg-secondary p-4">
-                      <div className="flex items-start gap-3">
+                    <div key={field.key} className="rounded-lg border border-secondary bg-secondary p-3 sm:p-4">
+                      <div className="flex items-start gap-2 sm:gap-3">
                         <Badge type="pill-color" color="brand" size="sm" className="mt-0.5 shrink-0">
                           {stepNumber}
                         </Badge>
@@ -116,14 +116,14 @@ export function SetupTab({
                       </div>
 
                       {field.help?.steps?.length ? (
-                        <ol className="mt-3 ml-9 list-decimal space-y-1 pl-4 text-sm text-tertiary">
+                        <ol className="mt-3 list-decimal space-y-1 pl-6 text-sm text-tertiary sm:ml-9 sm:pl-4">
                           {field.help.steps.map((step, i) => (
                             <li key={i}>{step}</li>
                           ))}
                         </ol>
                       ) : null}
 
-                      <div className="mt-4 ml-9">
+                      <div className="mt-4 sm:ml-9">
                         <div className="flex items-stretch gap-2">
                           <div className="relative min-w-0 flex-1">
                             {field.selectOptions ? (
@@ -238,12 +238,12 @@ export function SetupTab({
                   }
 
                   return (
-                    <div key={toggle.key} className="rounded-lg border border-secondary bg-secondary p-4">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="min-w-0 space-y-1">
+                    <div key={toggle.key} className="rounded-lg border border-secondary bg-secondary p-3 sm:p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1 space-y-1">
                           <p className="m-0 inline-flex items-center gap-2 text-sm font-medium text-secondary">
-                            <Icon icon={toggle.icon} className="size-4 text-fg-quaternary" />
-                            {toggle.label}
+                            <Icon icon={toggle.icon} className="size-4 shrink-0 text-fg-quaternary" />
+                            <span>{toggle.label}</span>
                           </p>
                           <p className="m-0 text-sm text-tertiary">{toggle.description}</p>
                         </div>
@@ -251,6 +251,7 @@ export function SetupTab({
                         <Toggle
                           aria-label={toggle.label}
                           size="md"
+                          className="shrink-0"
                           isSelected={Boolean(config[toggle.key])}
                           onChange={(isSelected) => {
                             setConfig((prev) => ({ ...prev, [toggle.key]: isSelected }));
