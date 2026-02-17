@@ -132,6 +132,21 @@ export function App({ mode = 'light', setMode = () => {} }) {
     }
   }, []);
 
+  const onBoardError = useCallback((message: string, details?: { stack?: string; exitCode?: number; stderr?: string; stdout?: string }) => {
+    const id = `board-err-${Date.now()}`;
+    setCollectedErrors((prev) => [...prev, {
+      id,
+      ts: new Date().toISOString(),
+      level: 'error',
+      source: 'board',
+      message,
+      stack: details?.stack,
+      exitCode: details?.exitCode,
+      stderr: details?.stderr,
+      stdout: details?.stdout
+    }]);
+  }, []);
+
 
 
   const callApi = useCallback(
@@ -622,6 +637,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
               showToast={showToast}
               refreshTrigger={boardRefreshTrigger}
               onShowErrorDetail={(title, message) => setErrorModal({ open: true, title, message })}
+              onError={onBoardError}
               setFixingTaskId={setFixingTaskId}
             />
           ) : activeTab === NAV_TAB_KEYS.git ? (

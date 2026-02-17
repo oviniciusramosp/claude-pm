@@ -28,6 +28,7 @@ interface BoardTabProps {
   showToast: (message: string, color?: 'success' | 'warning' | 'danger' | 'neutral') => void;
   refreshTrigger: number;
   onShowErrorDetail: (title: string, message: string) => void;
+  onError?: (message: string, details?: { stack?: string; exitCode?: number; stderr?: string; stdout?: string }) => void;
   setFixingTaskId?: (taskId: string | null) => void;
 }
 
@@ -359,7 +360,7 @@ function SkeletonCard() {
   );
 }
 
-export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDetail, setFixingTaskId: setFixingTaskIdProp }: BoardTabProps) {
+export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDetail, onError, setFixingTaskId: setFixingTaskIdProp }: BoardTabProps) {
   const [tasks, setTasks] = useState<BoardTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [boardError, setBoardError] = useState<BoardError | null>(null);
@@ -464,6 +465,12 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
           };
           setBoardError(err);
           if (!silent) showToast(err.message, 'danger');
+
+          // Report to debug errors
+          onError?.(err.message, {
+            stderr: err.details?.raw || rawBody,
+            stdout: err.details?.hint
+          });
           return;
         }
 
@@ -478,6 +485,11 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
           };
           setBoardError(err);
           if (!silent) showToast(err.message, 'danger');
+
+          // Report to debug errors
+          onError?.(err.message, {
+            stderr: JSON.stringify(payload, null, 2)
+          });
           return;
         }
 
@@ -510,6 +522,13 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
         };
         setBoardError(networkError);
         if (!silent) showToast(networkError.message, 'danger');
+
+        // Report to debug errors
+        onError?.(networkError.message, {
+          stack: err.stack,
+          stderr: networkError.details?.raw || err.message,
+          stdout: networkError.details?.hint
+        });
       } finally {
         if (mountedRef.current) {
           setLoading(false);
