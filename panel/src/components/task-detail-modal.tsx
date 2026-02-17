@@ -7,9 +7,53 @@ import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
-import { BOARD_PRIORITY_COLORS, BOARD_TYPE_COLORS } from '../constants';
+import { BOARD_PRIORITY_COLORS, BOARD_TYPE_COLORS, CLAUDE_MODELS } from '../constants';
 import type { BoardTask } from '../types';
 
+// --- Shared form constants ---
+const TYPE_OPTIONS = ['UserStory', 'Epic', 'Bug', 'Chore', 'Discovery'] as const;
+const PRIORITY_OPTIONS = ['P0', 'P1', 'P2', 'P3'] as const;
+const STATUS_OPTIONS = ['Not Started', 'In Progress', 'Done'] as const;
+
+const selectClasses = 'w-full rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary shadow-xs focus:border-brand-solid focus:outline-none focus:ring-1 focus:ring-brand-solid';
+const inputClasses = 'w-full rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary shadow-xs focus:border-brand-solid focus:outline-none focus:ring-1 focus:ring-brand-solid';
+const labelClasses = 'block text-sm font-medium text-secondary mb-1';
+
+// --- Frontmatter parser (client-side, mirrors src/local/frontmatter.js) ---
+function parseFrontmatter(content: string): { frontmatter: Record<string, string>; body: string } {
+  const text = content || '';
+  if (!text.startsWith('---')) return { frontmatter: {}, body: text };
+  const endIndex = text.indexOf('\n---', 3);
+  if (endIndex === -1) return { frontmatter: {}, body: text };
+
+  const yamlBlock = text.slice(4, endIndex).trim();
+  const body = text.slice(endIndex + 4).trim();
+  const frontmatter: Record<string, string> = {};
+
+  for (const line of yamlBlock.split('\n')) {
+    const colonIndex = line.indexOf(':');
+    if (colonIndex === -1) continue;
+    const key = line.slice(0, colonIndex).trim();
+    let value = line.slice(colonIndex + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    if (key) frontmatter[key] = value;
+  }
+  return { frontmatter, body };
+}
+
+function serializeFrontmatter(fields: Record<string, string>): string {
+  const lines = ['---'];
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === null || value === undefined || value === '') continue;
+    lines.push(`${key}: ${value}`);
+  }
+  lines.push('---');
+  return lines.join('\n');
+}
+
+// --- Component ---
 interface TaskDetailModalProps {
   open: boolean;
   onClose: () => void;
@@ -25,9 +69,16 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Edit mode
+  // Edit mode - structured fields
   const [editing, setEditing] = useState(false);
-  const [editContent, setEditContent] = useState('');
+  const [editName, setEditName] = useState('');
+  const [editPriority, setEditPriority] = useState('');
+  const [editType, setEditType] = useState('');
+  const [editStatus, setEditStatus] = useState('');
+  const [editModel, setEditModel] = useState('');
+  const [editAgents, setEditAgents] = useState('');
+  const [editBody, setEditBody] = useState('');
+  const [extraFrontmatter, setExtraFrontmatter] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
   // Delete
@@ -65,9 +116,7 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
     if (open && task) {
       fetchMarkdown(task.id);
     }
-    // Reset state on open/close or task change
     setEditing(false);
-    setEditContent('');
     setConfirmDelete(false);
     setDeleteEpicFolder(true);
     if (confirmTimerRef.current) {
@@ -76,7 +125,6 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
     }
   }, [open, task, fetchMarkdown]);
 
-  // Cleanup timer on unmount
   useEffect(() => {
     return () => {
       if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
@@ -84,23 +132,56 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
   }, []);
 
   const handleEdit = useCallback(() => {
-    setEditContent(markdown);
+    // Parse frontmatter from raw markdown into structured fields
+    const { frontmatter, body } = parseFrontmatter(markdown);
+    setEditName(frontmatter.name || task?.name || '');
+    setEditPriority(frontmatter.priority || task?.priority || 'P1');
+    setEditType(frontmatter.type || task?.type || 'UserStory');
+    setEditStatus(frontmatter.status || task?.status || 'Not Started');
+    setEditModel(frontmatter.model || '');
+    setEditAgents(frontmatter.agents || frontmatter.agent || '');
+    setEditBody(body);
+
+    // Preserve any extra frontmatter fields we don't have explicit controls for
+    const knownKeys = new Set(['name', 'priority', 'type', 'status', 'model', 'agents', 'agent']);
+    const extra: Record<string, string> = {};
+    for (const [key, value] of Object.entries(frontmatter)) {
+      if (!knownKeys.has(key)) extra[key] = value;
+    }
+    setExtraFrontmatter(extra);
     setEditing(true);
-  }, [markdown]);
+  }, [markdown, task]);
 
   const handleCancelEdit = useCallback(() => {
     setEditing(false);
-    setEditContent('');
   }, []);
 
   const handleSave = useCallback(async () => {
     if (!task) return;
+    if (!editName.trim()) {
+      showToast('Task name is required', 'warning');
+      return;
+    }
+
+    // Rebuild the full markdown from structured fields
+    const fields: Record<string, string> = {
+      name: editName.trim(),
+      priority: editPriority,
+      type: editType,
+      status: editStatus,
+      ...extraFrontmatter
+    };
+    if (editModel) fields.model = editModel;
+    if (editAgents) fields.agents = editAgents;
+
+    const newContent = serializeFrontmatter(fields) + '\n\n' + editBody;
+
     setSaving(true);
     try {
       const response = await fetch(`${apiBaseUrl}/api/board/task-markdown`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId: task.id, content: editContent })
+        body: JSON.stringify({ taskId: task.id, content: newContent })
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -109,18 +190,17 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
       }
       showToast('Task saved', 'success');
       setEditing(false);
-      setMarkdown(editContent);
+      setMarkdown(newContent);
       onSaved?.();
     } catch (err: any) {
       showToast(err.message || 'Failed to save', 'danger');
     } finally {
       setSaving(false);
     }
-  }, [task, apiBaseUrl, editContent, showToast, onSaved]);
+  }, [task, editName, editPriority, editType, editStatus, editModel, editAgents, editBody, extraFrontmatter, apiBaseUrl, showToast, onSaved]);
 
   const handleDeleteClick = useCallback(() => {
     if (confirmDelete) {
-      // Second click — execute delete
       handleDelete();
     } else {
       setConfirmDelete(true);
@@ -174,10 +254,10 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                 <div className="flex items-center gap-2">
                   <Icon icon={File06} className="size-5 shrink-0 text-tertiary" />
                   <h3 className="m-0 truncate text-lg font-semibold text-primary">
-                    {task?.name || 'Task'}
+                    {editing ? editName || 'Task' : (task?.name || 'Task')}
                   </h3>
                 </div>
-                {task && (task.priority || task.type || task.status) && (
+                {!editing && task && (task.priority || task.type || task.status) && (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     {task.priority && (
                       <Badge size="sm" color={(priorityColor || 'gray') as any}>
@@ -196,7 +276,7 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                     )}
                   </div>
                 )}
-                {task && (task.model || task.agents.length > 0) && (
+                {!editing && task && (task.model || task.agents.length > 0) && (
                   <div className="mt-3 flex flex-col gap-2">
                     {task.model && (
                       <div className="flex items-center gap-2 text-xs text-tertiary">
@@ -238,12 +318,75 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
               )}
 
               {!loading && !error && editing && (
-                <textarea
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  className="w-full min-h-[40vh] resize-y rounded-lg border border-secondary bg-secondary p-3 font-mono text-sm text-primary focus:border-brand-solid focus:outline-none"
-                  spellCheck={false}
-                />
+                <div className="space-y-4">
+                  {/* Name */}
+                  <div>
+                    <label className={labelClasses}>Name *</label>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className={inputClasses}
+                      autoFocus
+                    />
+                  </div>
+
+                  {/* Row: Priority + Type + Status */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className={labelClasses}>Priority</label>
+                      <select value={editPriority} onChange={(e) => setEditPriority(e.target.value)} className={selectClasses}>
+                        {PRIORITY_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelClasses}>Type</label>
+                      <select value={editType} onChange={(e) => setEditType(e.target.value)} className={selectClasses}>
+                        {TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelClasses}>Status</label>
+                      <select value={editStatus} onChange={(e) => setEditStatus(e.target.value)} className={selectClasses}>
+                        {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Model */}
+                  <div>
+                    <label className={labelClasses}>Model</label>
+                    <select value={editModel} onChange={(e) => setEditModel(e.target.value)} className={selectClasses}>
+                      <option value="">Default</option>
+                      {CLAUDE_MODELS.map((m) => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Agents */}
+                  <div>
+                    <label className={labelClasses}>Agents</label>
+                    <input
+                      type="text"
+                      value={editAgents}
+                      onChange={(e) => setEditAgents(e.target.value)}
+                      placeholder="frontend, design"
+                      className={inputClasses}
+                    />
+                  </div>
+
+                  {/* Body */}
+                  <div>
+                    <label className={labelClasses}>Content (Markdown)</label>
+                    <textarea
+                      value={editBody}
+                      onChange={(e) => setEditBody(e.target.value)}
+                      className="w-full min-h-[30vh] resize-y rounded-lg border border-secondary bg-secondary p-3 font-mono text-sm text-primary focus:border-brand-solid focus:outline-none"
+                      spellCheck={false}
+                    />
+                  </div>
+                </div>
               )}
 
               {!loading && !error && !editing && renderedHtml && (

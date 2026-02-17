@@ -213,15 +213,13 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
               </div>
 
               {/* Epic Parent */}
-              {epicFolders.length > 0 && (
-                <div>
-                  <label className={labelClasses}>Epic Parent</label>
-                  <select value={epicId} onChange={(e) => setEpicId(e.target.value)} className={selectClasses}>
-                    <option value="">None (standalone task)</option>
-                    {epicFolders.map((f) => <option key={f} value={f}>{f}</option>)}
-                  </select>
-                </div>
-              )}
+              <div>
+                <label className={labelClasses}>Epic Parent</label>
+                <select value={epicId} onChange={(e) => setEpicId(e.target.value)} className={selectClasses}>
+                  <option value="">None (standalone task)</option>
+                  {epicFolders.map((f) => <option key={f} value={f}>{f}</option>)}
+                </select>
+              </div>
 
               {/* Body */}
               <div>
