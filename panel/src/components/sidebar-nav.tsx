@@ -135,11 +135,7 @@ export function SidebarNav({
               title={appError ? "App Error" : apiRunning ? "App Running" : "App Stopped"}
               description={appError ? "Click to view error details" : apiRunning ? "Panel is connected and operational" : "Panel is not running"}
             >
-              <TooltipTrigger
-                onPress={appError ? onAppBadgeClick : undefined}
-                isDisabled={!appError}
-                className="cursor-default"
-              >
+              <TooltipTrigger className={appError ? "cursor-pointer" : "cursor-default"}>
                 <StatusBadge
                   color={appError ? 'error' : apiRunning ? 'success' : 'gray'}
                   connectionState={apiRunning ? 'active' : 'inactive'}
@@ -153,11 +149,7 @@ export function SidebarNav({
               title={apiError ? "API Error" : apiHealthStatus.connectionState === 'active' ? "API Connected" : "API Disconnected"}
               description={apiError ? "Click to view error details" : apiHealthStatus.connectionState === 'active' ? "Automation API is healthy and responding" : "Automation API is not responding"}
             >
-              <TooltipTrigger
-                onPress={apiError ? onApiBadgeClick : undefined}
-                isDisabled={!apiError}
-                className="cursor-default"
-              >
+              <TooltipTrigger className={apiError ? "cursor-pointer" : "cursor-default"}>
                 <StatusBadge
                   color={apiError ? 'error' : apiHealthStatus.connectionState === 'active' ? 'success' : 'gray'}
                   connectionState={apiHealthStatus.connectionState === 'active' ? 'active' : 'inactive'}
