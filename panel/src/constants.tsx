@@ -30,6 +30,10 @@ export const CLAUDE_MODELS = [
   { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', description: 'Fast and cost-effective' }
 ] as const;
 
+export const CLAUDE_TASK_MODELS = CLAUDE_MODELS.filter((m) => m.value !== '');
+
+export const CLAUDE_DEFAULT_TASK_MODEL = 'claude-sonnet-4-5-20250929';
+
 export const TEXT_FIELD_CONFIG: TextFieldConfig[] = [
   {
     key: 'CLAUDE_CODE_OAUTH_TOKEN',
@@ -75,7 +79,7 @@ export const TEXT_FIELD_CONFIG: TextFieldConfig[] = [
       title: 'Claude Model Selection',
       summary: 'Choose which Claude model to use for task execution.',
       steps: [
-        'Leave empty to use the model specified in each task.',
+        'Use Automatic to use the model specified in each task.',
         'Or select a model to override all task models.',
         'Opus 4.6 is most capable but slower, Haiku 4.5 is fastest.'
       ]

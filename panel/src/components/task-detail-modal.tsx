@@ -7,7 +7,7 @@ import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
-import { BOARD_PRIORITY_COLORS, BOARD_TYPE_COLORS, CLAUDE_MODELS } from '../constants';
+import { BOARD_PRIORITY_COLORS, BOARD_TYPE_COLORS, CLAUDE_TASK_MODELS } from '../constants';
 import type { BoardTask } from '../types';
 
 interface ModalError {
@@ -504,8 +504,7 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                   <div>
                     <label className={labelClasses}>Model</label>
                     <select value={editModel} onChange={(e) => setEditModel(e.target.value)} className={selectClasses}>
-                      <option value="">Default</option>
-                      {CLAUDE_MODELS.map((m) => (
+                      {CLAUDE_TASK_MODELS.map((m) => (
                         <option key={m.value} value={m.value}>{m.label}</option>
                       ))}
                     </select>

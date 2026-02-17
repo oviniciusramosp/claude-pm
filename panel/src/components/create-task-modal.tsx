@@ -5,7 +5,7 @@ import { AlertTriangle, File06, Stars01 } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
-import { CLAUDE_MODELS } from '../constants';
+import { CLAUDE_TASK_MODELS, CLAUDE_DEFAULT_TASK_MODEL } from '../constants';
 import type { BoardTask } from '../types';
 
 interface ModalError {
@@ -47,7 +47,7 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
   const [priority, setPriority] = useState('P1');
   const [type, setType] = useState('UserStory');
   const [status, setStatus] = useState('Not Started');
-  const [model, setModel] = useState('');
+  const [model, setModel] = useState(CLAUDE_DEFAULT_TASK_MODEL);
   const [agents, setAgents] = useState('');
   const [body, setBody] = useState('');
   const [epicId, setEpicId] = useState('');
@@ -84,7 +84,7 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
       setPriority('P1');
       setType('UserStory');
       setStatus('Not Started');
-      setModel('');
+      setModel(CLAUDE_DEFAULT_TASK_MODEL);
       setAgents('');
       setBody('');
       setEpicId(defaultEpicId || '');
@@ -305,8 +305,7 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
               <div>
                 <label className={labelClasses}>Model</label>
                 <select value={model} onChange={(e) => setModel(e.target.value)} className={selectClasses}>
-                  <option value="">Default</option>
-                  {CLAUDE_MODELS.map((m) => (
+                  {CLAUDE_TASK_MODELS.map((m) => (
                     <option key={m.value} value={m.value}>{m.label}</option>
                   ))}
                 </select>
