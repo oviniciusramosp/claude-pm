@@ -548,7 +548,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
   return (
     <div
       className={cx(
-        'flex min-h-screen transition-colors duration-300',
+        'flex h-screen overflow-hidden transition-colors duration-300',
         isDark ? 'bg-linear-to-b from-gray-950 via-gray-900 to-gray-950' : 'bg-linear-to-b from-utility-brand-50 via-secondary to-primary'
       )}
     >
