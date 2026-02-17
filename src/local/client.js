@@ -192,6 +192,27 @@ export class LocalBoardClient {
     this._invalidateIndex();
   }
 
+  async updateTask(taskId, fields, body) {
+    const task = await this._findTaskById(taskId);
+    if (!task) {
+      throw new Error(`Task not found: ${taskId}`);
+    }
+
+    const frontmatterFields = {};
+    if (fields.name !== undefined) frontmatterFields.name = fields.name;
+    if (fields.priority !== undefined) frontmatterFields.priority = fields.priority;
+    if (fields.type !== undefined) frontmatterFields.type = fields.type;
+    if (fields.status !== undefined) frontmatterFields.status = fields.status;
+    if (fields.model !== undefined) frontmatterFields.model = fields.model;
+    if (fields.agents !== undefined) frontmatterFields.agents = fields.agents;
+
+    const header = serializeFrontmatter(frontmatterFields);
+    const content = header + '\n\n' + (body || '').trim() + '\n';
+
+    await fs.writeFile(task._filePath, content, 'utf8');
+    this._invalidateIndex();
+  }
+
   async deleteTask(taskId, { deleteEpicFolder = false } = {}) {
     const task = await this._findTaskById(taskId);
     if (!task) {
