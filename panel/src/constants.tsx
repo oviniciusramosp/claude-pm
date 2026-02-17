@@ -200,10 +200,10 @@ export const LOG_LEVEL_META: Record<string, LogLevelMeta> = {
 
 export const LOG_SOURCE_META: Record<string, LogSourceMeta> = {
   panel: {
-    label: 'Panel',
-    icon: Settings01,
+    label: 'User',
+    icon: User01,
     side: 'outgoing',
-    avatarInitials: 'PN',
+    avatarInitials: 'US',
     directClaude: false
   },
   claude: {
