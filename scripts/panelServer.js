@@ -3034,7 +3034,7 @@ ${s.body?.slice(0, 500) || '(empty)'}
 `;
   }).join('\n---\n\n');
 
-  return `You are a senior product manager and prompt engineering expert. Your job is to fix incomplete or malformed user stories in an Epic.
+  return `You are a senior product manager and prompt engineering expert. Your job is to fix incomplete or malformed user stories in an Epic AND organize them in the correct logical order.
 
 <epic_name>${epicName}</epic_name>
 
@@ -3043,9 +3043,17 @@ ${storiesList}
 </stories_to_fix>
 
 <instructions>
+CRITICAL FIRST STEP: Before fixing individual stories, analyze all stories together and determine the LOGICAL EXECUTION ORDER. Consider:
+- Dependencies between stories (which stories must be completed before others?)
+- Development flow (setup → core features → polish → testing)
+- Technical prerequisites (infrastructure before features, data models before UI)
+- User journey flow (authentication → core actions → secondary features)
+
+Once you've determined the correct order, proceed with fixing each story:
+
 1. For each story, fix all the issues listed:
    - If missing title: generate a clear, concise name (imperative form, e.g., "Implement login form")
-   - If missing number: ensure the filename follows the pattern S{epic}-{story}-{slug} (e.g., S1-1-implement-login, S1-2-add-validation)
+   - If missing number: assign the filename following the pattern S{epic}-{story}-{slug} where {story} is the sequential number based on the LOGICAL ORDER you determined (e.g., S1-1-implement-login, S1-2-add-validation)
    - If missing content: generate a complete markdown body following this structure:
 
      # [Story Name]
@@ -3083,7 +3091,9 @@ ${storiesList}
    - If missing type: set \`type: UserStory\`
    - If missing priority: analyze the story and assign P0 (critical), P1 (high), P2 (medium), or P3 (low)
 
-2. Return a JSON array with the fixed stories. Each story must have:
+2. Return a JSON array with the fixed stories IN THE CORRECT LOGICAL ORDER (the order they should be executed in). The array order determines the final sequential numbering (first story = S{epic}-1, second = S{epic}-2, etc.).
+
+Each story must have:
    - fileName: the corrected filename (S{epic}-{story}-{slug} format)
    - name: the story title
    - priority: P0, P1, P2, or P3
@@ -3110,10 +3120,23 @@ Return ONLY a JSON array in this exact format (no markdown, no code blocks, no e
 </output_format>
 
 Important rules:
+- ANALYZE ALL STORIES FIRST to determine the logical execution order
 - Keep existing good content when possible (don't regenerate everything if only a few fields are missing)
 - Ensure all acceptance criteria use checkbox format: \`- [ ] ...\`
 - Use proper escaping for newlines in the JSON body field
-- Return ONLY valid JSON, nothing else`;
+- The fileName field must match the array position: first item = S{epic}-1-{slug}, second = S{epic}-2-{slug}, etc.
+- Return ONLY valid JSON, nothing else
+
+Example of reordering:
+Input stories (random order):
+  - "Add user profile page" (current: s1-3-profile.md)
+  - "Implement logout" (current: s1-1-logout.md)
+  - "Setup authentication" (current: s1-2-auth.md)
+
+Logical order (setup → features → polish):
+  1. Setup authentication → S1-1-setup-authentication
+  2. Add user profile page → S1-2-add-user-profile-page
+  3. Implement logout → S1-3-implement-logout`;
 }
 
 function parseFixEpicStoriesResponse(reply) {
