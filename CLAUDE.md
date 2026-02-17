@@ -433,6 +433,12 @@ npm run panel
 ```
 This builds the React panel, starts the panel server on port 4100, and auto-opens the browser.
 
+For public access from anywhere (via Cloudflare Tunnel):
+```bash
+npm run panel:public
+```
+This starts the panel and creates a Cloudflare Tunnel, generating a public URL (e.g., `https://random-name.trycloudflare.com`). Requires `cloudflared` (`brew install cloudflared`).
+
 For development with hot-reload:
 ```bash
 npm run panel:dev
@@ -442,7 +448,7 @@ npm run panel:dev
 When the panel starts the automation API (via the Start button or auto-start), it defaults to `npm start` (stable mode, no file watcher). This prevents `node --watch` from restarting the API when Claude modifies files during task execution, which would kill the running Claude subprocess. To override, set `PANEL_API_START_COMMAND` in `.env`.
 
 ### Panel Features
-- **Sidebar Navigation** - Persistent left sidebar with page navigation, process controls (start/stop API, run queue, status badges), runtime settings access, and theme toggle.
+- **Sidebar Navigation** - Persistent left sidebar with page navigation, process controls (start/stop API, run queue, status badges), runtime settings access, and theme toggle. The "PM Automation" header is clickable and opens an **Access Menu** with a QR code for remote access (see below).
 - **Setup Page** - Form-based configuration wizard with validation and help tooltips for all `.env` values (Claude token, working directory, runtime toggles).
 - **Feed Page** - Real-time streaming of all logs via SSE, color-coded by level and source (Panel, API, Claude, Chat), plus Claude chat input. AC completions appear as success messages in real time.
 - **Board Page** - Kanban board with three columns (Not Started, In Progress, Done). Each task card shows a **donut chart** indicating Acceptance Criteria progress (completed/total). The board polls every 30s and refreshes on SSE events. Supports drag-and-drop, inline task creation/editing/deletion, and AI-assisted features (see below).
@@ -450,6 +456,24 @@ When the panel starts the automation API (via the Start button or auto-start), i
 - **Generate Stories from Epic** - After creating an Epic, a "Generate" button appears next to the manual "+" add button on Epic cards. Claude reads the Epic description and automatically generates user story `.md` files with full acceptance criteria, technical tasks, tests, and dependencies. Capped at 15 stories per generation.
 - **Unsaved Changes Protection** - Both create and edit modals guard against accidental data loss. If the user has unsaved changes (or a review is in progress), closing the modal triggers a confirmation overlay. Users can choose to keep editing or discard changes. In-progress reviews are cancelled via AbortController when the user confirms closing.
 - **Theme Toggle** - Light/dark mode with OS preference detection (in sidebar footer).
+- **QR Code Access Menu** - Click the "PM Automation" header in the sidebar to open a dropdown with a QR code. In local mode, the QR code shows the LAN IP URL for same-network mobile access. In public mode (`npm run panel:public`), it shows the Cloudflare Tunnel URL for access from anywhere. Includes a one-click copy button.
+
+### Remote Access
+
+The panel supports two modes of remote access:
+
+| Mode | Command | Access |
+|------|---------|--------|
+| **Local (LAN)** | `npm run panel` | Access from devices on the same network via LAN IP (e.g., `http://192.168.1.42:4100`) |
+| **Public (Tunnel)** | `npm run panel:public` | Access from anywhere via Cloudflare Tunnel (e.g., `https://random-name.trycloudflare.com`) |
+
+Click the **"PM Automation"** header in the sidebar to see the QR code and access URL. Scan the QR code with your phone to open the panel remotely.
+
+**Prerequisites for public mode:**
+- Install `cloudflared`: `brew install cloudflared`
+- No account or configuration needed — uses Cloudflare's free quick tunnel feature
+
+**Backend endpoint:** `GET /api/server/info` returns `{ localUrl, lanUrl, tunnelUrl, tunnelStatus, tunnelError }`.
 
 ### Panel Architecture
 - **Frontend**: React + Tailwind CSS + Base UI components, built with Vite (`panel/src/`).
@@ -532,6 +556,7 @@ From the Operations tab:
 | Script | Purpose |
 |--------|---------|
 | `npm run panel` | Build and start the visual control panel (port 4100) |
+| `npm run panel:public` | Build and start the panel with Cloudflare Tunnel for public access |
 | `npm run panel:dev` | Panel in hot-reload development mode |
 | `npm run dev` | Start automation API in watch mode (port 3000) |
 | `npm start` | Start automation API normally |
@@ -874,6 +899,7 @@ Product Manager/
 │       │   ├── status-badge.tsx      # Status badge with dot
 │       │   ├── source-avatar.tsx     # Log source avatar
 │       │   ├── toast-notification.tsx # Toast component
+│       │   ├── access-menu.tsx        # QR code access menu (LAN + tunnel)
 │       │   ├── sidebar-nav.tsx       # Sidebar navigation + process controls
 │       │   ├── setup-tab.tsx         # Setup configuration form
 │       │   ├── feed-tab.tsx          # Live feed + Claude chat

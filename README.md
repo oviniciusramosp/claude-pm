@@ -35,6 +35,7 @@ Board/                          Orchestrator                    Claude Code
 - **Review with Claude** — One-click AI review of task descriptions. Claude Sonnet optimizes acceptance criteria, technical tasks, and tests following prompt engineering best practices. Includes undo and cancel support.
 - **Auto-generate stories** — Generate up to 15 user stories from an Epic description. Claude reads the Epic, creates `.md` files with full ACs, technical tasks, tests, and dependencies.
 - **Unsaved changes protection** — Create and edit modals guard against accidental data loss with confirmation dialogs. In-progress reviews are cancelled on close.
+- **Remote access via QR code** — Click the "PM Automation" header to see a QR code. Scan it from your phone to access the panel from the same network, or run `npm run panel:public` to access from anywhere via Cloudflare Tunnel.
 - **CLI slash commands** — `/project:review-task` and `/project:generate-stories` bring the same AI features to the Claude Code CLI, no panel required.
 - **CLAUDE.md injection** — Automatically injects automation instructions into your target project's `CLAUDE.md`.
 - **Model flexibility** — Specify different Claude models per task (Opus, Sonnet, Haiku) or override globally.
@@ -121,6 +122,15 @@ This builds the React panel and opens it at `http://localhost:4100`. From the pa
 - Watch live log streaming
 - Chat with Claude directly
 - Inspect git commit history
+- Access from your phone via QR code (click "PM Automation" in the sidebar)
+
+For **public access** from anywhere (not just your local network):
+
+```bash
+npm run panel:public
+```
+
+This starts a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) that generates a public URL. The QR code in the panel updates to show this URL. Requires `cloudflared` (`brew install cloudflared`).
 
 Alternatively, start the automation API directly (without the panel):
 
@@ -413,11 +423,23 @@ Start the panel with `npm run panel` and open `http://localhost:4100`.
 
 ### Sidebar Controls
 
+- **PM Automation header** — Click to open the **QR Code Access Menu** with a scannable QR code and copyable URL for remote access
 - **Start/Stop** — Start or stop the automation API process
 - **Run Queue** — Trigger manual reconciliation
 - **Pause/Resume** — Pause or resume the orchestrator
 - **Runtime Settings** — Toggle streaming, logging, and model override without restarting
 - **Theme** — Light/dark mode toggle
+
+### Remote Access
+
+| Mode | Command | How it works |
+|------|---------|-------------|
+| **Local network** | `npm run panel` | QR code shows your LAN IP (e.g., `http://192.168.1.42:4100`). Access from any device on the same Wi-Fi. |
+| **Public** | `npm run panel:public` | Starts a Cloudflare Tunnel. QR code shows the public URL (e.g., `https://random-name.trycloudflare.com`). Access from anywhere. |
+
+Click **"PM Automation"** in the sidebar to see the QR code. Scan it with your phone camera to open the panel.
+
+**Public mode prerequisites:** Install `cloudflared` with `brew install cloudflared`. No account needed — uses Cloudflare's free quick tunnel.
 
 ## AI-Assisted Task Writing
 
@@ -475,6 +497,7 @@ These commands are available in any Claude Code session inside this project (via
 | Script | Purpose |
 |--------|---------|
 | `npm run panel` | Build and start the visual control panel (port 4100) |
+| `npm run panel:public` | Build and start the panel with Cloudflare Tunnel for public access |
 | `npm run panel:dev` | Panel in hot-reload development mode |
 | `npm start` | Start automation API (port 3000) |
 | `npm run dev` | Start automation API with file-watcher (for developing the automation engine itself) |
@@ -586,6 +609,7 @@ The **panel server** (port 4100) also exposes these endpoints:
 
 | Method | Path | Description |
 |--------|------|-------------|
+| `GET` | `/api/server/info` | Server network info (local URL, LAN IP, tunnel URL and status) |
 | `POST` | `/api/board/review-task` | Send task content to Claude for AI review and optimization |
 | `POST` | `/api/board/generate-stories` | Generate user stories from an Epic description |
 
@@ -617,7 +641,7 @@ Product Manager/
 ├── panel/                      # Visual control panel (React + TypeScript)
 │   └── src/
 │       ├── app.tsx            # Main app component
-│       └── components/        # UI components (board, feed, setup, git, modals, etc.)
+│       └── components/        # UI components (board, feed, setup, git, access menu, modals, etc.)
 ├── scripts/
 │   ├── panelServer.js         # Panel Express backend (SSE, process management)
 │   ├── claudeManual.js        # CLI chat/manual prompt scripts
