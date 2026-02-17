@@ -68,7 +68,7 @@ function checkManualToken(req, res) {
   const auth = extractHeaderValue(req, 'authorization');
   const expected = `Bearer ${config.manualRun.token}`;
   if (auth !== expected) {
-    res.status(401).json({ error: 'Nao autorizado' });
+    res.status(401).json({ error: 'Unauthorized' });
     return false;
   }
 
@@ -280,7 +280,7 @@ app.post('/sync-claude-md', (req, res) => {
 
 app.use((error, _req, res, _next) => {
   logger.error(`Unhandled HTTP error: ${error.message}`);
-  res.status(500).json({ error: 'Erro interno' });
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 app.listen(config.server.port, () => {

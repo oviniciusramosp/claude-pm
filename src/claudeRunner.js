@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { resolveAcRef } from './acParser.js';
 
-const FIXED_CLAUDE_COMMAND = '/opt/homebrew/bin/claude --print';
+const DEFAULT_CLAUDE_COMMAND = 'claude --print';
 
 function isLikelyTaskContract(line) {
   const trimmed = (line || '').trim();
@@ -285,7 +285,7 @@ function parseJsonFromOutput(stdout) {
 }
 
 function buildCommand(config, task, overrideModel) {
-  let cmd = FIXED_CLAUDE_COMMAND;
+  let cmd = config.claude.command || DEFAULT_CLAUDE_COMMAND;
 
   const model = overrideModel || config.claude.modelOverride || task.model;
   if (model) {
@@ -304,7 +304,7 @@ function buildCommand(config, task, overrideModel) {
 }
 
 function summarizeCommandOutput(stderr, stdout) {
-  const raw = String(stderr || stdout || 'sem output');
+  const raw = String(stderr || stdout || 'no output');
   const line = raw
     .split('\n')
     .map((item) => item.trim())

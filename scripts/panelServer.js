@@ -15,7 +15,7 @@ const cwd = process.cwd();
 const envFilePath = path.join(cwd, '.env');
 const panelDistPath = path.join(cwd, 'panel', 'dist');
 const panelPort = Number(process.env.PANEL_PORT || 4100);
-const FIXED_CLAUDE_COMMAND = '/opt/homebrew/bin/claude --print';
+const DEFAULT_CLAUDE_COMMAND = 'claude --print';
 const DEFAULT_CLAUDE_TIMEOUT_MS = 45 * 60 * 1000;
 const MAX_CHAT_MESSAGE_CHARS = 12000;
 const MAX_CHAT_LOG_CHARS = 8000;
@@ -735,7 +735,7 @@ function getApiBaseUrl() {
 function getApiProcessEnvOverrides() {
   return {
     QUEUE_RUN_ON_STARTUP: 'false',
-    CLAUDE_COMMAND: FIXED_CLAUDE_COMMAND
+    CLAUDE_COMMAND: DEFAULT_CLAUDE_COMMAND
   };
 }
 
@@ -823,7 +823,7 @@ function summarizeCommandOutput(stderr, stdout) {
 }
 
 function buildClaudePromptCommand(model) {
-  let command = FIXED_CLAUDE_COMMAND;
+  let command = DEFAULT_CLAUDE_COMMAND;
 
   if (envEnabled(process.env.CLAUDE_FULL_ACCESS, false) && !command.includes('--dangerously-skip-permissions')) {
     command = `${command} --dangerously-skip-permissions`;
@@ -1219,7 +1219,7 @@ app.get('/api/config', async (_req, res) => {
   res.json({
     values: {
       CLAUDE_CODE_OAUTH_TOKEN: env.CLAUDE_CODE_OAUTH_TOKEN || '',
-      CLAUDE_COMMAND: FIXED_CLAUDE_COMMAND,
+      CLAUDE_COMMAND: DEFAULT_CLAUDE_COMMAND,
       CLAUDE_WORKDIR: env.CLAUDE_WORKDIR || '.',
       CLAUDE_MODEL_OVERRIDE: env.CLAUDE_MODEL_OVERRIDE || '',
       CLAUDE_FULL_ACCESS: env.CLAUDE_FULL_ACCESS || 'true',
@@ -1238,7 +1238,7 @@ app.get('/api/config', async (_req, res) => {
 app.post('/api/config', async (req, res) => {
   const updates = {
     ...(req.body || {}),
-    CLAUDE_COMMAND: FIXED_CLAUDE_COMMAND
+    CLAUDE_COMMAND: DEFAULT_CLAUDE_COMMAND
   };
 
   await updateEnvFile(updates);
@@ -1837,7 +1837,7 @@ app.post('/api/board/fix-task', async (req, res) => {
     const claudeModel = task.model || env.CLAUDE_DEFAULT_MODEL || 'claude-sonnet-4-5-20250929';
 
     // Build command string (claude CLI uses shell command parsing)
-    let command = '/opt/homebrew/bin/claude --print';
+    let command = env.CLAUDE_COMMAND || DEFAULT_CLAUDE_COMMAND;
 
     if (claudeModel) {
       command += ` --model ${claudeModel}`;

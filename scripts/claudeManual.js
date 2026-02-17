@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import dotenv from 'dotenv';
 
 dotenv.config();
-const FIXED_CLAUDE_COMMAND = '/opt/homebrew/bin/claude --print';
+const DEFAULT_CLAUDE_COMMAND = 'claude --print';
 
 function parseArgs(argv) {
   const args = argv.slice(2);
@@ -55,7 +55,7 @@ function removePrintMode(command) {
 function resolveCommand({ baseCommand, fullAccess, chat }) {
   let command = String(baseCommand || '').trim();
   if (!command) {
-    command = '/opt/homebrew/bin/claude';
+    command = 'claude';
   }
 
   command = chat ? removePrintMode(command) : ensurePrintMode(command);
@@ -120,7 +120,7 @@ async function main() {
   }
 
   const fullAccess = hasTruthyEnv(process.env.CLAUDE_FULL_ACCESS);
-  const baseCommand = process.env.CLAUDE_COMMAND || FIXED_CLAUDE_COMMAND;
+  const baseCommand = process.env.CLAUDE_COMMAND || DEFAULT_CLAUDE_COMMAND;
   const workdir = path.resolve(process.cwd(), process.env.CLAUDE_WORKDIR || '.');
   const command = resolveCommand({
     baseCommand,

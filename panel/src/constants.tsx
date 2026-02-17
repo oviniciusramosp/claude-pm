@@ -41,7 +41,7 @@ export const TEXT_FIELD_CONFIG: TextFieldConfig[] = [
       title: 'How to get Claude OAuth Token',
       summary: 'Generate a token from Claude CLI on your machine.',
       steps: [
-        <>Run <code className="cursor-pointer select-all rounded bg-quaternary px-1.5 py-0.5 font-mono text-xs text-secondary" onClick={() => navigator.clipboard.writeText('/opt/homebrew/bin/claude setup-token')} title="Click to copy">/opt/homebrew/bin/claude setup-token</code> in your terminal.</>,
+        <>Run <code className="cursor-pointer select-all rounded bg-quaternary px-1.5 py-0.5 font-mono text-xs text-secondary" onClick={() => navigator.clipboard.writeText('claude setup-token')} title="Click to copy">claude setup-token</code> in your terminal.</>,
         'Copy the generated token.',
         'Paste the token in this field.'
       ]

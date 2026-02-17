@@ -2,7 +2,7 @@ import path from 'node:path';
 import dotenv from 'dotenv';
 
 dotenv.config();
-const FIXED_CLAUDE_COMMAND = '/opt/homebrew/bin/claude --print';
+const DEFAULT_CLAUDE_COMMAND = 'claude --print';
 
 function number(name, fallback) {
   const value = process.env[name];
@@ -12,7 +12,7 @@ function number(name, fallback) {
 
   const parsed = Number(value);
   if (Number.isNaN(parsed)) {
-    throw new Error(`Variavel ${name} precisa ser numerica.`);
+    throw new Error(`Environment variable ${name} must be numeric.`);
   }
 
   return parsed;
@@ -58,7 +58,7 @@ export const config = {
     pollIntervalMs: number('QUEUE_POLL_INTERVAL_MS', 60 * 1000)
   },
   claude: {
-    command: FIXED_CLAUDE_COMMAND,
+    command: process.env.CLAUDE_COMMAND || DEFAULT_CLAUDE_COMMAND,
     timeoutMs: number('CLAUDE_TIMEOUT_MS', 75 * 60 * 1000),
     extraPrompt: process.env.CLAUDE_EXTRA_PROMPT || '',
     oauthToken: process.env.CLAUDE_CODE_OAUTH_TOKEN || '',

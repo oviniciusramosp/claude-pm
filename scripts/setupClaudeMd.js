@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import dotenv from 'dotenv';
 
 dotenv.config();
-const FIXED_CLAUDE_COMMAND = '/opt/homebrew/bin/claude --print';
+const DEFAULT_CLAUDE_COMMAND = 'claude --print';
 
 function parseArgs(argv) {
   const args = new Set(argv.slice(2));
@@ -37,7 +37,7 @@ function runClaude(command, prompt, env) {
 
     child.on('close', (code) => {
       if (code !== 0) {
-        reject(new Error(`Falha ao executar Claude (exit=${code}): ${stderr || stdout || 'sem output'}`));
+        reject(new Error(`Claude execution failed (exit=${code}): ${stderr || stdout || 'no output'}`));
         return;
       }
 
@@ -67,57 +67,57 @@ function resolveClaudeCommand(baseCommand, fullAccess) {
 function buildPrompt(context) {
   const existingFileInfo = context.existingContent
     ? [
-        'Conteudo atual de CLAUDE.md (use como base para atualizar sem perder contexto):',
+        'Current CLAUDE.md content (use as a base to update without losing context):',
         '---',
         context.existingContent,
         '---',
         ''
       ]
     : [
-        'Nao existe CLAUDE.md ainda neste repositorio.',
-        'Crie o arquivo CLAUDE.md com a estrutura abaixo.',
+        'No CLAUDE.md file exists yet in this repository.',
+        'Create the CLAUDE.md file with the structure below.',
         ''
       ];
 
   return [
-    'Atualize o arquivo CLAUDE.md DESTE repositorio usando ferramentas de arquivo (Edit/Write).',
-    'Nao responda com o conteudo completo do arquivo.',
-    'Edite o arquivo in-place preservando seções uteis existentes.',
-    'Nao apague instrucoes validas ja existentes sem necessidade.',
+    'Update the CLAUDE.md file in THIS repository using file tools (Edit/Write).',
+    'Do not respond with the full file content.',
+    'Edit the file in-place, preserving useful existing sections.',
+    'Do not delete valid existing instructions unnecessarily.',
     '',
     ...existingFileInfo,
     '',
-    'Contexto do projeto:',
-    '- Projeto: Product Manager Automation (local Board + Claude Code).',
-    '- Objetivo: executar tasks do Board automaticamente, implementar no repositorio, e reportar resultados.',
+    'Project context:',
+    '- Project: Product Manager Automation (local Board + Claude Code).',
+    '- Goal: automatically execute Board tasks, implement in the repository, and report results.',
     `- Board directory: ${context.boardDir}`,
     `- Board statuses: ${context.notStarted} -> ${context.inProgress} -> ${context.done}`,
-    '- Tipos de tarefa: Epic, UserStory, Defect, Discovery.',
-    '- Sub-tasks ficam dentro da pasta do Epic e usam frontmatter status.',
+    '- Task types: Epic, UserStory, Bug, Chore.',
+    '- Sub-tasks live inside the Epic folder and use frontmatter status.',
     '',
-    'Conteudo obrigatorio do CLAUDE.md:',
-    '1) Um resumo rapido do fluxo operacional esperado do agente.',
-    '2) Checklist de execucao por task:',
-    '   - ler task atual e criterios',
-    '   - implementar',
-    '   - rodar validacoes locais relevantes',
-    '   - criar commit ao concluir (mensagem objetiva)',
-    '   - ao concluir, mover o task para Done quando o fluxo exigir atualizacao manual',
-    '   - retornar um JSON final no formato usado pela automacao.',
-    '3) Secao de Board:',
-    '   - tasks sao arquivos .md com frontmatter YAML dentro de Board/',
-    '   - nunca hardcodar tokens no repositorio',
-    '   - sempre incluir o ID do task como referencia no output.',
-    '4) Secao de seguranca: nao vazar segredos em logs, commits, codigo ou docs.',
-    '5) Secao de padrao de resposta com JSON:',
+    'Required CLAUDE.md content:',
+    '1) A brief summary of the expected agent operational flow.',
+    '2) Execution checklist per task:',
+    '   - read current task and criteria',
+    '   - implement',
+    '   - run relevant local validations',
+    '   - create a commit on completion (concise, objective message)',
+    '   - move the task to Done when the flow requires manual update',
+    '   - return a final JSON in the format used by the automation.',
+    '3) Board section:',
+    '   - tasks are .md files with YAML frontmatter inside Board/',
+    '   - never hardcode tokens in the repository',
+    '   - always include the task ID as a reference in the output.',
+    '4) Security section: do not leak secrets in logs, commits, code, or docs.',
+    '5) Response format section with JSON:',
     '   {"status":"done|blocked","summary":"...","notes":"...","files":["..."],"tests":"..."}',
-    '6) Secao de git com convencoes de commit curtas e praticas.',
+    '6) Git section with short and practical commit conventions.',
     '',
-    'Importante:',
-    '- Nao inclua valores reais de tokens no arquivo.',
-    '- Se mencionar credenciais, referencie somente nomes de variaveis de ambiente.',
-    '- O texto deve ser pratico, direto e orientado a execucao.',
-    '- No final, responda APENAS um JSON de uma linha:',
+    'Important:',
+    '- Do not include real token values in the file.',
+    '- If mentioning credentials, reference only environment variable names.',
+    '- The text should be practical, direct, and execution-oriented.',
+    '- At the end, respond with ONLY a single-line JSON:',
     '  {"status":"ok|blocked","summary":"...","changes":["..."]}',
     ''
   ].join('\n');
@@ -127,14 +127,14 @@ async function main() {
   const { help } = parseArgs(process.argv);
 
   if (help) {
-    console.log('Uso: npm run setup:claude-md');
-    console.log('Atualiza (ou cria) CLAUDE.md via Claude, sem sobrescrever direto pelo script.');
+    console.log('Usage: npm run setup:claude-md');
+    console.log('Updates (or creates) CLAUDE.md via Claude, without overwriting directly from a script.');
     return;
   }
 
   const targetPath = path.resolve(process.cwd(), 'CLAUDE.md');
 
-  const baseCommand = process.env.CLAUDE_COMMAND || FIXED_CLAUDE_COMMAND;
+  const baseCommand = process.env.CLAUDE_COMMAND || DEFAULT_CLAUDE_COMMAND;
   const fullAccess = ['1', 'true', 'yes', 'on'].includes(
     String(process.env.CLAUDE_FULL_ACCESS || '').toLowerCase()
   );
@@ -181,15 +181,15 @@ async function main() {
   }
 
   if (!fileExistsNow) {
-    throw new Error('Claude nao criou/atualizou CLAUDE.md.');
+    throw new Error('Claude did not create/update CLAUDE.md.');
   }
 
   const changed = !existedBefore || existingContent !== updatedContent;
   if (!changed) {
-    console.warn('Claude executou, mas CLAUDE.md nao mudou.');
+    console.warn('Claude executed, but CLAUDE.md did not change.');
   }
 
-  console.log(`CLAUDE.md processado em: ${targetPath}`);
+  console.log(`CLAUDE.md processed at: ${targetPath}`);
   if (response) {
     console.log(response);
   }

@@ -1,180 +1,631 @@
-# Product Manager Automation (Notion + Claude Code)
+# Product Manager Automation
 
-A Node.js service that orchestrates a Notion Kanban board and executes cards automatically through Claude Code.
+A local automation system that manages a file-based Kanban board and executes tasks automatically through [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Write your tasks as Markdown files, and the orchestrator picks them up, sends them to Claude, tracks Acceptance Criteria in real time, and moves them to Done when complete.
 
-## What It Does
+## How It Works
 
-- Reads cards from a Notion database with these properties:
-  - `Name`, `Status`, `Agent`, `Priority`, `Type`, `Parent item` (sub-task)
-- Ensures continuous flow:
-  - If there is a card in `In Progress` (non-`Epic`), it executes that card.
-  - If `In Progress` is empty, it moves the first card from `Not Started` to `In Progress` (ignoring `Epic`).
-  - Parent cards with sub-tasks are also treated as `Epic` even if `Type` is empty/misconfigured.
-- For each card, it starts a separate execution of the command configured in `CLAUDE_COMMAND`.
-- When execution finishes successfully (`status=done`), it moves the card to `Done`.
-- When all children of an `Epic` are in `Done`, it automatically moves the `Epic` to `Done`.
-- Appends an automation summary with estimated duration to the Epic card.
-- Periodically reconciles the board to pick up new tasks (polling every 60s by default).
+```
+Board/                          Orchestrator                    Claude Code
+┌──────────────┐     ┌─────────────────────────┐     ┌──────────────────────┐
+│ task.md       │────▶│ Pick next task           │────▶│ Execute instructions │
+│ status: Not   │     │ Set status: In Progress  │     │ Emit AC completions  │
+│ Started       │     │ Build prompt with ACs    │     │ Return final JSON    │
+└──────────────┘     │ Stream output & track ACs│◀────│                      │
+                     │ Verify all ACs complete  │     └──────────────────────┘
+                     │ Set status: Done         │
+                     └─────────────────────────┘
+```
+
+1. You write tasks as `.md` files with YAML frontmatter inside a `Board/` directory in your project.
+2. The orchestrator picks the next task, sets its status to `In Progress`, and sends it to Claude Code.
+3. Claude executes the instructions, emits per-Acceptance-Criteria completion markers, and returns a final JSON response.
+4. The orchestrator verifies all ACs are complete, then moves the task to `Done`.
+5. For Epics (groups of related tasks), children are executed sequentially. The Epic auto-completes when all children are done.
+
+## Features
+
+- **File-based Kanban board** — Tasks are plain Markdown files with YAML frontmatter. No external services required.
+- **Automatic task execution** — The orchestrator picks tasks, runs Claude Code, and tracks progress.
+- **Real-time AC tracking** — Acceptance Criteria checkboxes are updated in real time as Claude completes each one.
+- **AC verification gate** — Tasks only move to Done when ALL Acceptance Criteria are checked.
+- **Epic support** — Group related tasks into Epic folders. Children execute sequentially; the Epic auto-completes.
+- **Auto-recovery** — When tasks fail, the system analyzes the error and retries with targeted fixes (up to 2 attempts).
+- **Watchdog** — Monitors long-running tasks and kills stuck processes after configurable thresholds.
+- **Visual control panel** — React-based web UI with real-time log streaming, Kanban board view, configuration wizard, and Claude chat.
+- **CLAUDE.md injection** — Automatically injects automation instructions into your target project's `CLAUDE.md`.
+- **Model flexibility** — Specify different Claude models per task (Opus, Sonnet, Haiku) or override globally.
+- **Git integration** — Panel includes commit history viewer and diff inspection.
 
 ## Requirements
 
-- Node.js 20+
-- Notion integration with access to the database
-- `claude` command (or equivalent) available in the environment
+- **Node.js 20+**
+- **Claude Code CLI** — Install from [claude.ai/download](https://claude.ai/download) or via `npm install -g @anthropic-ai/claude-code`
+- **Claude OAuth Token** — For non-interactive execution (see [Setup](#3-generate-a-claude-oauth-token))
 
-## Setup
+## Quick Start
 
-1. Install dependencies:
+### 1. Clone and install
 
 ```bash
+git clone https://github.com/YOUR_USERNAME/product-manager-automation.git
+cd product-manager-automation
 npm install
 ```
 
-2. Configure environment variables:
+### 2. Configure environment
 
 ```bash
 cp .env.example .env
 ```
 
-3. Update `.env`:
-- `NOTION_API_TOKEN`
-- `NOTION_DATABASE_ID`
-- (Optional) `CLAUDE_COMMAND` (defaults to `claude --print`)
-- `CLAUDE_CODE_OAUTH_TOKEN` (generate via `claude setup-token`)
-- `CLAUDE_WORKDIR` (folder where Claude will execute)
-- `CLAUDE_STREAM_OUTPUT=true` if you want to watch Claude output live
-- `CLAUDE_LOG_PROMPT=true` to print the exact prompt sent to Claude
-- `CLAUDE_FULL_ACCESS=true` to skip Claude permission prompts during task execution
-- (Optional) property/status names if they differ in your Notion
-
-4. Start the service:
+Edit `.env` and set at minimum:
 
 ```bash
-npm run dev
+# Required: OAuth token for non-interactive Claude execution
+CLAUDE_CODE_OAUTH_TOKEN=your_token_here
+
+# Required: Absolute path to the project where Claude will work
+CLAUDE_WORKDIR=/path/to/your/project
+
+# Recommended: Allow Claude to run without permission prompts
+CLAUDE_FULL_ACCESS=true
+
+# Recommended: See Claude's output in real time
+CLAUDE_STREAM_OUTPUT=true
 ```
 
-5. (Optional) Generate a project `CLAUDE.md` playbook via Claude:
+### 3. Generate a Claude OAuth Token
+
+Claude Code needs a long-lived OAuth token to run non-interactively (without a human approving each action).
 
 ```bash
-npm run setup:claude-md
+claude setup-token
 ```
 
-This command asks Claude to edit `CLAUDE.md` in-place (or create it if missing), instead of replacing it directly from a template.
+This opens a browser flow. After completing it, you'll get a token. Paste it into your `.env` as `CLAUDE_CODE_OAUTH_TOKEN`.
 
-## Base UI Setup Panel (Recommended for Team)
+Quick validation:
 
-This project includes a local Base UI-based control panel to avoid manual terminal setup.
+```bash
+printf 'Return only ok' | claude --print
+```
 
-Start panel:
+If it returns `ok`, your token is working.
+
+### 4. Create a Board in your project
+
+The `Board/` directory must be inside your target project (the directory set in `CLAUDE_WORKDIR`):
+
+```bash
+cd /path/to/your/project
+mkdir -p Board
+```
+
+Then add task files (see [Writing Tasks](#writing-tasks) below).
+
+### 5. Start the control panel
 
 ```bash
 npm run panel
 ```
 
-Open:
+This builds the React panel and opens it at `http://localhost:4100`. From the panel you can:
 
-```text
-http://localhost:4100
-```
+- Configure all settings through a visual form
+- Start/stop the automation API
+- View the Kanban board with real-time AC progress
+- Watch live log streaming
+- Chat with Claude directly
+- Inspect git commit history
 
-By default the panel tries to open the browser automatically.
-Disable it with `PANEL_AUTO_OPEN=false` in `.env`.
-
-By default the panel also auto-starts the automation app (`npm run dev`).
-Disable it with `PANEL_AUTO_START_API=false` in `.env`.
-
-UI development (hot reload):
+Alternatively, start the automation API directly (without the panel):
 
 ```bash
-npm run panel:dev
+npm start
 ```
 
-From the panel you can:
-- Configure `.env` fields
-- Open contextual help (`?`) for each setup field
-- Validate key fields before saving
-- Switch between light and dark theme
-- Open the Notion database directly from the `Notion Database ID` field
-- Pick `CLAUDE_WORKDIR` with a native folder picker
-- Start/stop the automation app (`npm run dev`)
-- Trigger manual run
-- Send one-shot chat messages to Claude from the panel at any time
-- Toggle `Show Claude Live Output` and `Log Prompt Sent to Claude` at runtime (without editing `.env`)
-- Watch live process logs in a feed
-- Save config with optional app restart confirmation (to apply changes immediately)
+## Writing Tasks
 
-Panel behavior note:
-- Starting the automation app from the panel forces `QUEUE_RUN_ON_STARTUP=false`, so queue execution starts when you click `Run Queue Now` or by periodic polling (`QUEUE_POLL_INTERVAL_MS`).
+Tasks are Markdown files with YAML frontmatter. The orchestrator reads them from the `Board/` directory.
 
-Panel implementation note:
-- The panel is built with `@base-ui/react` + Tailwind CSS, uses `Ionicons`, and is compiled with Vite into `panel/dist`.
+### Task File Format
 
-## Endpoints
+Every task file must have YAML frontmatter with these fields:
 
-- `GET /health`
-- `POST /run` (manual trigger)
-  - If `MANUAL_RUN_TOKEN` is configured: `Authorization: Bearer <token>`
-
-## Claude Response Contract
-
-The orchestrator sends the card to the configured command and expects a one-line JSON response:
-
-```json
-{"status":"done|blocked","summary":"...","notes":"...","files":["..."],"tests":"..."}
+```yaml
+---
+name: Human-readable task name        # Required
+priority: P1                           # Required: P0, P1, P2, or P3
+type: UserStory                        # Required: UserStory, Bug, Chore, or Epic
+status: Not Started                    # Required: "Not Started", "In Progress", or "Done"
+model: claude-sonnet-4-5-20250929      # Optional: override the Claude model for this task
+agents: frontend, design               # Optional: agent hints
+---
 ```
 
-- `status=done`: card moves to `Done`.
-- `status=blocked` or command failure: card remains as-is (or returns to `Not Started` if `AUTO_RESET_FAILED_TASK=true`).
-- On success, the automation also appends an execution summary (`summary`, `notes`, `tests`, `files`) to the task card in Notion.
+**Important:** The `status` field values must be exact: `"Not Started"`, `"In Progress"`, or `"Done"` (with capital letters and spaces).
 
-## Claude Auth (Non-interactive)
+### Acceptance Criteria
 
-Generate a long-lived token:
+Acceptance Criteria **must** be defined as Markdown checkboxes. The orchestrator parses these, assigns numbers (AC-1, AC-2, etc.), and tracks completion:
+
+```markdown
+## Acceptance Criteria
+- [ ] Login form renders with email and password fields
+- [ ] Form validates email format
+- [ ] Submit button is disabled when form is invalid
+- [ ] Successful login redirects to dashboard
+```
+
+As Claude completes each AC, it emits a JSON marker and the checkbox is updated in real time:
+
+```markdown
+- [x] Login form renders with email and password fields  ← completed
+- [x] Form validates email format                        ← completed
+- [ ] Submit button is disabled when form is invalid     ← pending
+- [ ] Successful login redirects to dashboard            ← pending
+```
+
+### Standalone Task Example
+
+Place the file directly in `Board/`:
+
+**File:** `Board/implement-login-page.md`
+
+```markdown
+---
+name: Implement login page
+priority: P1
+type: UserStory
+status: Not Started
+model: claude-sonnet-4-5-20250929
+---
+
+# Implement Login Page
+
+**User Story**: As a user, I want to log in with my email and password so that I can access my account.
+
+## Acceptance Criteria
+- [ ] Login form renders with email and password fields
+- [ ] Form validates email format before submission
+- [ ] Form validates password is not empty
+- [ ] Submit button is disabled when form is invalid
+- [ ] Error messages are displayed below each field when validation fails
+- [ ] Successful login redirects to dashboard
+
+## Technical Tasks
+1. Create `src/pages/Login.tsx` component
+2. Add form validation using React Hook Form
+3. Create `useAuth` hook for authentication logic
+4. Add error message display component
+5. Implement redirect logic after successful login
+
+## Tests
+- Login form renders correctly
+- Email validation works
+- Password validation works
+- Submit button disabled state
+- Error messages display correctly
+
+## Standard Completion Criteria
+- [ ] Tests written with 5+ test cases
+- [ ] `npm test` runs with zero failures
+- [ ] `npx tsc --noEmit` compiles without errors
+- [ ] Commit: `feat(auth): implement login page`
+```
+
+### Epic (Group of Related Tasks)
+
+An Epic is a folder inside `Board/` containing an `epic.md` file and child task files:
+
+```
+Board/
+└── Epic-Auth/
+    ├── epic.md              # Epic definition (required)
+    ├── us-001-login.md      # Child task 1
+    ├── us-002-signup.md     # Child task 2
+    └── us-003-logout.md     # Child task 3
+```
+
+**Epic definition** (`epic.md`):
+
+```markdown
+---
+name: Authentication System
+priority: P0
+type: Epic
+status: Not Started
+---
+
+# Authentication System Epic
+
+Build a complete authentication system with login, signup, and logout.
+
+## Acceptance Criteria
+- [ ] Users can log in with valid credentials
+- [ ] Users can create new accounts
+- [ ] Users can log out
+- [ ] Authentication state persists across page refreshes
+```
+
+**Child task** (`us-001-login.md`):
+
+```markdown
+---
+name: Implement Login Page
+priority: P1
+type: UserStory
+status: Not Started
+model: claude-sonnet-4-5-20250929
+---
+
+# Implement Login Page
+
+**User Story**: As a user, I want to log in so that I can access my account.
+
+## Acceptance Criteria
+- [ ] Login form renders with email and password fields
+- [ ] Form validates email format
+- [ ] Successful login redirects to dashboard
+- [ ] Failed login shows error message
+
+## Standard Completion Criteria
+- [ ] Tests written and passing
+- [ ] TypeScript compiles without errors
+- [ ] Commit: `feat(auth): implement login page [US-001]`
+```
+
+**Epic rules:**
+- All files (epic and children) stay in the same folder — they never move on disk.
+- Status changes happen by updating the `status` field in frontmatter.
+- Children execute sequentially in alphabetical order.
+- The Epic only moves to `Done` when ALL children have `status: Done`.
+
+### Bug Fix Task
+
+```markdown
+---
+name: Fix login redirect loop
+priority: P0
+type: Bug
+status: Not Started
+model: claude-opus-4-6
+---
+
+# Fix Login Redirect Loop
+
+**Bug**: Users are stuck in an infinite redirect loop after logging in.
+
+## Acceptance Criteria
+- [ ] Users can log in without redirect loop
+- [ ] Redirect logic only triggers once
+- [ ] Unit test added to prevent regression
+
+## Standard Completion Criteria
+- [ ] Tests written and passing
+- [ ] Commit: `fix(auth): resolve login redirect loop`
+```
+
+### Infrastructure/Chore Task
+
+```markdown
+---
+name: Install Dependencies
+priority: P0
+type: Chore
+status: Not Started
+---
+
+# Install Dependencies
+
+## Acceptance Criteria
+- [ ] All dependencies installed via `npm install`
+- [ ] No peer dependency warnings
+- [ ] `package.json` and `package-lock.json` are in sync
+
+## Tests
+N/A — infrastructure task, no business logic to test
+
+## Standard Completion Criteria
+- [ ] Commit: `chore(deps): install project dependencies`
+```
+
+### Naming Conventions
+
+| Item | Convention | Examples |
+|------|-----------|----------|
+| Task files | kebab-case | `implement-login.md`, `fix-auth-bug.md` |
+| Epic folders | PascalCase with prefix | `Epic-Auth`, `E01-Foundation` |
+| Epic definition | Always `epic.md` | `Board/Epic-Auth/epic.md` |
+| Child tasks | kebab-case | `us-001-login.md`, `bug-fix-redirect.md` |
+
+### Task Priority
+
+| Priority | Meaning |
+|----------|---------|
+| P0 | Critical — blocks everything else |
+| P1 | High — should be done soon |
+| P2 | Medium — normal priority |
+| P3 | Low — nice to have |
+
+### Task Ordering
+
+Tasks are picked in the order configured by `QUEUE_ORDER`:
+
+- `alphabetical` (default) — A to Z by filename
+- `priority_then_alphabetical` — P0 first, then P1, etc., alphabetical within each priority
+
+## Validating Your Board
+
+The system validates your Board structure on startup and shows errors in the panel. You can also validate manually from the panel's Setup tab.
+
+### Common Validation Errors
+
+| Error | Fix |
+|-------|-----|
+| `Missing 'status' field` | Add `status: Not Started` to the YAML frontmatter |
+| `Invalid status value: "not started"` | Use exact values: `"Not Started"`, `"In Progress"`, `"Done"` |
+| `Board directory not found` | Create the `Board/` folder in your `CLAUDE_WORKDIR` |
+| `Unexpected directory found` | Remove subdirectories or convert to an Epic with `epic.md` |
+| `Epic folder missing epic.md` | Add an `epic.md` file to the Epic folder |
+
+### Validating via Claude
+
+You can ask Claude to validate and fix your board structure. Run this in your project directory:
 
 ```bash
-/opt/homebrew/bin/claude setup-token
+claude "Read all .md files in the Board/ directory. For each file, verify:
+1. YAML frontmatter exists with 'name', 'priority', 'type', and 'status' fields
+2. Status is one of: 'Not Started', 'In Progress', 'Done' (exact match)
+3. At least one Acceptance Criteria checkbox exists (- [ ] ...)
+4. Epic folders contain an epic.md file
+Report any issues and fix them."
 ```
 
-Then set it in `.env`:
+## CLAUDE.md Injection
 
-```bash
-CLAUDE_CODE_OAUTH_TOKEN=sk-ant-...
-CLAUDE_FULL_ACCESS=true
+When `INJECT_CLAUDE_MD=true` (default), the automation injects a managed section into your target project's `CLAUDE.md` file. This section tells Claude how to:
+
+- Track Acceptance Criteria completion with JSON markers
+- Format its final response
+- Handle the board structure
+
+The managed section is delimited by `<!-- PRODUCT-MANAGER:START -->` and `<!-- PRODUCT-MANAGER:END -->` markers. It is updated on every API startup and will not overwrite any content outside these markers.
+
+If your project already has a `CLAUDE.md`, the managed section is appended. If not, a new file is created.
+
+## Control Panel
+
+Start the panel with `npm run panel` and open `http://localhost:4100`.
+
+### Tabs
+
+| Tab | Description |
+|-----|-------------|
+| **Setup** | Configuration wizard with validation and help tooltips for all settings |
+| **Feed** | Real-time streaming log viewer with color-coded entries by source (API, Claude, Chat). Includes Claude chat input. |
+| **Board** | Kanban board with three columns (Not Started, In Progress, Done). Each card shows a donut chart with AC progress. Supports drag-and-drop, task creation, editing, and deletion. |
+| **Git** | Commit history viewer with diff inspection (when project is a git repo) |
+
+### Sidebar Controls
+
+- **Start/Stop** — Start or stop the automation API process
+- **Run Queue** — Trigger manual reconciliation
+- **Pause/Resume** — Pause or resume the orchestrator
+- **Runtime Settings** — Toggle streaming, logging, and model override without restarting
+- **Theme** — Light/dark mode toggle
+
+## Available Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `npm run panel` | Build and start the visual control panel (port 4100) |
+| `npm run panel:dev` | Panel in hot-reload development mode |
+| `npm start` | Start automation API (port 3000) |
+| `npm run dev` | Start automation API with file-watcher (for developing the automation engine itself) |
+| `npm test` | Run tests |
+| `npm run claude:chat` | Interactive Claude chat session |
+| `npm run claude:manual -- "prompt"` | One-shot Claude prompt |
+| `npm run setup:claude-md` | Regenerate CLAUDE.md playbook |
+
+## Configuration Reference
+
+All configuration is done via `.env`. Copy `.env.example` to `.env` and customize.
+
+### Essential Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CLAUDE_CODE_OAUTH_TOKEN` | — | **Required.** OAuth token from `claude setup-token` |
+| `CLAUDE_WORKDIR` | `.` | **Required.** Absolute path to the project where Claude works. The `Board/` directory must be inside this path. |
+| `CLAUDE_FULL_ACCESS` | `false` | Skip Claude permission prompts (adds `--dangerously-skip-permissions`) |
+| `CLAUDE_STREAM_OUTPUT` | `false` | Stream Claude's output to logs in real time |
+
+### Server
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3000` | Automation API port |
+| `PANEL_PORT` | `4100` | Panel UI port |
+| `PANEL_AUTO_OPEN` | `true` | Auto-open browser when panel starts |
+| `PANEL_AUTO_START_API` | `false` | Auto-start the automation API when panel starts |
+| `PANEL_API_START_COMMAND` | `npm start` | Command used by panel to start the API |
+
+### Board
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BOARD_DIR` | `Board` | Path to Board directory (relative to `CLAUDE_WORKDIR` or absolute) |
+| `BOARD_TYPE_EPIC` | `Epic` | Type value that identifies an Epic |
+
+### Claude Execution
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CLAUDE_TIMEOUT_MS` | `4500000` | Claude execution timeout (75 minutes) |
+| `CLAUDE_LOG_PROMPT` | `true` | Log prompts sent to Claude |
+| `CLAUDE_MODEL_OVERRIDE` | — | Override the model for all tasks. Valid: `claude-opus-4-6`, `claude-sonnet-4-5-20250929`, `claude-haiku-4-5-20251001` |
+| `CLAUDE_EXTRA_PROMPT` | — | Additional text appended to every task prompt |
+| `INJECT_CLAUDE_MD` | `true` | Inject managed automation section into target project's CLAUDE.md |
+| `OPUS_REVIEW_ENABLED` | `false` | Review tasks completed by non-Opus models with Opus |
+| `EPIC_REVIEW_ENABLED` | `false` | Review completed Epics with Opus |
+| `FORCE_TEST_CREATION` | `false` | Require Claude to create tests for each task |
+| `FORCE_TEST_RUN` | `false` | Require all tests to pass before task completion |
+| `FORCE_COMMIT` | `false` | Require Claude to create a commit for each task |
+
+### Queue
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `QUEUE_ORDER` | `alphabetical` | Task ordering: `alphabetical` or `priority_then_alphabetical` |
+| `QUEUE_RUN_ON_STARTUP` | `true` | Run reconciliation on API boot |
+| `QUEUE_POLL_INTERVAL_MS` | `60000` | Polling interval in ms (0 to disable) |
+| `QUEUE_DEBOUNCE_MS` | `1500` | Reconciliation debounce |
+| `MAX_TASKS_PER_RUN` | `50` | Max tasks per reconciliation cycle |
+| `AUTO_RESET_FAILED_TASK` | `false` | Reset failed tasks back to Not Started |
+
+### Watchdog
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WATCHDOG_ENABLED` | `true` | Enable watchdog timer |
+| `WATCHDOG_INTERVAL_MS` | `1200000` | Check interval (20 minutes) |
+| `WATCHDOG_MAX_WARNINGS` | `3` | Warnings before killing a task (3 = 60min) |
+| `WATCHDOG_MAX_CONSECUTIVE_FAILURES` | `3` | Same-task failures before halting |
+| `GLOBAL_MAX_CONSECUTIVE_FAILURES` | `5` | All-task failures before halting |
+
+### Auto-Recovery
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUTO_RECOVERY_ENABLED` | `true` | Attempt to fix and retry failed tasks |
+| `AUTO_RECOVERY_MAX_RETRIES` | `2` | Max recovery attempts per task |
+| `AUTO_RECOVERY_TIMEOUT_MS` | `300000` | Recovery timeout (5 minutes) |
+| `AUTO_RECOVERY_MODEL` | `auto` | Model for recovery (`auto` uses Opus) |
+
+### Other
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MANUAL_RUN_TOKEN` | — | Bearer token to protect `/run` and `/resume` endpoints |
+| `RUN_STORE_PATH` | `.data/runs.json` | Path for execution history |
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Health check + orchestrator status |
+| `POST` | `/run` | Trigger manual reconciliation |
+| `POST` | `/run-task` | Run a single task by ID |
+| `POST` | `/run-epic` | Run epic reconciliation |
+| `POST` | `/pause` | Pause the orchestrator |
+| `POST` | `/unpause` | Resume the orchestrator |
+| `POST` | `/resume` | Resume from halted state |
+| `GET` | `/settings/runtime` | Get runtime configuration |
+| `POST` | `/settings/runtime` | Update runtime settings |
+| `GET` | `/usage/weekly` | Get weekly API usage summary |
+| `GET` | `/validate-board` | Validate board structure |
+| `POST` | `/sync-claude-md` | Sync CLAUDE.md to target project |
+
+If `MANUAL_RUN_TOKEN` is set, protected endpoints require `Authorization: Bearer <token>`.
+
+## Architecture
+
+```
+Product Manager/
+├── src/                        # Automation engine (Node.js)
+│   ├── index.js               # Express server + API endpoints
+│   ├── orchestrator.js        # Queue logic, task lifecycle, reconciliation
+│   ├── selectTask.js          # Task picking + epic detection
+│   ├── claudeRunner.js        # Claude subprocess execution
+│   ├── claudeMdManager.js     # CLAUDE.md injection into target project
+│   ├── acParser.js            # Acceptance Criteria parsing + numbering
+│   ├── promptBuilder.js       # Task prompt generation
+│   ├── autoRecovery.js        # Auto-recovery orchestration
+│   ├── boardValidator.js      # Board structure validation
+│   ├── config.js              # Environment config parsing
+│   ├── logger.js              # Colored console logging
+│   ├── runStore.js            # Execution history (JSON store)
+│   ├── usageStore.js          # API usage tracking
+│   ├── watchdog.js            # Long-running task monitor
+│   └── local/                 # Board file system integration
+│       ├── client.js          # Board client (read/write .md files)
+│       ├── frontmatter.js     # YAML frontmatter parser/serializer
+│       └── helpers.js         # Utilities
+├── panel/                      # Visual control panel (React + TypeScript)
+│   └── src/
+│       ├── app.tsx            # Main app component
+│       └── components/        # UI components (board, feed, setup, git, etc.)
+├── scripts/
+│   ├── panelServer.js         # Panel Express backend (SSE, process management)
+│   ├── claudeManual.js        # CLI chat/manual prompt scripts
+│   └── setupClaudeMd.js       # CLAUDE.md regeneration
+├── .env.example                # Configuration template
+└── CLAUDE.md                   # Automation playbook for Claude
 ```
 
-Quick validation:
+### Key Components
+
+- **Orchestrator** — Manages the task queue, picks the next task, runs Claude, tracks ACs, handles failures, and moves tasks through the board.
+- **Claude Runner** — Spawns a Claude Code subprocess with the task prompt, streams output, and parses JSON responses.
+- **AC Parser** — Extracts Acceptance Criteria checkboxes from Markdown, assigns stable numbers (AC-1, AC-2...), and updates checkboxes in real time.
+- **Board Client** — Reads and writes `.md` files with YAML frontmatter. Handles standalone tasks and Epics.
+- **Watchdog** — Periodically checks if a task is running too long and kills the process after configurable warnings.
+- **Auto-Recovery** — When a task fails, analyzes the error with Claude and attempts targeted fixes before retrying.
+- **Panel Server** — Serves the React UI, manages the API child process, streams logs via SSE, and proxies API endpoints.
+
+## Troubleshooting
+
+### Claude token not working
 
 ```bash
-printf 'Return only ok' | /opt/homebrew/bin/claude --print
+# Regenerate the token
+claude setup-token
+
+# Test it
+printf 'Return only ok' | claude --print
 ```
 
-## Manual Claude Interaction
+### Board not found
 
-Start an interactive Claude session at any time:
+Make sure `Board/` exists inside the directory specified by `CLAUDE_WORKDIR`:
 
 ```bash
-npm run claude:chat
+ls /path/to/your/project/Board/
 ```
 
-Run a one-shot prompt at any time:
+### Tasks not being picked up
+
+1. Check that task files have valid YAML frontmatter with `status: Not Started`
+2. Verify the orchestrator is not paused (check the panel sidebar)
+3. Check logs in the Feed tab for errors
+
+### Task stuck in "In Progress"
+
+The watchdog will automatically kill tasks that run too long (default: 60 minutes at 3 warnings x 20 minute intervals). You can also:
+
+1. Stop the API from the panel
+2. Manually reset the task's `status` field back to `Not Started` in the `.md` file
+3. Restart the API
+
+### Panel won't start
 
 ```bash
-npm run claude:manual -- "Summarize current pending tasks"
+# Kill any lingering processes
+npm run panel:kill
+
+# Retry
+npm run panel
 ```
 
 ## Important Notes
 
-- The Notion API does not reliably expose the board's visual order. The "first card" is approximated by creation order (`QUEUE_ORDER=created`) or priority+creation (`priority_then_created`).
-- `QUEUE_RUN_ON_STARTUP=true` triggers one reconciliation cycle right after API boot. The panel overrides this to `false` when it starts/restarts the app.
-- `QUEUE_POLL_INTERVAL_MS=60000` enables periodic reconciliation every 60s (set `0` to disable).
-- The service is designed to run as a single process. For high availability, add a distributed lock.
-- Epic durations are based on local timestamps stored in `.data/runs.json`.
-- The automation identifies Epic children through sub-task relation (`Parent item`) and also falls back to `page.parent.page_id`.
-- `npm run dev` and `npm start` suppress only Node warning `DEP0040` to keep logs clean on Node v23+.
-- The terminal logs show status transitions and (optionally) full prompts sent to Claude (`CLAUDE_LOG_PROMPT=true`).
+- The service is designed to run as a single process. Do not run multiple instances pointing to the same Board directory.
+- `npm run dev` uses `node --watch` which restarts when files change. Use `npm start` for stable mode when Claude is modifying files.
+- Epic durations are calculated from timestamps stored in `.data/runs.json`.
+- The orchestrator starts paused by default when launched from the panel. Click "Run Queue" or use the Start/Resume button to begin processing.
+- When an Epic completes, the API auto-shuts down to prevent picking up unrelated tasks. Restart from the panel when ready.
 
-## Tests
+## License
 
-```bash
-npm test
-```
+MIT

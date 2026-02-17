@@ -84,17 +84,16 @@ All task files must start with YAML frontmatter between `---` delimiters.
 | `name` | string | Human-readable task name | `"Implement login page"` |
 | `priority` | string | Priority level | `"P0"`, `"P1"`, `"P2"`, `"P3"` |
 | `type` | string | Task type | `"UserStory"`, `"Epic"`, `"Bug"`, `"Chore"` |
+| `status` | string | Task status | `"Not Started"`, `"In Progress"`, `"Done"` |
 
 #### Optional Fields
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
 | `model` | string | Claude model to use | `"claude-opus-4-6"`, `"claude-sonnet-4-5-20250929"` |
 | `agents` | string or array | Agents to run | `"frontend, design"` or `["frontend", "design"]` |
-| `status` | string | Task status (required) | `"Not Started"`, `"In Progress"`, `"Done"` |
 
 **Important**:
-- The `status` field is **REQUIRED** for all tasks (standalone and epic children).
-- If `status` is not specified, it defaults to `"Not Started"`.
+- The `status` field is **REQUIRED** for all tasks (standalone and epic children). Exact values: `"Not Started"`, `"In Progress"`, `"Done"`.
 - The `model` field is optional. If not specified, the default model from config is used.
 
 ### Acceptance Criteria Format
@@ -405,11 +404,10 @@ agents: frontend, debugging
 ### Validation Checklist
 
 Before creating a task file, verify:
-- ✅ YAML frontmatter is valid and includes required fields (`name`, `priority`, `type`)
+- ✅ YAML frontmatter is valid and includes required fields (`name`, `priority`, `type`, `status`)
+- ✅ The `status` field uses exact values: `"Not Started"`, `"In Progress"`, or `"Done"`
 - ✅ Acceptance Criteria are formatted as markdown checkboxes (`- [ ] ...`)
 - ✅ File naming follows conventions (kebab-case for tasks, epic.md for epics)
-- ✅ For Epic children: `status` field is present in frontmatter
-- ✅ For standalone tasks: NO `status` field in frontmatter
 - ✅ Task ID would be unique (no duplicate filenames)
 - ✅ Markdown content is clear and actionable for Claude
 
@@ -453,7 +451,7 @@ When the panel starts the automation API (via the Start button or auto-start), i
 Setup is done through the visual panel at `http://localhost:4100`.
 
 The Setup tab guides the user through configuring:
-1. **Claude OAuth Token** - Obtained via `/opt/homebrew/bin/claude setup-token`.
+1. **Claude OAuth Token** - Obtained via `claude setup-token`.
 2. **Claude Working Directory** - Where Claude executes tasks (supports native folder picker).
 3. **Runtime Toggles** - Full Access, Stream Output, Log Prompt.
 
@@ -498,6 +496,7 @@ From the Operations tab:
 - `BOARD_TYPE_EPIC` - Type value that represents an Epic (default `Epic`).
 - `CLAUDE_CODE_OAUTH_TOKEN` - For non-interactive Claude auth.
 - `CLAUDE_WORKDIR` - Working directory for Claude execution (default `.`). The `Board/` directory must be inside this directory.
+- `CLAUDE_COMMAND` - Command to run Claude in non-interactive mode (default `claude --print`). Override if Claude is installed in a non-standard location.
 - `CLAUDE_FULL_ACCESS` - Skip Claude permission prompts (default `false`).
 - `CLAUDE_STREAM_OUTPUT` - Stream Claude output to logs (default `false`).
 - `CLAUDE_LOG_PROMPT` - Log prompts sent to Claude (default `true`).
@@ -515,7 +514,7 @@ From the Operations tab:
 - `PANEL_AUTO_START_API` - Auto-start API when panel starts (default `false`).
 - `PANEL_API_START_COMMAND` - Command to start the API from the panel (default `npm start`). Use `npm run dev` only for local development of the automation engine itself.
 - `QUEUE_DEBOUNCE_MS` - Reconciliation debounce (default `1500`).
-- `QUEUE_ORDER` - Task ordering: `alphabetical` (default, A→Z by name) or `priority_then_alphabetical`.
+- `QUEUE_ORDER` - Task ordering: `alphabetical` (default, A-Z by name) or `priority_then_alphabetical`.
 - `QUEUE_RUN_ON_STARTUP` - Run reconciliation on boot (default `true`).
 - `QUEUE_POLL_INTERVAL_MS` - Fallback polling interval (default `60000`).
 - `MAX_TASKS_PER_RUN` - Max tasks per reconciliation cycle (default `50`).
