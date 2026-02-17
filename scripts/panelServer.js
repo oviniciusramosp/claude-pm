@@ -2708,6 +2708,18 @@ ${acGuidance[taskType] || acGuidance.UserStory}
 ${outputFormatBlock}`;
 }
 
+function normalizeMarkdownNewlines(text) {
+  // Replace literal \n (two-char sequence from double-escaped JSON) with real newlines
+  // Only replace when the string contains literal \n but no real newlines (sign of double-escaping)
+  if (typeof text !== 'string') return text;
+  const hasRealNewlines = text.includes('\n');
+  const hasLiteralEscapes = text.includes('\\n');
+  if (!hasRealNewlines && hasLiteralEscapes) {
+    return text.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+  }
+  return text;
+}
+
 function parseReviewResponse(reply) {
   const text = String(reply || '').trim();
 
@@ -2717,14 +2729,15 @@ function parseReviewResponse(reply) {
 
   try {
     const parsed = JSON.parse(jsonStr);
+    const rawBody = parsed.improvedBody || parsed.improved_body || text;
     return {
-      improvedBody: parsed.improvedBody || parsed.improved_body || text,
+      improvedBody: normalizeMarkdownNewlines(rawBody),
       summary: parsed.summary || 'Review completed'
     };
   } catch {
     // If Claude didn't return valid JSON, treat the entire reply as the improved body
     return {
-      improvedBody: text,
+      improvedBody: normalizeMarkdownNewlines(text),
       summary: 'Review completed (raw response)'
     };
   }
