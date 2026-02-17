@@ -9,7 +9,7 @@ import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/mod
 import { Icon } from './icon';
 import { DiscardConfirmOverlay } from './discard-confirm-overlay';
 import { Select, type SelectOption } from '@/components/base/select/select';
-import { BOARD_PRIORITY_COLORS, CLAUDE_TASK_MODELS } from '../constants';
+import { BOARD_PRIORITY_COLORS, BOARD_TYPE_COLORS, CLAUDE_TASK_MODELS } from '../constants';
 import { handleModalKeyDown } from '@/utils/modal-keyboard';
 import type { BoardTask } from '../types';
 
