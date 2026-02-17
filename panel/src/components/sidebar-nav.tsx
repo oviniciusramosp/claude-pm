@@ -113,7 +113,7 @@ export function SidebarNav({
               <Icon icon={item.icon} className="size-5" />
               <span>{item.label}</span>
               {showBadge ? (
-                <span className="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-utility-brand-600 text-[11px] font-semibold text-white">
+                <span className="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-utility-brand-600 text-[11px] font-semibold text-utility-brand-50 dark:text-utility-brand-950">
                   {unreadFeedCount > 99 ? '99+' : unreadFeedCount}
                 </span>
               ) : null}
@@ -262,7 +262,7 @@ export function SidebarNav({
           <Icon icon={AlertOctagon} className="size-5" />
           <span>Debug Errors</span>
           {errorCount > 0 ? (
-            <span className="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-utility-error-600 text-[11px] font-semibold text-white">
+            <span className="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-utility-error-600 text-[11px] font-semibold text-utility-error-50 dark:text-utility-error-950">
               {errorCount > 99 ? '99+' : errorCount}
             </span>
           ) : null}
