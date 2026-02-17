@@ -2529,10 +2529,56 @@ function buildReviewTaskPrompt({ name, priority, type, status, model, agents, bo
   const taskModel = model || '(default)';
   const taskAgents = agents || '(none)';
 
-  return `You are an expert prompt engineer and product manager reviewing a task file for a Claude Code automation system.
+  // Type-specific AC guidance
+  const acGuidanceByType = {
+    Epic: `   - **Epic-level ACs**: Focus on high-level business outcomes and deliverables, NOT technical implementation details
+   - Each AC should describe a complete, user-visible capability or business result
+   - ACs should be measurable but not prescriptive about implementation
+   - Example: "Users can authenticate with email and password" (NOT "Login form component exists")
+   - Avoid technical details like file names, function names, or code structure
+   - Typically 3-7 ACs for an Epic
+   - Think in terms of "what" the Epic delivers, not "how" it's built`,
+
+    UserStory: `   - **Story-level ACs**: Focus on specific, testable behaviors and technical requirements
+   - Each AC must be concrete and verifiable through code, tests, or manual inspection
+   - Include UI behavior, data validation, error handling, and edge cases
+   - Reference specific elements when applicable (e.g., "Submit button is disabled when form is invalid")
+   - ACs should guide implementation directly
+   - Typically 4-10 ACs for a UserStory
+   - Think in terms of acceptance tests that would verify this story`,
+
+    Bug: `   - **Bug-fix ACs**: Focus on verification that the bug is fixed and won't regress
+   - First AC: Reproduction steps that currently fail
+   - Second AC: Expected behavior after fix
+   - Additional ACs: Edge cases, related scenarios that must still work
+   - Include regression test requirements
+   - Typically 3-6 ACs for a Bug
+   - ACs should prove the bug is fixed and covered by tests`,
+
+    Chore: `   - **Chore-level ACs**: Focus on operational outcomes and verification steps
+   - Each AC describes a successful completion criterion
+   - Include verification steps (e.g., "Build passes without warnings")
+   - For infrastructure: describe what's working after completion
+   - Avoid over-engineering — chores should be simple and direct
+   - Typically 2-5 ACs for a Chore
+   - ACs confirm the operational task was completed correctly`,
+
+    Discovery: `   - **Discovery-level ACs**: Focus on research outcomes and documentation deliverables
+   - Each AC describes a specific question answered or artifact produced
+   - Include documentation requirements (e.g., "Decision document created with findings")
+   - Focus on learning outcomes, not implementation
+   - Typically 3-6 ACs for a Discovery task
+   - ACs should result in actionable insights for future work`
+  };
+
+  const acGuidance = acGuidanceByType[taskType] || acGuidanceByType.UserStory;
+
+  return `You are an expert prompt engineer and product manager reviewing a ${taskType} for a Claude Code automation system.
 
 <context>
 This task will be executed by Claude Code (an AI coding assistant). Claude reads the task file, follows the instructions, implements the acceptance criteria, and reports completion via JSON. The quality of the task file directly determines execution success.
+
+**IMPORTANT**: This is a **${taskType}**. The acceptance criteria, description style, and level of detail must match this task type.
 </context>
 
 <task_metadata>
@@ -2549,32 +2595,34 @@ ${body}
 </current_task_body>
 
 <review_instructions>
-Review this task and produce an improved version. Follow these quality criteria:
+Review this ${taskType} and produce an improved version. Follow these quality criteria:
 
-1. **Acceptance Criteria Quality**:
+1. **Acceptance Criteria Quality** (TYPE-SPECIFIC):
    - Each AC must be a markdown checkbox: \`- [ ] Description\`
    - Each AC must be testable, specific, and unambiguous
    - Avoid vague ACs like "works correctly" — specify exact behavior
-   - Include edge cases and error handling ACs when relevant
-   - Number of ACs should be proportional to task complexity (typically 4-10)
+
+${acGuidance}
 
 2. **Task Description Clarity**:
-   - Include a clear user story or problem statement at the top
+   - Include a clear description appropriate for a ${taskType}
    - For UserStory: use "As a [role], I want [goal] so that [benefit]"
+   - For Epic: describe the high-level business goal and scope
    - For Bug: include what happens (actual), what should happen (expected), reproduction steps
    - For Chore: describe the operational goal clearly
+   - For Discovery: frame the research question or investigation goal
 
 3. **Technical Tasks Section**:
-   - Break implementation into numbered, sequential steps
-   - Reference specific file paths when possible (e.g., "Create \`src/components/LoginForm.tsx\`")
-   - Each step should be actionable by Claude Code
-   - Include command-line steps when relevant (e.g., "Run \`npm install react-hook-form\`")
+   ${taskType === 'Epic'
+     ? '- For Epics: list high-level implementation phases (NOT detailed steps)\n   - Example: "Phase 1: Authentication infrastructure", "Phase 2: UI components"\n   - Avoid file-level details — save those for child User Stories'
+     : '- Break implementation into numbered, sequential steps\n   - Reference specific file paths when possible (e.g., "Create `src/components/LoginForm.tsx`")\n   - Each step should be actionable by Claude Code\n   - Include command-line steps when relevant (e.g., "Run `npm install react-hook-form`")'
+   }
 
 4. **Tests Section**:
-   - Specify test file path (e.g., "\`__tests__/LoginForm.test.tsx\`")
-   - List specific test cases to write
-   - Include edge case tests
-   - For infrastructure/chore tasks, state "N/A — no business logic to test"
+   ${taskType === 'Epic'
+     ? '- For Epics: describe testing strategy at a high level (e.g., "End-to-end tests for auth flow")\n   - Do not specify individual test files — child stories will handle that'
+     : '- Specify test file path (e.g., "`__tests__/LoginForm.test.tsx`")\n   - List specific test cases to write\n   - Include edge case tests\n   - For infrastructure/chore tasks, state "N/A — no business logic to test"'
+   }
 
 5. **Dependencies Section**:
    - List any prerequisites or blocking tasks
@@ -2590,7 +2638,7 @@ Review this task and produce an improved version. Follow these quality criteria:
    - Avoid ambiguous language ("consider", "maybe", "if possible")
    - Use imperative language ("Create", "Add", "Implement", "Run")
    - Structure content with clear markdown headers (##)
-   - If the task involves modifying existing files, specify which files and what changes
+   ${taskType !== 'Epic' ? '- If the task involves modifying existing files, specify which files and what changes' : ''}
 </review_instructions>
 
 <output_format>

@@ -99,7 +99,7 @@ export function logSourceMeta(entry: LogEntry | string): LogSourceMeta {
   };
 }
 
-export type SpecialBubbleType = 'in-progress' | 'epic-done' | 'validation-report' | null;
+export type SpecialBubbleType = 'in-progress' | 'epic-done' | 'validation-report' | 'progressive-log' | null;
 
 export function detectSpecialBubble(message: string): SpecialBubbleType {
   const text = (message || '').trim();
@@ -113,6 +113,46 @@ export function detectSpecialBubble(message: string): SpecialBubbleType {
     return 'epic-done';
   }
   return null;
+}
+
+/**
+ * Progressive log metadata extracted from meta field
+ */
+export interface ProgressiveLogMeta {
+  progressive: true;
+  groupId: string;
+  state: 'start' | 'progress' | 'complete' | 'error';
+  expandableContent?: string | null;
+  model?: string;
+  duration?: string;
+  [key: string]: any;
+}
+
+/**
+ * Checks if a log entry has progressive metadata
+ */
+export function isProgressiveLog(entry: LogEntry): boolean {
+  return Boolean(entry.meta && typeof entry.meta === 'object' && 'progressive' in entry.meta && entry.meta.progressive === true);
+}
+
+/**
+ * Extracts progressive log metadata from a log entry
+ */
+export function extractProgressiveMeta(entry: LogEntry): ProgressiveLogMeta | null {
+  if (!isProgressiveLog(entry)) {
+    return null;
+  }
+
+  const meta = entry.meta as any;
+  return {
+    progressive: true,
+    groupId: meta.groupId || '',
+    state: meta.state || 'start',
+    expandableContent: meta.expandableContent || null,
+    model: meta.model,
+    duration: meta.duration,
+    ...meta
+  };
 }
 
 export function logToneClasses(level: string, side = 'incoming', directClaude = false, specialBubble: SpecialBubbleType = null, isValid = true): string {

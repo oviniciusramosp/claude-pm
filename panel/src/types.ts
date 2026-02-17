@@ -45,6 +45,7 @@ export interface LogEntry {
   message?: string;
   isPrompt?: boolean;
   promptTitle?: string;
+  meta?: Record<string, any>; // Metadata for progressive logs and other structured data
   // Debug fields (only for error-level logs)
   stack?: string;
   exitCode?: string | number;

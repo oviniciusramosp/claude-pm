@@ -71,6 +71,56 @@ function write(streamFn, color, emoji, label, message, meta = undefined) {
   streamFn(line);
 }
 
+/**
+ * Emits a progressive log entry that can be updated later by emitting another log with the same groupId.
+ * Progressive logs allow the UI to show loading states and consolidate related messages into a single bubble.
+ *
+ * @param {string} level - Log level: 'info', 'success', 'warn', 'error'
+ * @param {string} groupId - Unique identifier for this log group (e.g., 'epic-review-E17')
+ * @param {string} state - Current state: 'start', 'progress', 'complete', 'error'
+ * @param {string} message - Main message text
+ * @param {object} meta - Additional metadata (model, duration, childCount, etc.)
+ * @param {string} [expandableContent] - Optional expandable content (e.g., prompt text)
+ */
+function writeProgressive(level, groupId, state, message, meta = {}, expandableContent = null) {
+  const timestamp = nowStamp();
+  const progressive = {
+    progressive: true,
+    groupId,
+    state,
+    expandableContent
+  };
+  const fullMeta = { ...meta, ...progressive };
+
+  // Color and emoji based on level
+  let color, emoji, label;
+  switch (level) {
+    case 'success':
+      color = ANSI_GREEN;
+      emoji = '✅';
+      label = 'SUCCESS';
+      break;
+    case 'warn':
+      color = ANSI_YELLOW;
+      emoji = '⚠️';
+      label = 'WARN';
+      break;
+    case 'error':
+      color = ANSI_RED;
+      emoji = '❌';
+      label = 'ERROR';
+      break;
+    default:
+      color = ANSI_CYAN;
+      emoji = 'ℹ️';
+      label = 'INFO';
+  }
+
+  const header = `${color}${emoji} ${label}${ANSI_RESET}`;
+  const line = `${header} - ${message}${formatMeta(fullMeta)} ${ANSI_DIM}(${timestamp})${ANSI_RESET}`;
+  console.log(line);
+}
+
 function writeBlock(title, content, meta = undefined) {
   const timestamp = nowStamp();
   const header = `${ANSI_MAGENTA}🧠 PROMPT${ANSI_RESET} - ${title}${formatMeta(meta)} ${ANSI_DIM}(${timestamp})${ANSI_RESET}`;
@@ -102,5 +152,18 @@ export const logger = {
 
   block(title, content, meta) {
     writeBlock(title, content, meta);
+  },
+
+  /**
+   * Emits a progressive log entry.
+   * @param {string} level - 'info', 'success', 'warn', 'error'
+   * @param {string} groupId - Unique group identifier
+   * @param {string} state - 'start', 'progress', 'complete', 'error'
+   * @param {string} message - Log message
+   * @param {object} meta - Additional metadata
+   * @param {string} [expandableContent] - Optional expandable content
+   */
+  progressive(level, groupId, state, message, meta = {}, expandableContent = null) {
+    writeProgressive(level, groupId, state, message, meta, expandableContent);
   }
 };

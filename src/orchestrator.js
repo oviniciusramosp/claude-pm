@@ -1223,21 +1223,35 @@ export class Orchestrator {
         this.currentTaskName = taskLabel(task);
 
         try {
-          this.logger.info(`Starting Epic review for: "${taskLabel(task)}" (${epicResult.children.length} children)`);
-
           const reviewPrompt = buildEpicReviewPrompt(task, epicResult.children, summary);
-          if (this.config.claude.logPrompt) {
-            this.logger.block(`Epic review prompt for "${taskLabel(task)}"`, reviewPrompt);
-          }
+          const groupId = `epic-review-${task.id}`;
 
-          this.logger.info(`Opus is reviewing epic: "${taskLabel(task)}" | model: ${OPUS_REVIEW_MODEL}`);
+          // Emit consolidated start log with expandable prompt
+          this.logger.progressive(
+            'info',
+            groupId,
+            'start',
+            `Epic review for: "${taskLabel(task)}" (${epicResult.children.length} children)`,
+            { model: OPUS_REVIEW_MODEL },
+            this.config.claude.logPrompt ? reviewPrompt : null
+          );
 
           const epicReviewStartTime = Date.now();
           const reviewExecution = await runClaudeTask(task, reviewPrompt, this.config, { overrideModel: OPUS_REVIEW_MODEL });
           await this._recordTaskUsage(task, reviewExecution);
           const epicReviewElapsed = Date.now() - epicReviewStartTime;
 
-          this.logger.info(`Opus epic review finished: "${taskLabel(task)}" (${formatDuration(epicReviewElapsed)})`);
+          // Emit completion update for the same group
+          this.logger.progressive(
+            'info',
+            groupId,
+            'complete',
+            `Epic review for: "${taskLabel(task)}" (${epicResult.children.length} children)`,
+            {
+              model: OPUS_REVIEW_MODEL,
+              duration: formatDuration(epicReviewElapsed)
+            }
+          );
 
           if (normalize(reviewExecution.status) !== 'done') {
             const reviewNotes = buildTaskCompletionNotes(task, reviewExecution);
@@ -1247,7 +1261,7 @@ export class Orchestrator {
             return;
           }
 
-          this.logger.success(`Epic review approved: "${taskLabel(task)}"`);
+          // Don't log approval here - we'll consolidate it with the children update below
 
           const reviewNotes = buildTaskCompletionNotes(task, reviewExecution);
           await this.boardClient.appendMarkdown(task.id, `## Epic Review Approved (${new Date().toISOString()})\n` + reviewNotes);
@@ -1296,7 +1310,11 @@ export class Orchestrator {
       for (const child of epicResult.children) {
         await this.boardClient.updateTaskStatus(child.id, this.config.board.statuses.done);
       }
-      this.logger.info(`Updated ${epicResult.children.length} children to Done status in frontmatter`);
+
+      // Log consolidated success message with children update info
+      this.logger.success(
+        `Epic review approved: "${taskLabel(task)}" — Updated ${epicResult.children.length} ${epicResult.children.length === 1 ? 'child' : 'children'} to Done status`
+      );
 
       await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.done);
       autoRecovery.resetEpic(task.id); // Reset epic recovery counter on success

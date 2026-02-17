@@ -1,7 +1,7 @@
 // panel/src/components/feed-tab.tsx
 
-import React, { type RefObject, useLayoutEffect, useState } from 'react';
-import { ChevronDown, ChevronRight, Copy01, CpuChip01, Send01, TerminalBrowser } from '@untitledui/icons';
+import React, { type RefObject, useLayoutEffect, useState, useMemo } from 'react';
+import { ChevronDown, ChevronRight, Copy01, CpuChip01, Send01, TerminalBrowser, Check } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { cx } from '@/utils/cx';
 import {
@@ -17,11 +17,169 @@ import {
   formatClaudeTaskContract,
   extractModelFromMessage,
   formatModelLabel,
-  parseValidationReport
+  parseValidationReport,
+  isProgressiveLog,
+  extractProgressiveMeta,
+  type ProgressiveLogMeta
 } from '../utils/log-helpers';
 import { Icon } from './icon';
 import { SourceAvatar } from './source-avatar';
 import type { LogEntry, OrchestratorState, TaskContractData, ValidationReportData } from '../types';
+
+/**
+ * Groups progressive logs by their groupId
+ * Returns an array of either individual logs or grouped progressive log arrays
+ */
+function groupProgressiveLogs(logs: LogEntry[]): Array<LogEntry | LogEntry[]> {
+  const result: Array<LogEntry | LogEntry[]> = [];
+  const progressiveGroups = new Map<string, LogEntry[]>();
+
+  for (const log of logs) {
+    if (isProgressiveLog(log)) {
+      const meta = extractProgressiveMeta(log);
+      if (meta && meta.groupId) {
+        if (!progressiveGroups.has(meta.groupId)) {
+          progressiveGroups.set(meta.groupId, []);
+        }
+        progressiveGroups.get(meta.groupId)!.push(log);
+        continue;
+      }
+    }
+    result.push(log);
+  }
+
+  // Insert grouped logs at the position of their first occurrence
+  const insertedGroups = new Set<string>();
+  const finalResult: Array<LogEntry | LogEntry[]> = [];
+
+  for (const item of result) {
+    if (!Array.isArray(item) && isProgressiveLog(item)) {
+      const meta = extractProgressiveMeta(item);
+      if (meta && meta.groupId && !insertedGroups.has(meta.groupId)) {
+        const group = progressiveGroups.get(meta.groupId);
+        if (group && group.length > 0) {
+          finalResult.push(group);
+          insertedGroups.add(meta.groupId);
+        }
+      }
+    } else {
+      finalResult.push(item);
+    }
+  }
+
+  // Add any remaining groups that weren't inserted
+  for (const [groupId, group] of progressiveGroups.entries()) {
+    if (!insertedGroups.has(groupId)) {
+      finalResult.push(group);
+    }
+  }
+
+  return finalResult;
+}
+
+/**
+ * Renders a progressive log group with loading states
+ */
+function ProgressiveLogBubble({
+  logs,
+  onCopy
+}: {
+  logs: LogEntry[];
+  onCopy: (text: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Get the latest state from the group
+  const latestLog = logs[logs.length - 1];
+  const latestMeta = extractProgressiveMeta(latestLog);
+  const firstMeta = extractProgressiveMeta(logs[0]);
+
+  if (!latestMeta) return null;
+
+  const isLoading = latestMeta.state === 'start' || latestMeta.state === 'progress';
+  const isComplete = latestMeta.state === 'complete';
+  const isError = latestMeta.state === 'error';
+
+  const message = latestLog.message || '';
+  const expandableContent = firstMeta?.expandableContent;
+  const hasExpandable = expandableContent && expandableContent.length > 0;
+  const lineCount = hasExpandable ? expandableContent.split('\n').length : 0;
+
+  return (
+    <div className="space-y-2">
+      {/* Main message with loading/complete indicator */}
+      <div className="flex items-start gap-2">
+        <div className="mt-0.5 flex size-5 shrink-0 items-center justify-center">
+          {isLoading ? (
+            <svg className="size-4 animate-spin text-current" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          ) : isComplete ? (
+            <Icon icon={Check} className="size-4 text-success-primary" />
+          ) : isError ? (
+            <span className="text-error-primary">✗</span>
+          ) : null}
+        </div>
+        <div className="flex-1">
+          <p className="m-0 text-sm font-medium leading-5 text-current">{message}</p>
+        </div>
+      </div>
+
+      {/* Model badge */}
+      {latestMeta.model && (
+        <div className="inline-flex items-center gap-1 rounded-sm bg-black/5 px-2 py-0.5 text-[11px] text-current/70 dark:bg-white/10">
+          <Icon icon={CpuChip01} className="size-3 shrink-0" />
+          <span>{formatModelLabel(latestMeta.model)}</span>
+        </div>
+      )}
+
+      {/* Duration badge (shown when complete) */}
+      {isComplete && latestMeta.duration && (
+        <div className="inline-flex items-center gap-1 rounded-sm bg-success-50 px-2 py-0.5 text-[11px] text-success-700 dark:bg-success-900/30 dark:text-success-300">
+          <Icon icon={Check} className="size-3 shrink-0" />
+          <span>{latestMeta.duration}</span>
+        </div>
+      )}
+
+      {/* Expandable prompt */}
+      {hasExpandable && (
+        <div>
+          <button
+            type="button"
+            className="m-0 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left text-sm font-medium leading-5 text-current hover:opacity-80"
+            onClick={() => setExpanded((prev) => !prev)}
+            aria-expanded={expanded}
+          >
+            <Icon icon={expanded ? ChevronDown : ChevronRight} className="size-4 shrink-0" />
+            <span>Prompt</span>
+            {!expanded && lineCount > 0 ? (
+              <span className="ml-1 text-[11px] font-normal text-tertiary">
+                ({lineCount} {lineCount === 1 ? 'line' : 'lines'})
+              </span>
+            ) : null}
+          </button>
+
+          {expanded ? (
+            <div className="relative mt-2">
+              <pre className="m-0 max-h-[400px] overflow-auto rounded-sm bg-primary/50 p-3 text-xs leading-relaxed text-current">
+                {expandableContent}
+              </pre>
+              <Button
+                size="sm"
+                color="tertiary"
+                className="absolute right-2 top-2 h-6 w-6 shrink-0 [&_svg]:!size-3"
+                aria-label="Copy prompt"
+                iconLeading={Copy01}
+                onPress={() => onCopy(expandableContent || '')}
+              />
+            </div>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ExpandablePrompt({
   title,
@@ -303,6 +461,9 @@ export function FeedTab({
   fixingTaskId?: string | null;
 }) {
   const claudeWorking = orchestratorState?.active && orchestratorState.currentTaskId;
+
+  // Group progressive logs
+  const groupedLogs = useMemo(() => groupProgressiveLogs(logs), [logs]);
 
   useLayoutEffect(() => {
     const el = logFeedRef.current;

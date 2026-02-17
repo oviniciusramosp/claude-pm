@@ -3,6 +3,7 @@
 import {
   AlertCircle,
   CheckCircle,
+  ChevronDown,
   Eye,
   EyeOff,
   Folder,
@@ -125,20 +126,23 @@ export function SetupTab({
                         <div className="flex items-stretch gap-2">
                           <div className="relative min-w-0 flex-1">
                             {field.selectOptions ? (
-                              <select
-                                aria-label={field.label}
-                                value={config[field.key] || ''}
-                                onChange={(e) => {
-                                  setConfig((prev) => ({ ...prev, [field.key]: e.target.value }));
-                                }}
-                                className="w-full h-11 rounded-sm border border-secondary bg-primary px-3 py-2 text-sm text-primary transition hover:border-secondary_hover focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
-                              >
-                                {field.selectOptions.map((option) => (
-                                  <option key={option.value} value={option.value}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
+                              <>
+                                <select
+                                  aria-label={field.label}
+                                  value={config[field.key] || ''}
+                                  onChange={(e) => {
+                                    setConfig((prev) => ({ ...prev, [field.key]: e.target.value }));
+                                  }}
+                                  className="appearance-none w-full h-11 rounded-sm border border-secondary bg-primary pl-3 pr-9 py-2 text-sm text-primary transition hover:border-secondary_hover focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+                                >
+                                  {field.selectOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-5 -translate-y-1/2 text-quaternary" />
+                              </>
                             ) : (
                               <Input
                                 size="md"
@@ -165,7 +169,8 @@ export function SetupTab({
                                 <TooltipTrigger
                                   aria-label={`${field.label} ${validation.level}`}
                                   className={cx(
-                                    'absolute right-3 top-1/2 -translate-y-1/2',
+                                    'absolute top-1/2 -translate-y-1/2',
+                                    field.selectOptions ? 'right-9' : 'right-3',
                                     validation.level === 'success'
                                       ? 'text-success-primary'
                                       : validation.level === 'warning'
