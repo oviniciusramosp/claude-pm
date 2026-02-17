@@ -480,8 +480,15 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
     }
   }, [task, apiBaseUrl, isEpic, deleteEpicFolder, showToast, onDeleted, onClose]);
 
-  const renderedHtml = markdown
-    ? marked.parse(markdown, { async: false, gfm: true, breaks: true }) as string
+  // Extract body without frontmatter for display
+  const markdownBody = useMemo(() => {
+    if (!markdown) return '';
+    const { body } = parseFrontmatter(markdown);
+    return body;
+  }, [markdown]);
+
+  const renderedHtml = markdownBody
+    ? marked.parse(markdownBody, { async: false, gfm: true, breaks: true }) as string
     : '';
 
   const priorityColor = task ? BOARD_PRIORITY_COLORS[task.priority] : undefined;
