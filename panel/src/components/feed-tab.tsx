@@ -504,7 +504,74 @@ export function FeedTab({
         ref={logFeedRef}
         className="min-h-0 flex-1 space-y-2 overflow-auto rounded-lg border border-secondary bg-secondary p-3"
       >
-        {logs.map((line, index) => {
+        {groupedLogs.map((item, index) => {
+          // Check if this is a progressive log group
+          const isProgressiveGroup = Array.isArray(item) && item.length > 0 && isProgressiveLog(item[0]);
+
+          if (isProgressiveGroup) {
+            const group = item as LogEntry[];
+            const firstLog = group[0];
+            const latestLog = group[group.length - 1];
+            const timestamp = formatFeedTimestamp(latestLog.ts);
+            const level = normalizeLogLevel(latestLog.level);
+            const levelMeta = logLevelMeta(level);
+            const sourceMeta = logSourceMeta(latestLog);
+            const isOutgoing = sourceMeta.side === 'outgoing';
+            const alignment = isOutgoing ? 'justify-end' : 'justify-start';
+
+            // For progressive groups, we don't check source key continuity
+            const isGroupContinuation = false;
+            const isLastInGroup = true;
+
+            return (
+              <div
+                key={`progressive-${extractProgressiveMeta(firstLog)?.groupId || index}`}
+                className={cx('flex', alignment, isGroupContinuation ? '!mt-0.5' : '')}
+              >
+                <div
+                  className={cx(
+                    'flex w-full max-w-[min(95%,900px)] items-end gap-2',
+                    isOutgoing ? 'justify-end' : 'justify-start'
+                  )}
+                >
+                  {!isOutgoing ? (
+                    isLastInGroup
+                      ? <SourceAvatar sourceMeta={sourceMeta} />
+                      : <span className="size-8 shrink-0" aria-hidden="true" />
+                  ) : null}
+
+                  <div
+                    className={cx(
+                      'group/msg max-w-[min(86%,760px)] rounded-xl px-4 py-3 shadow-xs',
+                      isOutgoing ? 'rounded-br-sm' : 'rounded-bl-sm',
+                      logToneClasses(level, sourceMeta.side, sourceMeta.directClaude, 'progressive-log', true),
+                      'ring-1 ring-brand/45'
+                    )}
+                  >
+                    <ProgressiveLogBubble logs={group} onCopy={copyLiveFeedMessage} />
+
+                    <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-current/50">
+                      <div className="inline-flex items-center gap-1">
+                        <Icon icon={levelMeta.icon} className="size-3" />
+                        <span>{levelMeta.label}</span>
+                        <span className="mx-0.5 opacity-60">&bull;</span>
+                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{timestamp}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {isOutgoing ? (
+                    isLastInGroup
+                      ? <SourceAvatar sourceMeta={sourceMeta} />
+                      : <span className="size-8 shrink-0" aria-hidden="true" />
+                  ) : null}
+                </div>
+              </div>
+            );
+          }
+
+          // Regular log rendering
+          const line = item as LogEntry;
           const timestamp = formatFeedTimestamp(line.ts);
           const level = normalizeLogLevel(line.level);
           const levelMeta = logLevelMeta(level);
@@ -520,9 +587,11 @@ export function FeedTab({
           const specialBubble = detectSpecialBubble(line.message || '');
 
           const currentSourceKey = resolveLogSourceKey(line.source, line.message);
-          const prevLine = index > 0 ? logs[index - 1] : null;
+          const prevItem = index > 0 ? groupedLogs[index - 1] : null;
+          const prevLine = Array.isArray(prevItem) ? null : prevItem;
           const prevSourceKey = prevLine ? resolveLogSourceKey(prevLine.source, prevLine.message) : null;
-          const nextLine = index < logs.length - 1 ? logs[index + 1] : null;
+          const nextItem = index < groupedLogs.length - 1 ? groupedLogs[index + 1] : null;
+          const nextLine = Array.isArray(nextItem) ? null : nextItem;
           const nextSourceKey = nextLine ? resolveLogSourceKey(nextLine.source, nextLine.message) : null;
           const isGroupContinuation = currentSourceKey === prevSourceKey;
           const isLastInGroup = currentSourceKey !== nextSourceKey;
