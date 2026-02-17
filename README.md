@@ -32,6 +32,9 @@ Board/                          Orchestrator                    Claude Code
 - **Auto-recovery** — When tasks fail, the system analyzes the error and retries with targeted fixes (up to 2 attempts).
 - **Watchdog** — Monitors long-running tasks and kills stuck processes after configurable thresholds.
 - **Visual control panel** — React-based web UI with real-time log streaming, Kanban board view, configuration wizard, and Claude chat.
+- **Review with Claude** — One-click AI review of task descriptions. Claude Sonnet optimizes acceptance criteria, technical tasks, and tests following prompt engineering best practices. Includes undo and cancel support.
+- **Auto-generate stories** — Generate up to 15 user stories from an Epic description. Claude reads the Epic, creates `.md` files with full ACs, technical tasks, tests, and dependencies.
+- **Unsaved changes protection** — Create and edit modals guard against accidental data loss with confirmation dialogs. In-progress reviews are cancelled on close.
 - **CLAUDE.md injection** — Automatically injects automation instructions into your target project's `CLAUDE.md`.
 - **Model flexibility** — Specify different Claude models per task (Opus, Sonnet, Haiku) or override globally.
 - **Git integration** — Panel includes commit history viewer and diff inspection.
@@ -404,7 +407,7 @@ Start the panel with `npm run panel` and open `http://localhost:4100`.
 |-----|-------------|
 | **Setup** | Configuration wizard with validation and help tooltips for all settings |
 | **Feed** | Real-time streaming log viewer with color-coded entries by source (API, Claude, Chat). Includes Claude chat input. |
-| **Board** | Kanban board with three columns (Not Started, In Progress, Done). Each card shows a donut chart with AC progress. Supports drag-and-drop, task creation, editing, and deletion. |
+| **Board** | Kanban board with three columns (Not Started, In Progress, Done). Each card shows a donut chart with AC progress. Supports drag-and-drop, task creation, editing, and deletion. Includes "Review with Claude" in task modals and "Generate Stories" on Epic cards. |
 | **Git** | Commit history viewer with diff inspection (when project is a git repo) |
 
 ### Sidebar Controls
@@ -414,6 +417,32 @@ Start the panel with `npm run panel` and open `http://localhost:4100`.
 - **Pause/Resume** — Pause or resume the orchestrator
 - **Runtime Settings** — Toggle streaming, logging, and model override without restarting
 - **Theme** — Light/dark mode toggle
+
+## AI-Assisted Task Writing
+
+The panel includes two Claude-powered features that help you write better tasks without leaving the UI.
+
+### Review with Claude
+
+Inside both the **Create Task** and **Edit Task** modals, click "Review with Claude" to send the task content to Claude Sonnet for optimization. Claude improves acceptance criteria, technical tasks, tests, and overall structure following prompt engineering best practices.
+
+- **Undo**: After a review, click "Undo Review" to revert to the original content.
+- **Cancel**: If you close the modal while a review is running, the review is cancelled automatically.
+- **Dirty-check**: If you have unsaved changes, closing the modal shows a confirmation dialog to prevent accidental data loss.
+
+### Generate Stories from Epic
+
+After creating an Epic with a description of the features you want, click the **"Generate"** button that appears next to the "+" button on Epic cards in the board.
+
+Claude reads the Epic description and automatically creates up to 15 user story `.md` files, each with:
+- Name and priority
+- Acceptance criteria as checkboxes
+- Technical tasks
+- Test plan
+- Dependencies
+- Standard completion criteria
+
+The generated stories appear as children of the Epic. Both manual ("+" button) and AI-generated story creation coexist.
 
 ## Available Scripts
 
@@ -527,6 +556,13 @@ All configuration is done via `.env`. Copy `.env.example` to `.env` and customiz
 | `GET` | `/validate-board` | Validate board structure |
 | `POST` | `/sync-claude-md` | Sync CLAUDE.md to target project |
 
+The **panel server** (port 4100) also exposes these endpoints:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/board/review-task` | Send task content to Claude for AI review and optimization |
+| `POST` | `/api/board/generate-stories` | Generate user stories from an Epic description |
+
 If `MANUAL_RUN_TOKEN` is set, protected endpoints require `Authorization: Bearer <token>`.
 
 ## Architecture
@@ -555,7 +591,7 @@ Product Manager/
 ├── panel/                      # Visual control panel (React + TypeScript)
 │   └── src/
 │       ├── app.tsx            # Main app component
-│       └── components/        # UI components (board, feed, setup, git, etc.)
+│       └── components/        # UI components (board, feed, setup, git, modals, etc.)
 ├── scripts/
 │   ├── panelServer.js         # Panel Express backend (SSE, process management)
 │   ├── claudeManual.js        # CLI chat/manual prompt scripts
