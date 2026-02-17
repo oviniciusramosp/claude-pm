@@ -2529,59 +2529,7 @@ function buildReviewTaskPrompt({ name, priority, type, status, model, agents, bo
   const taskModel = model || '(default)';
   const taskAgents = agents || '(none)';
 
-  // Type-specific AC guidance
-  const acGuidanceByType = {
-    Epic: `   - **Epic-level ACs**: Focus on high-level business outcomes and deliverables, NOT technical implementation details
-   - Each AC should describe a complete, user-visible capability or business result
-   - ACs should be measurable but not prescriptive about implementation
-   - Example: "Users can authenticate with email and password" (NOT "Login form component exists")
-   - Avoid technical details like file names, function names, or code structure
-   - Typically 3-7 ACs for an Epic
-   - Think in terms of "what" the Epic delivers, not "how" it's built`,
-
-    UserStory: `   - **Story-level ACs**: Focus on specific, testable behaviors and technical requirements
-   - Each AC must be concrete and verifiable through code, tests, or manual inspection
-   - Include UI behavior, data validation, error handling, and edge cases
-   - Reference specific elements when applicable (e.g., "Submit button is disabled when form is invalid")
-   - ACs should guide implementation directly
-   - Typically 4-10 ACs for a UserStory
-   - Think in terms of acceptance tests that would verify this story`,
-
-    Bug: `   - **Bug-fix ACs**: Focus on verification that the bug is fixed and won't regress
-   - First AC: Reproduction steps that currently fail
-   - Second AC: Expected behavior after fix
-   - Additional ACs: Edge cases, related scenarios that must still work
-   - Include regression test requirements
-   - Typically 3-6 ACs for a Bug
-   - ACs should prove the bug is fixed and covered by tests`,
-
-    Chore: `   - **Chore-level ACs**: Focus on operational outcomes and verification steps
-   - Each AC describes a successful completion criterion
-   - Include verification steps (e.g., "Build passes without warnings")
-   - For infrastructure: describe what's working after completion
-   - Avoid over-engineering — chores should be simple and direct
-   - Typically 2-5 ACs for a Chore
-   - ACs confirm the operational task was completed correctly`,
-
-    Discovery: `   - **Discovery-level ACs**: Focus on research outcomes and documentation deliverables
-   - Each AC describes a specific question answered or artifact produced
-   - Include documentation requirements (e.g., "Decision document created with findings")
-   - Focus on learning outcomes, not implementation
-   - Typically 3-6 ACs for a Discovery task
-   - ACs should result in actionable insights for future work`
-  };
-
-  const acGuidance = acGuidanceByType[taskType] || acGuidanceByType.UserStory;
-
-  return `You are an expert prompt engineer and product manager reviewing a ${taskType} for a Claude Code automation system.
-
-<context>
-This task will be executed by Claude Code (an AI coding assistant). Claude reads the task file, follows the instructions, implements the acceptance criteria, and reports completion via JSON. The quality of the task file directly determines execution success.
-
-**IMPORTANT**: This is a **${taskType}**. The acceptance criteria, description style, and level of detail must match this task type.
-</context>
-
-<task_metadata>
+  const metadataBlock = `<task_metadata>
 - Name: ${name}
 - Type: ${taskType}
 - Priority: ${taskPriority}
@@ -2592,37 +2540,153 @@ This task will be executed by Claude Code (an AI coding assistant). Claude reads
 
 <current_task_body>
 ${body}
-</current_task_body>
+</current_task_body>`;
+
+  const outputFormatBlock = `<output_format>
+Return your response as a JSON object with this exact structure:
+
+{"improvedBody": "The complete improved markdown body (everything after the YAML frontmatter). Use \\n for newlines.", "summary": "A 1-2 sentence summary of what was improved"}
+
+IMPORTANT:
+- Return ONLY the JSON object, no markdown code blocks around it
+- The "improvedBody" must be the complete task body — do not omit sections
+- Preserve any existing content that is already good
+- Do not invent content unrelated to the task
+- Keep the same task intent and scope — improve quality, not scope
+- Use literal \\n for newlines inside the JSON string values
+</output_format>`;
+
+  // ── Epic-specific prompt ──────────────────────────────────────────────
+  if (taskType === 'Epic') {
+    return `You are an expert product manager reviewing an **Epic** definition for a Claude Code automation system.
+
+<context>
+This Epic will NOT be executed directly by Claude. Instead, it serves as a **parent container** that defines a high-level business goal. Child User Stories will be generated from this Epic and those stories will be executed individually by Claude Code.
+
+The Epic must be written at the RIGHT level of abstraction:
+- HIGH ENOUGH to describe business outcomes, not implementation details
+- DETAILED ENOUGH to generate meaningful User Stories from it
+</context>
+
+${metadataBlock}
+
+<review_instructions>
+Review this Epic and produce an improved version. The output MUST follow the **Epic format** (NOT a User Story format).
+
+**REQUIRED SECTIONS** (in this exact order):
+
+1. **# [Epic Name] Epic** (h1 header)
+   - Use the format: "# [Name] Epic"
+
+2. **Epic Goal** (bold paragraph, NOT a section header)
+   - One paragraph starting with "**Epic Goal**:" that describes the high-level business objective
+   - Focus on WHAT will be delivered and WHY, not HOW
+   - Example: "**Epic Goal**: Build a complete authentication system that allows users to securely create accounts, log in, and manage their sessions."
+
+3. **## Scope**
+   - Bullet list of what this Epic includes
+   - Each bullet is a capability or feature area (NOT a technical task)
+   - Example: "- User login with email/password" (NOT "- Create LoginForm.tsx component")
+
+4. **## Acceptance Criteria**
+   - Each AC must be a markdown checkbox: \`- [ ] Description\`
+   - **CRITICAL**: ACs must describe business outcomes and user-visible results
+   - DO NOT include technical details (file names, function names, component names, code patterns)
+   - DO NOT write ACs that sound like unit tests or implementation steps
+   - Good: "- [ ] Users can log in with valid credentials"
+   - Bad: "- [ ] Login form component renders with email and password fields"
+   - Good: "- [ ] Error messages are shown for invalid inputs"
+   - Bad: "- [ ] Form validates email format using regex"
+   - Typically 3-7 ACs for an Epic
+
+5. **## Technical Approach**
+   - Bullet list of high-level architectural decisions and technology choices
+   - This guides the child stories but does NOT prescribe implementation
+   - Example: "- Use JWT tokens for authentication" or "- Store state in React Context"
+   - NO file paths, NO function signatures, NO code snippets
+
+6. **## Dependencies**
+   - List prerequisites, external services, or blocking items
+   - Or "- None" if standalone
+
+7. **## Child Tasks**
+   - Always end with: "See individual user story files in this Epic folder."
+   - This section is a placeholder — child stories are generated separately
+
+**SECTIONS TO NEVER INCLUDE IN AN EPIC:**
+- ❌ "User Story" / "As a [role], I want..." (that's for child stories)
+- ❌ "Technical Tasks" with numbered implementation steps
+- ❌ "Tests" with specific test files or test cases
+- ❌ "Standard Completion Criteria" with build/lint/commit checks
+- ❌ File paths, component names, or code references in ACs
+</review_instructions>
+
+${outputFormatBlock}`;
+  }
+
+  // ── Non-Epic prompt (UserStory, Bug, Chore, Discovery) ────────────────
+  const descriptionGuidance = {
+    UserStory: '- Start with: "**User Story**: As a [role], I want [goal] so that [benefit]"',
+    Bug: '- Start with "**Bug**:" followed by a description of what happens\n   - Include: actual behavior, expected behavior, and reproduction steps',
+    Chore: '- Describe the operational goal clearly and concisely',
+    Discovery: '- Frame the research question or investigation goal\n   - Describe what decisions depend on the outcome'
+  };
+
+  const acGuidance = {
+    UserStory: `   - Focus on specific, testable behaviors and technical requirements
+   - Each AC must be concrete and verifiable through code, tests, or manual inspection
+   - Include UI behavior, data validation, error handling, and edge cases
+   - Reference specific elements when applicable (e.g., "Submit button is disabled when form is invalid")
+   - ACs should guide implementation directly
+   - Typically 4-10 ACs for a UserStory`,
+
+    Bug: `   - First AC: describe the expected behavior after the fix
+   - Additional ACs: edge cases, related scenarios that must still work
+   - Include regression test requirements
+   - Typically 3-6 ACs for a Bug`,
+
+    Chore: `   - Focus on operational outcomes and verification steps
+   - Each AC describes a successful completion criterion
+   - Include verification steps (e.g., "Build passes without warnings")
+   - Typically 2-5 ACs for a Chore`,
+
+    Discovery: `   - Focus on research outcomes and documentation deliverables
+   - Each AC describes a specific question answered or artifact produced
+   - Include documentation requirements (e.g., "Decision document created with findings")
+   - Typically 3-6 ACs for a Discovery task`
+  };
+
+  return `You are an expert prompt engineer and product manager reviewing a ${taskType} for a Claude Code automation system.
+
+<context>
+This task will be executed by Claude Code (an AI coding assistant). Claude reads the task file, follows the instructions, implements the acceptance criteria, and reports completion via JSON. The quality of the task file directly determines execution success.
+</context>
+
+${metadataBlock}
 
 <review_instructions>
 Review this ${taskType} and produce an improved version. Follow these quality criteria:
 
-1. **Acceptance Criteria Quality** (TYPE-SPECIFIC):
+1. **Task Description**:
+   ${descriptionGuidance[taskType] || descriptionGuidance.UserStory}
+
+2. **Acceptance Criteria Quality**:
    - Each AC must be a markdown checkbox: \`- [ ] Description\`
    - Each AC must be testable, specific, and unambiguous
    - Avoid vague ACs like "works correctly" — specify exact behavior
-
-${acGuidance}
-
-2. **Task Description Clarity**:
-   - Include a clear description appropriate for a ${taskType}
-   - For UserStory: use "As a [role], I want [goal] so that [benefit]"
-   - For Epic: describe the high-level business goal and scope
-   - For Bug: include what happens (actual), what should happen (expected), reproduction steps
-   - For Chore: describe the operational goal clearly
-   - For Discovery: frame the research question or investigation goal
+${acGuidance[taskType] || acGuidance.UserStory}
 
 3. **Technical Tasks Section**:
-   ${taskType === 'Epic'
-     ? '- For Epics: list high-level implementation phases (NOT detailed steps)\n   - Example: "Phase 1: Authentication infrastructure", "Phase 2: UI components"\n   - Avoid file-level details — save those for child User Stories'
-     : '- Break implementation into numbered, sequential steps\n   - Reference specific file paths when possible (e.g., "Create `src/components/LoginForm.tsx`")\n   - Each step should be actionable by Claude Code\n   - Include command-line steps when relevant (e.g., "Run `npm install react-hook-form`")'
-   }
+   - Break implementation into numbered, sequential steps
+   - Reference specific file paths when possible (e.g., "Create \`src/components/LoginForm.tsx\`")
+   - Each step should be actionable by Claude Code
+   - Include command-line steps when relevant (e.g., "Run \`npm install react-hook-form\`")
 
 4. **Tests Section**:
-   ${taskType === 'Epic'
-     ? '- For Epics: describe testing strategy at a high level (e.g., "End-to-end tests for auth flow")\n   - Do not specify individual test files — child stories will handle that'
-     : '- Specify test file path (e.g., "`__tests__/LoginForm.test.tsx`")\n   - List specific test cases to write\n   - Include edge case tests\n   - For infrastructure/chore tasks, state "N/A — no business logic to test"'
-   }
+   - Specify test file path (e.g., "\`__tests__/LoginForm.test.tsx\`")
+   - List specific test cases to write
+   - Include edge case tests
+   - For infrastructure/chore tasks, state "N/A — no business logic to test"
 
 5. **Dependencies Section**:
    - List any prerequisites or blocking tasks
@@ -2638,22 +2702,10 @@ ${acGuidance}
    - Avoid ambiguous language ("consider", "maybe", "if possible")
    - Use imperative language ("Create", "Add", "Implement", "Run")
    - Structure content with clear markdown headers (##)
-   ${taskType !== 'Epic' ? '- If the task involves modifying existing files, specify which files and what changes' : ''}
+   - If the task involves modifying existing files, specify which files and what changes
 </review_instructions>
 
-<output_format>
-Return your response as a JSON object with this exact structure:
-
-{"improvedBody": "The complete improved markdown body (everything after the YAML frontmatter). Use \\n for newlines.", "summary": "A 1-2 sentence summary of what was improved"}
-
-IMPORTANT:
-- Return ONLY the JSON object, no markdown code blocks around it
-- The "improvedBody" must be the complete task body — do not omit sections
-- Preserve any existing content that is already good
-- Do not invent acceptance criteria unrelated to the task
-- Keep the same task intent and scope — improve quality, not scope
-- Use literal \\n for newlines inside the JSON string values
-</output_format>`;
+${outputFormatBlock}`;
 }
 
 function parseReviewResponse(reply) {
