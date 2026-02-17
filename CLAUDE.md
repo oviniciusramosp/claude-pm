@@ -477,9 +477,55 @@ Click the **"PM Automation"** header in the sidebar to see the QR code and acces
 
 ### Authentication (Public Mode)
 
-When the panel runs in public mode (`npm run panel:public`), OAuth authentication protects the panel from unauthorized access. **Authentication is disabled in local mode** to preserve development convenience.
+When the panel runs in public mode (`npm run panel:public`), authentication protects the panel from unauthorized access. **Authentication is disabled in local mode** to preserve development convenience.
 
-#### Setup
+You can use **passkey authentication** (simple code), **OAuth** (GitHub/Google), or both.
+
+#### Method 1: Passkey Authentication (Recommended for Quick Tunnels)
+
+Passkey is the simplest option and works perfectly with Cloudflare quick tunnels (which generate random URLs on each restart).
+
+**Setup:**
+
+1. **Generate JWT secret:**
+   ```bash
+   openssl rand -base64 32
+   ```
+   Add to `.env`: `JWT_SECRET=<generated-secret>`
+
+2. **Set your passkey:**
+   ```bash
+   AUTH_PASSKEY=your-secret-code-here
+   ```
+   Choose a strong passkey (e.g., `my-secret-panel-2024`)
+
+3. **Start the panel in public mode:**
+   ```bash
+   npm run panel:public
+   ```
+
+4. **Login:**
+   - Open the tunnel URL in your browser
+   - Enter your passkey
+   - Click "Sign in with Passkey"
+
+**Advantages:**
+- ✅ Simple setup (just one environment variable)
+- ✅ Works with random Cloudflare Tunnel URLs
+- ✅ No OAuth app configuration needed
+- ✅ Perfect for personal use
+
+**Disadvantages:**
+- ❌ Single shared passkey (no individual user tracking)
+- ❌ Less secure than OAuth for team use
+
+---
+
+#### Method 2: OAuth Authentication (For Static URLs)
+
+OAuth is better for teams and when you have a stable URL (named tunnel or static domain).
+
+**Setup:**
 
 1. **Generate JWT secret:**
    ```bash
@@ -508,13 +554,26 @@ When the panel runs in public mode (`npm run panel:public`), OAuth authenticatio
    AUTH_ALLOWED_EMAILS=you@example.com,teammate@example.com
    ```
 
+**Advantages:**
+- ✅ Individual user tracking (name, email, avatar)
+- ✅ More secure for team use
+- ✅ Email whitelist support
+
+**Disadvantages:**
+- ❌ Requires OAuth app setup
+- ❌ Callback URLs must be updated for quick tunnels
+- ❌ More complex configuration
+
+---
+
 #### How It Works
 
 - **Local mode** (`npm run panel`): No authentication required
 - **Public mode** (`npm run panel:public`): All `/api/*` endpoints require JWT cookie (except `/api/auth/*` and `/api/server/info`)
-- Users log in via OAuth (GitHub or Google)
+- **Passkey**: User enters code, gets JWT token
+- **OAuth**: User logs in via GitHub/Google, gets JWT token with user info
 - JWT stored in httpOnly cookie with sameSite=strict (expires in 7 days by default)
-- User info (name, email, avatar) shown in sidebar
+- User info shown in sidebar (OAuth only, passkey shows "Authenticated User")
 - Logout clears cookie and redirects to login page
 
 #### Cloudflare Tunnel Callbacks

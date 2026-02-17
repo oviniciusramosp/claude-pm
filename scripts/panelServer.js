@@ -17,6 +17,7 @@ import { generateStoryFileName } from '../src/local/helpers.js';
 import { configurePassport, getEnabledProviders } from '../src/auth/passport-config.js';
 import { generateToken, getCookieOptions } from '../src/auth/jwt.js';
 import { requireAuth, optionalAuth } from '../src/auth/middleware.js';
+import { isPasskeyEnabled, verifyPasskey, generatePasskeyToken } from '../src/auth/passkey.js';
 
 dotenv.config();
 
@@ -1450,6 +1451,23 @@ app.get('/auth/google/callback', authLimiter, passport.authenticate('google', { 
   res.redirect(safeReturnTo);
 });
 
+// Passkey login
+app.post('/auth/passkey', authLimiter, (req, res) => {
+  const { passkey } = req.body;
+
+  if (!passkey) {
+    return res.status(400).json({ error: 'Passkey is required' });
+  }
+
+  if (!verifyPasskey(passkey)) {
+    return res.status(401).json({ error: 'Invalid passkey' });
+  }
+
+  const token = generatePasskeyToken();
+  res.cookie('pm_auth_token', token, getCookieOptions());
+  res.json({ success: true });
+});
+
 // Logout
 app.post('/auth/logout', (req, res) => {
   res.clearCookie('pm_auth_token');
@@ -1464,9 +1482,12 @@ app.get('/api/auth/user', optionalAuth, (req, res) => {
   res.json({ authenticated: true, user: req.user });
 });
 
-// Available auth providers
+// Available auth providers and methods
 app.get('/api/auth/providers', (_req, res) => {
-  res.json({ providers: getEnabledProviders() });
+  res.json({
+    providers: getEnabledProviders(),
+    passkeyEnabled: isPasskeyEnabled()
+  });
 });
 
 // ── Server Info & API Routes ───────────────────────────────────────
