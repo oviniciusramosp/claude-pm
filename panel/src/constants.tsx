@@ -19,6 +19,7 @@ import {
   Settings01,
   TerminalBrowser,
   User01,
+  Users01,
   XCircle
 } from '@untitledui/icons';
 import type { TextFieldConfig, ToggleConfig, SetupSection, LogLevelMeta, LogSourceMeta } from './types';
@@ -137,6 +138,12 @@ export const TOGGLE_CONFIG: ToggleConfig[] = [
     label: 'Force Commit',
     icon: GitCommit,
     description: 'Claude must create a commit before moving the task to Done.'
+  },
+  {
+    key: 'ENABLE_MULTI_AGENTS',
+    label: 'Enable Multi-Agent Execution',
+    icon: Users01,
+    description: 'When enabled, Claude will use multiple agents in parallel for complex tasks to improve speed and quality.'
   }
 ];
 
@@ -158,7 +165,7 @@ export const SETUP_SECTIONS: SetupSection[] = [
     title: 'Execution & Logs',
     description: 'Controls terminal streaming and prompt logging for task runs.',
     textKeys: [],
-    toggleKeys: ['CLAUDE_STREAM_OUTPUT', 'CLAUDE_LOG_PROMPT', 'OPUS_REVIEW_ENABLED', 'EPIC_REVIEW_ENABLED', 'FORCE_TEST_CREATION', 'FORCE_TEST_RUN', 'FORCE_COMMIT']
+    toggleKeys: ['CLAUDE_STREAM_OUTPUT', 'CLAUDE_LOG_PROMPT', 'ENABLE_MULTI_AGENTS', 'OPUS_REVIEW_ENABLED', 'EPIC_REVIEW_ENABLED', 'FORCE_TEST_CREATION', 'FORCE_TEST_RUN', 'FORCE_COMMIT']
   }
 ];
 

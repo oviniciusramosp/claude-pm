@@ -3,6 +3,7 @@
 import React, { type RefObject, useLayoutEffect, useState, useMemo } from 'react';
 import { ChevronDown, ChevronRight, Copy01, CpuChip01, Send01, TerminalBrowser, Check, ChevronSelectorVertical } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
+import { Tooltip } from './base/tooltip/tooltip';
 import { cx } from '@/utils/cx';
 import {
   normalizeLogLevel,
@@ -465,6 +466,7 @@ export function FeedTab({
   fixingTaskId?: string | null;
 }) {
   const claudeWorking = orchestratorState?.active && orchestratorState.currentTaskId;
+  const isChatDisabled = Boolean(busy.chat) || claudeWorking || Boolean(fixingTaskId);
 
   // Group progressive logs
   const groupedLogs = useMemo(() => groupProgressiveLogs(logs), [logs]);
@@ -716,18 +718,18 @@ export function FeedTab({
           className={cx(
             'flex items-end gap-2 rounded-lg bg-primary p-2 shadow-xs ring-1 ring-primary ring-inset transition-shadow duration-100 ease-linear',
             'has-[:focus]:ring-2 has-[:focus]:ring-brand',
-            Boolean(busy.chat) && 'bg-disabled_subtle ring-disabled'
+            isChatDisabled && 'bg-disabled_subtle ring-disabled'
           )}
         >
           <div className="relative shrink-0">
             <select
               value={chatModel}
               onChange={(e) => setChatModel(e.target.value)}
-              disabled={Boolean(busy.chat)}
+              disabled={isChatDisabled}
               className={cx(
                 'h-9 appearance-none rounded-md border border-secondary bg-primary px-3 pr-8 text-sm text-primary outline-hidden transition-colors',
                 'hover:border-secondary_hover focus:border-brand focus:ring-2 focus:ring-brand/20',
-                Boolean(busy.chat) && 'cursor-not-allowed opacity-50'
+                isChatDisabled && 'cursor-not-allowed opacity-50'
               )}
               aria-label="Select Claude model"
             >
@@ -741,9 +743,15 @@ export function FeedTab({
           </div>
           <textarea
             aria-label="Chat prompt"
-            placeholder="Ask Claude about this project..."
+            placeholder={
+              claudeWorking
+                ? 'Claude is working on a task...'
+                : fixingTaskId
+                  ? 'Claude is fixing acceptance criteria...'
+                  : 'Ask Claude about this project...'
+            }
             value={chatDraft}
-            disabled={Boolean(busy.chat)}
+            disabled={isChatDisabled}
             rows={1}
             onChange={(e) => {
               setChatDraft(e.target.value);
@@ -754,24 +762,45 @@ export function FeedTab({
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
-                sendClaudeChatMessage();
+                if (!isChatDisabled) {
+                  sendClaudeChatMessage();
+                }
               }
             }}
             className={cx(
               'min-w-0 flex-1 resize-none bg-transparent py-1 pl-2 text-md text-primary outline-hidden placeholder:text-placeholder',
-              Boolean(busy.chat) && 'cursor-not-allowed text-disabled'
+              isChatDisabled && 'cursor-not-allowed text-disabled'
             )}
           />
-          <Button
-            size="sm"
-            color="primary"
-            iconLeading={Send01}
-            className="shrink-0 rounded-xs p-2! [&_svg]:!size-4"
-            isLoading={Boolean(busy.chat)}
-            isDisabled={!chatDraft.trim() || Boolean(busy.chat)}
-            onPress={sendClaudeChatMessage}
-            aria-label="Send"
-          />
+          <Tooltip
+            title={
+              claudeWorking
+                ? 'Claude is busy'
+                : fixingTaskId
+                  ? 'Claude is busy'
+                  : 'Send message'
+            }
+            description={
+              claudeWorking
+                ? `Currently executing: ${orchestratorState?.currentTaskName || orchestratorState?.currentTaskId}`
+                : fixingTaskId
+                  ? `Fixing acceptance criteria for: ${fixingTaskId}`
+                  : undefined
+            }
+            delay={300}
+            isDisabled={!isChatDisabled}
+          >
+            <Button
+              size="sm"
+              color="primary"
+              iconLeading={Send01}
+              className="shrink-0 rounded-xs p-2! [&_svg]:!size-4"
+              isLoading={Boolean(busy.chat)}
+              isDisabled={!chatDraft.trim() || isChatDisabled}
+              onPress={sendClaudeChatMessage}
+              aria-label="Send"
+            />
+          </Tooltip>
         </div>
       </div>
     </section>

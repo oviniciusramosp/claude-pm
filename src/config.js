@@ -72,7 +72,8 @@ export const config = {
     forceTestCreation: boolean('FORCE_TEST_CREATION', false),
     forceTestRun: boolean('FORCE_TEST_RUN', false),
     forceCommit: boolean('FORCE_COMMIT', false),
-    injectClaudeMd: boolean('INJECT_CLAUDE_MD', true)
+    injectClaudeMd: boolean('INJECT_CLAUDE_MD', true),
+    enableMultiAgents: boolean('ENABLE_MULTI_AGENTS', false)
   },
   state: {
     runStorePath: path.resolve(process.cwd(), process.env.RUN_STORE_PATH || '.data/runs.json'),

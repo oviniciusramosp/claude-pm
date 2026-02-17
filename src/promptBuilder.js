@@ -13,7 +13,8 @@ export function buildTaskPrompt(task, markdown, options = {}) {
     extraPrompt = '',
     forceTestCreation = false,
     forceTestRun = false,
-    forceCommit = false
+    forceCommit = false,
+    enableMultiAgents = false
   } = typeof options === 'string' ? { extraPrompt: options } : options;
 
   const agents = task.agents.length > 0 ? task.agents.join(', ') : '(no agents specified)';
@@ -80,6 +81,44 @@ export function buildTaskPrompt(task, markdown, options = {}) {
     '- Never include secrets in code, commits, or logs.',
     ''
   );
+
+  if (enableMultiAgents) {
+    basePrompt.push(
+      '='.repeat(80),
+      'MULTI-AGENT EXECUTION (ENABLED)',
+      '='.repeat(80),
+      '',
+      'You are encouraged to use multiple agents in parallel when appropriate to improve speed and quality.',
+      '',
+      'When to use multi-agents:',
+      '- Complex tasks that can be broken down into independent sub-tasks.',
+      '- Tasks that involve multiple domains (e.g., frontend + backend, or UI + tests).',
+      '- Tasks where different agents have specialized skills.',
+      '',
+      'How to use multi-agents effectively:',
+      '- Use the Task tool to launch specialized agents for independent work.',
+      '- Launch multiple agents in parallel by sending multiple Task tool calls in a single message.',
+      '- Coordinate between agents by passing context and results.',
+      '- Ensure each agent has clear, focused responsibilities.',
+      '',
+      'Available agent types:',
+      '- Bash: Command execution specialist for git operations and terminal tasks.',
+      '- general-purpose: Multi-step tasks, code search, complex research.',
+      '- Explore: Fast codebase exploration and pattern searching.',
+      '- Plan: Software architecture and implementation planning.',
+      '',
+      'Example parallel execution:',
+      '- Launch a frontend agent to build UI components.',
+      '- Simultaneously launch a test agent to write test cases.',
+      '- Coordinate results and integrate when both complete.',
+      '',
+      'IMPORTANT: Only use multi-agents when it genuinely improves the task execution.',
+      'For simple, focused tasks, a single-agent approach is more efficient.',
+      '',
+      '='.repeat(80),
+      ''
+    );
+  }
 
   if (forceTestCreation || forceTestRun || forceCommit) {
     basePrompt.push('Mandatory completion rules:');
