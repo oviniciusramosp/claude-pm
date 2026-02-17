@@ -2720,6 +2720,33 @@ function normalizeMarkdownNewlines(text) {
   return text;
 }
 
+function looksLikeJson(text) {
+  const trimmed = (text || '').trim();
+  return (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+         (trimmed.startsWith('[') && trimmed.endsWith(']'));
+}
+
+function extractMarkdownFromRawJson(text) {
+  // Last resort: if Claude returned JSON but we couldn't parse the field,
+  // try to find anything that looks like markdown inside the string
+  try {
+    const parsed = JSON.parse(text);
+    // Walk all string values looking for one with markdown markers
+    const candidates = Object.values(parsed).filter(
+      (v) => typeof v === 'string' && v.length > 50
+    );
+    // Prefer one with markdown headers or checkboxes
+    const best = candidates.find((v) => /^#|## |^\- \[/m.test(v));
+    if (best) return normalizeMarkdownNewlines(best);
+    // Fall back to longest string value
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => b.length - a.length);
+      return normalizeMarkdownNewlines(candidates[0]);
+    }
+  } catch { /* not valid JSON after all */ }
+  return null;
+}
+
 function parseReviewResponse(reply) {
   const text = String(reply || '').trim();
 
@@ -2729,13 +2756,41 @@ function parseReviewResponse(reply) {
 
   try {
     const parsed = JSON.parse(jsonStr);
-    const rawBody = parsed.improvedBody || parsed.improved_body || text;
-    return {
-      improvedBody: normalizeMarkdownNewlines(rawBody),
-      summary: parsed.summary || 'Review completed'
-    };
+    const rawBody = parsed.improvedBody || parsed.improved_body;
+
+    if (rawBody && typeof rawBody === 'string') {
+      return {
+        improvedBody: normalizeMarkdownNewlines(rawBody),
+        summary: parsed.summary || 'Review completed'
+      };
+    }
+
+    // JSON parsed but no improvedBody field — try to extract markdown from other fields
+    const extracted = extractMarkdownFromRawJson(jsonStr);
+    if (extracted) {
+      return {
+        improvedBody: extracted,
+        summary: parsed.summary || 'Review completed'
+      };
+    }
+
+    // Nothing usable found in the JSON
+    throw new Error('Response JSON has no improvedBody field');
   } catch {
-    // If Claude didn't return valid JSON, treat the entire reply as the improved body
+    // If the raw text looks like JSON, try to extract markdown from it
+    if (looksLikeJson(text)) {
+      const extracted = extractMarkdownFromRawJson(text);
+      if (extracted) {
+        return {
+          improvedBody: extracted,
+          summary: 'Review completed'
+        };
+      }
+      // JSON but no extractable markdown — reject it
+      throw new Error('Claude returned JSON instead of the expected review format. Please try again.');
+    }
+
+    // Raw text is not JSON — use it directly as markdown
     return {
       improvedBody: normalizeMarkdownNewlines(text),
       summary: 'Review completed (raw response)'
