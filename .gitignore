@@ -3,4 +3,5 @@ node_modules
 .data/
 panel/dist/
 npm-debug.log*
-.claude/
+.claude/*
+!.claude/commands/
