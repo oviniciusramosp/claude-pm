@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, Columns03, CpuChip01, Folder, FolderPlus, Plus, RefreshCw01, Stars01, Tool01, Users01 } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
+import { Tooltip, TooltipTrigger } from './base/tooltip/tooltip';
 import { cx } from '@/utils/cx';
 import { Icon } from './icon';
 import {
@@ -806,34 +807,35 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
               Updated {lastRefreshed.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
             </span>
           )}
-          <button
-            type="button"
-            className="rounded-sm p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary"
-            onClick={() => { setCreateDefaultEpicId(undefined); setCreateModalOpen(true); }}
-            aria-label="Create new task"
-            title="Create new task"
-          >
-            <Plus className="size-4" />
-          </button>
-          <button
-            type="button"
-            className="rounded-sm p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary disabled:opacity-50"
-            onClick={fixBoardOrder}
-            disabled={fixing}
-            aria-label="Fix board order"
-            title="Fix epic ordering"
-          >
-            <Tool01 className={cx('size-4', fixing && 'animate-spin')} />
-          </button>
-          <button
-            type="button"
-            className="rounded-sm p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary disabled:opacity-50"
-            onClick={() => fetchBoard()}
-            disabled={refreshing}
-            aria-label="Refresh board"
-          >
-            <RefreshCw01 className={cx('size-4', refreshing && 'animate-spin')} />
-          </button>
+          <Tooltip title="Create task" description="Create a new task or epic">
+            <TooltipTrigger
+              onPress={() => { setCreateDefaultEpicId(undefined); setCreateModalOpen(true); }}
+              aria-label="Create new task"
+              className="rounded-sm p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary"
+            >
+              <Plus className="size-4" />
+            </TooltipTrigger>
+          </Tooltip>
+          <Tooltip title="Fix board order" description="Fix epic and story numbering to ensure sequential ordering">
+            <TooltipTrigger
+              onPress={fixBoardOrder}
+              isDisabled={fixing}
+              aria-label="Fix board order"
+              className="rounded-sm p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary disabled:opacity-50"
+            >
+              <Tool01 className={cx('size-4', fixing && 'animate-spin')} />
+            </TooltipTrigger>
+          </Tooltip>
+          <Tooltip title="Refresh board" description="Refresh the board to see the latest task updates">
+            <TooltipTrigger
+              onPress={() => fetchBoard()}
+              isDisabled={refreshing}
+              aria-label="Refresh board"
+              className="rounded-sm p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary disabled:opacity-50"
+            >
+              <RefreshCw01 className={cx('size-4', refreshing && 'animate-spin')} />
+            </TooltipTrigger>
+          </Tooltip>
         </div>
       </div>
 
@@ -964,53 +966,59 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                               <div key={task.id} className="flex flex-col gap-1">
                                 {card}
                                 <div className="flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
-                                    className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
-                                    title={`Add task to ${task.name}`}
+                                  <Tooltip title="Add task" description={`Create a new task in ${task.name}`}>
+                                    <TooltipTrigger
+                                      onPress={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
+                                      className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
+                                    >
+                                      <Plus className="size-3" />
+                                      <span>Add task</span>
+                                    </TooltipTrigger>
+                                  </Tooltip>
+                                  <Tooltip
+                                    title={generatingEpicId === task.id ? "Generating stories..." : "Generate stories"}
+                                    description={generatingEpicId === task.id ? "Using Claude AI to create user stories" : "Auto-generate user stories with Claude AI"}
                                   >
-                                    <Plus className="size-3" />
-                                    <span>Add task</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleGenerateStories(task.id); }}
-                                    disabled={generatingEpicId !== null || fixingEpicId !== null}
-                                    className={cx(
-                                      'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
-                                      generatingEpicId === task.id
-                                        ? 'text-brand-secondary bg-utility-brand-50'
-                                        : (generatingEpicId !== null || fixingEpicId !== null)
-                                          ? 'text-quaternary cursor-not-allowed'
-                                          : 'text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50'
-                                    )}
-                                    title={generatingEpicId === task.id ? 'Generating stories...' : `Auto-generate stories for ${task.name}`}
+                                    <TooltipTrigger
+                                      onPress={() => handleGenerateStories(task.id)}
+                                      isDisabled={generatingEpicId !== null || fixingEpicId !== null}
+                                      className={cx(
+                                        'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
+                                        generatingEpicId === task.id
+                                          ? 'text-brand-secondary bg-utility-brand-50'
+                                          : (generatingEpicId !== null || fixingEpicId !== null)
+                                            ? 'text-quaternary cursor-not-allowed'
+                                            : 'text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50'
+                                      )}
+                                    >
+                                      {generatingEpicId === task.id
+                                        ? <RefreshCw01 className="size-3 animate-spin" />
+                                        : <Stars01 className="size-3" />}
+                                      <span>{generatingEpicId === task.id ? 'Generating...' : 'Generate'}</span>
+                                    </TooltipTrigger>
+                                  </Tooltip>
+                                  <Tooltip
+                                    title={fixingEpicId === task.id ? "Fixing stories..." : "Fix stories"}
+                                    description={fixingEpicId === task.id ? "Using Claude AI to complete unfinished stories" : "Auto-fix incomplete user stories with Claude AI"}
                                   >
-                                    {generatingEpicId === task.id
-                                      ? <RefreshCw01 className="size-3 animate-spin" />
-                                      : <Stars01 className="size-3" />}
-                                    <span>{generatingEpicId === task.id ? 'Generating...' : 'Generate'}</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleFixEpicStories(task.id); }}
-                                    disabled={generatingEpicId !== null || fixingEpicId !== null}
-                                    className={cx(
-                                      'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
-                                      fixingEpicId === task.id
-                                        ? 'text-utility-warning-600 bg-utility-warning-50'
-                                        : (generatingEpicId !== null || fixingEpicId !== null)
-                                          ? 'text-quaternary cursor-not-allowed'
-                                          : 'text-tertiary hover:text-utility-warning-600 hover:bg-utility-warning-50'
-                                    )}
-                                    title={fixingEpicId === task.id ? 'Fixing stories...' : `Fix incomplete stories in ${task.name}`}
-                                  >
-                                    {fixingEpicId === task.id
-                                      ? <RefreshCw01 className="size-3 animate-spin" />
-                                      : <Tool01 className="size-3" />}
-                                    <span>{fixingEpicId === task.id ? 'Fixing...' : 'Fix'}</span>
-                                  </button>
+                                    <TooltipTrigger
+                                      onPress={() => handleFixEpicStories(task.id)}
+                                      isDisabled={generatingEpicId !== null || fixingEpicId !== null}
+                                      className={cx(
+                                        'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
+                                        fixingEpicId === task.id
+                                          ? 'text-utility-warning-600 bg-utility-warning-50'
+                                          : (generatingEpicId !== null || fixingEpicId !== null)
+                                            ? 'text-quaternary cursor-not-allowed'
+                                            : 'text-tertiary hover:text-utility-warning-600 hover:bg-utility-warning-50'
+                                      )}
+                                    >
+                                      {fixingEpicId === task.id
+                                        ? <RefreshCw01 className="size-3 animate-spin" />
+                                        : <Tool01 className="size-3" />}
+                                      <span>{fixingEpicId === task.id ? 'Fixing...' : 'Fix'}</span>
+                                    </TooltipTrigger>
+                                  </Tooltip>
                                 </div>
                               </div>
                             );
@@ -1066,62 +1074,69 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   dragging={draggedTask?.id === task.id}
                                 />
                                 <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => toggleEpic(task.id)}
-                                  className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-secondary hover:bg-primary_hover transition"
-                                >
-                                  <ChevronDown className={cx('size-3 transition-transform', !expanded && '-rotate-90')} />
-                                  <span>{children.length} {children.length === 1 ? 'story' : 'stories'}</span>
-                                </button>
+                                <Tooltip title={expanded ? "Collapse stories" : "Expand stories"} description={expanded ? "Hide child tasks" : "Show child tasks"}>
+                                  <TooltipTrigger
+                                    onPress={() => toggleEpic(task.id)}
+                                    className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-secondary hover:bg-primary_hover transition"
+                                  >
+                                    <ChevronDown className={cx('size-3 transition-transform', !expanded && '-rotate-90')} />
+                                    <span>{children.length} {children.length === 1 ? 'story' : 'stories'}</span>
+                                  </TooltipTrigger>
+                                </Tooltip>
                                 {(col.key === 'not_started' || col.key === 'missing_status') && (
                                   <>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
-                                    className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
-                                    title={`Add task to ${task.name}`}
+                                  <Tooltip title="Add task" description={`Create a new task in ${task.name}`}>
+                                    <TooltipTrigger
+                                      onPress={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
+                                      className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
+                                    >
+                                      <Plus className="size-3" />
+                                    </TooltipTrigger>
+                                  </Tooltip>
+                                  <Tooltip
+                                    title={generatingEpicId === task.id ? "Generating stories..." : "Generate stories"}
+                                    description={generatingEpicId === task.id ? "Using Claude AI to create user stories" : "Auto-generate user stories with Claude AI"}
                                   >
-                                    <Plus className="size-3" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleGenerateStories(task.id); }}
-                                    disabled={generatingEpicId !== null || fixingEpicId !== null}
-                                    className={cx(
-                                      'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
-                                      generatingEpicId === task.id
-                                        ? 'text-brand-secondary bg-utility-brand-50'
-                                        : (generatingEpicId !== null || fixingEpicId !== null)
-                                          ? 'text-quaternary cursor-not-allowed'
-                                          : 'text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50'
-                                    )}
-                                    title={generatingEpicId === task.id ? 'Generating stories...' : `Auto-generate stories for ${task.name}`}
+                                    <TooltipTrigger
+                                      onPress={() => handleGenerateStories(task.id)}
+                                      isDisabled={generatingEpicId !== null || fixingEpicId !== null}
+                                      className={cx(
+                                        'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
+                                        generatingEpicId === task.id
+                                          ? 'text-brand-secondary bg-utility-brand-50'
+                                          : (generatingEpicId !== null || fixingEpicId !== null)
+                                            ? 'text-quaternary cursor-not-allowed'
+                                            : 'text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50'
+                                      )}
+                                    >
+                                      {generatingEpicId === task.id
+                                        ? <RefreshCw01 className="size-3 animate-spin" />
+                                        : <Stars01 className="size-3" />}
+                                      <span>{generatingEpicId === task.id ? 'Generating...' : 'Generate'}</span>
+                                    </TooltipTrigger>
+                                  </Tooltip>
+                                  <Tooltip
+                                    title={fixingEpicId === task.id ? "Fixing stories..." : "Fix stories"}
+                                    description={fixingEpicId === task.id ? "Using Claude AI to complete unfinished stories" : "Auto-fix incomplete user stories with Claude AI"}
                                   >
-                                    {generatingEpicId === task.id
-                                      ? <RefreshCw01 className="size-3 animate-spin" />
-                                      : <Stars01 className="size-3" />}
-                                    <span>{generatingEpicId === task.id ? 'Generating...' : 'Generate'}</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleFixEpicStories(task.id); }}
-                                    disabled={generatingEpicId !== null || fixingEpicId !== null}
-                                    className={cx(
-                                      'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
-                                      fixingEpicId === task.id
-                                        ? 'text-utility-warning-600 bg-utility-warning-50'
-                                        : (generatingEpicId !== null || fixingEpicId !== null)
-                                          ? 'text-quaternary cursor-not-allowed'
-                                          : 'text-tertiary hover:text-utility-warning-600 hover:bg-utility-warning-50'
-                                    )}
-                                    title={fixingEpicId === task.id ? 'Fixing stories...' : `Fix incomplete stories in ${task.name}`}
-                                  >
-                                    {fixingEpicId === task.id
-                                      ? <RefreshCw01 className="size-3 animate-spin" />
-                                      : <Tool01 className="size-3" />}
-                                    <span>{fixingEpicId === task.id ? 'Fixing...' : 'Fix'}</span>
-                                  </button>
+                                    <TooltipTrigger
+                                      onPress={() => handleFixEpicStories(task.id)}
+                                      isDisabled={generatingEpicId !== null || fixingEpicId !== null}
+                                      className={cx(
+                                        'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
+                                        fixingEpicId === task.id
+                                          ? 'text-utility-warning-600 bg-utility-warning-50'
+                                          : (generatingEpicId !== null || fixingEpicId !== null)
+                                            ? 'text-quaternary cursor-not-allowed'
+                                            : 'text-tertiary hover:text-utility-warning-600 hover:bg-utility-warning-50'
+                                      )}
+                                    >
+                                      {fixingEpicId === task.id
+                                        ? <RefreshCw01 className="size-3 animate-spin" />
+                                        : <Tool01 className="size-3" />}
+                                      <span>{fixingEpicId === task.id ? 'Fixing...' : 'Fix'}</span>
+                                    </TooltipTrigger>
+                                  </Tooltip>
                                   </>
                                 )}
                               </div>
@@ -1171,53 +1186,59 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   dragging={draggedTask?.id === task.id}
                                 />
                                 <div className="flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
-                                    className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
-                                    title={`Add task to ${task.name}`}
+                                  <Tooltip title="Add task" description={`Create a new task in ${task.name}`}>
+                                    <TooltipTrigger
+                                      onPress={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
+                                      className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
+                                    >
+                                      <Plus className="size-3" />
+                                      <span>Add task</span>
+                                    </TooltipTrigger>
+                                  </Tooltip>
+                                  <Tooltip
+                                    title={generatingEpicId === task.id ? "Generating stories..." : "Generate stories"}
+                                    description={generatingEpicId === task.id ? "Using Claude AI to create user stories" : "Auto-generate user stories with Claude AI"}
                                   >
-                                    <Plus className="size-3" />
-                                    <span>Add task</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleGenerateStories(task.id); }}
-                                    disabled={generatingEpicId !== null || fixingEpicId !== null}
-                                    className={cx(
-                                      'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
-                                      generatingEpicId === task.id
-                                        ? 'text-brand-secondary bg-utility-brand-50'
-                                        : (generatingEpicId !== null || fixingEpicId !== null)
-                                          ? 'text-quaternary cursor-not-allowed'
-                                          : 'text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50'
-                                    )}
-                                    title={generatingEpicId === task.id ? 'Generating stories...' : `Auto-generate stories for ${task.name}`}
+                                    <TooltipTrigger
+                                      onPress={() => handleGenerateStories(task.id)}
+                                      isDisabled={generatingEpicId !== null || fixingEpicId !== null}
+                                      className={cx(
+                                        'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
+                                        generatingEpicId === task.id
+                                          ? 'text-brand-secondary bg-utility-brand-50'
+                                          : (generatingEpicId !== null || fixingEpicId !== null)
+                                            ? 'text-quaternary cursor-not-allowed'
+                                            : 'text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50'
+                                      )}
+                                    >
+                                      {generatingEpicId === task.id
+                                        ? <RefreshCw01 className="size-3 animate-spin" />
+                                        : <Stars01 className="size-3" />}
+                                      <span>{generatingEpicId === task.id ? 'Generating...' : 'Generate'}</span>
+                                    </TooltipTrigger>
+                                  </Tooltip>
+                                  <Tooltip
+                                    title={fixingEpicId === task.id ? "Fixing stories..." : "Fix stories"}
+                                    description={fixingEpicId === task.id ? "Using Claude AI to complete unfinished stories" : "Auto-fix incomplete user stories with Claude AI"}
                                   >
-                                    {generatingEpicId === task.id
-                                      ? <RefreshCw01 className="size-3 animate-spin" />
-                                      : <Stars01 className="size-3" />}
-                                    <span>{generatingEpicId === task.id ? 'Generating...' : 'Generate'}</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleFixEpicStories(task.id); }}
-                                    disabled={generatingEpicId !== null || fixingEpicId !== null}
-                                    className={cx(
-                                      'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
-                                      fixingEpicId === task.id
-                                        ? 'text-utility-warning-600 bg-utility-warning-50'
-                                        : (generatingEpicId !== null || fixingEpicId !== null)
-                                          ? 'text-quaternary cursor-not-allowed'
-                                          : 'text-tertiary hover:text-utility-warning-600 hover:bg-utility-warning-50'
-                                    )}
-                                    title={fixingEpicId === task.id ? 'Fixing stories...' : `Fix incomplete stories in ${task.name}`}
-                                  >
-                                    {fixingEpicId === task.id
-                                      ? <RefreshCw01 className="size-3 animate-spin" />
-                                      : <Tool01 className="size-3" />}
-                                    <span>{fixingEpicId === task.id ? 'Fixing...' : 'Fix'}</span>
-                                  </button>
+                                    <TooltipTrigger
+                                      onPress={() => handleFixEpicStories(task.id)}
+                                      isDisabled={generatingEpicId !== null || fixingEpicId !== null}
+                                      className={cx(
+                                        'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
+                                        fixingEpicId === task.id
+                                          ? 'text-utility-warning-600 bg-utility-warning-50'
+                                          : (generatingEpicId !== null || fixingEpicId !== null)
+                                            ? 'text-quaternary cursor-not-allowed'
+                                            : 'text-tertiary hover:text-utility-warning-600 hover:bg-utility-warning-50'
+                                      )}
+                                    >
+                                      {fixingEpicId === task.id
+                                        ? <RefreshCw01 className="size-3 animate-spin" />
+                                        : <Tool01 className="size-3" />}
+                                      <span>{fixingEpicId === task.id ? 'Fixing...' : 'Fix'}</span>
+                                    </TooltipTrigger>
+                                  </Tooltip>
                                 </div>
                               </div>
                             );
