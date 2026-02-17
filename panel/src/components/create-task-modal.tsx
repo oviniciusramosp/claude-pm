@@ -1,7 +1,7 @@
 // panel/src/components/create-task-modal.tsx
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, File06, Stars01 } from '@untitledui/icons';
+import { AlertTriangle, ChevronDown, File06, Stars01 } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
@@ -24,6 +24,12 @@ interface CreateTaskModalProps {
   onShowErrorDetail?: (title: string, message: string) => void;
 }
 
+interface NextNumbers {
+  nextStandalone: number;
+  nextEpic: number;
+  epicChildNext: Record<string, number>;
+}
+
 function slugFromTitle(title: string): string {
   return (title || '')
     .toLowerCase()
@@ -32,11 +38,31 @@ function slugFromTitle(title: string): string {
     .slice(0, 80);
 }
 
+function extractEpicNumber(epicId: string): number | null {
+  const match = epicId.match(/^E(\d+)/i);
+  return match ? parseInt(match[1], 10) : null;
+}
+
+function extractNumberPrefix(fileName: string, context: 'standalone' | 'epic' | 'child'): string | null {
+  if (context === 'standalone') {
+    const m = fileName.match(/^(t\d+)-/i);
+    return m ? m[1].toLowerCase() : null;
+  }
+  if (context === 'epic') {
+    const m = fileName.match(/^(e\d+)-/i);
+    return m ? m[1].toLowerCase() : null;
+  }
+  // child: s{epicNum}-{childNum}
+  const m = fileName.match(/^(s\d+-\d+)-/i);
+  return m ? m[1].toLowerCase() : null;
+}
+
 const TYPE_OPTIONS = ['UserStory', 'Epic', 'Bug', 'Chore', 'Discovery'] as const;
 const PRIORITY_OPTIONS = ['P0', 'P1', 'P2', 'P3'] as const;
 const STATUS_OPTIONS = ['Not Started', 'In Progress', 'Done'] as const;
 
-const selectClasses = 'w-full rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary shadow-xs focus:border-brand-solid focus:outline-none focus:ring-1 focus:ring-brand-solid';
+const selectClasses = 'appearance-none w-full rounded-lg border border-secondary bg-primary pl-3 pr-9 py-2 text-sm text-primary shadow-xs focus:border-brand-solid focus:outline-none focus:ring-1 focus:ring-brand-solid';
+const selectChevronClasses = 'pointer-events-none absolute right-3 top-1/2 size-5 -translate-y-1/2 text-quaternary';
 const inputClasses = 'w-full rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary shadow-xs focus:border-brand-solid focus:outline-none focus:ring-1 focus:ring-brand-solid';
 const labelClasses = 'block text-sm font-medium text-secondary mb-1';
 
@@ -54,6 +80,7 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
   const [saving, setSaving] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [lastError, setLastError] = useState<ModalError | null>(null);
+  const [nextNumbers, setNextNumbers] = useState<NextNumbers | null>(null);
 
   // Derive available epic folders from tasks (exclude Done epics)
   const availableEpics = useMemo(() => {
@@ -66,31 +93,83 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
       .map((t) => ({ id: t.id, name: t.name }));
   }, [tasks]);
 
-  // Auto-generate fileName from name
+  // Auto-generate fileName from name with number prefix
   useEffect(() => {
-    if (!fileNameManual && name) {
-      setFileName(slugFromTitle(name));
-    } else if (!fileNameManual && !name) {
+    if (fileNameManual) return;
+    if (!name) {
       setFileName('');
+      return;
     }
-  }, [name, fileNameManual]);
 
-  // Reset form on open, pre-fill epicId from defaultEpicId
+    const slug = slugFromTitle(name);
+    if (!nextNumbers) {
+      setFileName(slug);
+      return;
+    }
+
+    const isEpic = type === 'Epic' && !epicId;
+    if (isEpic) {
+      const num = String(nextNumbers.nextEpic).padStart(2, '0');
+      setFileName(`e${num}-${slug}`);
+    } else if (epicId) {
+      const epicNum = extractEpicNumber(epicId);
+      const childNum = nextNumbers.epicChildNext[epicId] || 1;
+      if (epicNum !== null) {
+        setFileName(`s${epicNum}-${childNum}-${slug}`);
+      } else {
+        setFileName(`${childNum}-${slug}`);
+      }
+    } else {
+      const num = String(nextNumbers.nextStandalone).padStart(2, '0');
+      setFileName(`t${num}-${slug}`);
+    }
+  }, [name, fileNameManual, type, epicId, nextNumbers]);
+
+  // Reset form on open, pre-fill epicId from defaultEpicId, fetch next numbers
   useEffect(() => {
     if (open) {
       setName('');
       setFileName('');
       setFileNameManual(false);
       setPriority('P1');
-      setType('UserStory');
+      setType(defaultEpicId ? 'UserStory' : 'UserStory');
       setStatus('Not Started');
       setModel(CLAUDE_DEFAULT_TASK_MODEL);
       setAgents('');
       setBody('');
       setEpicId(defaultEpicId || '');
       setLastError(null);
+      setNextNumbers(null);
+
+      fetch(`${apiBaseUrl}/api/board/next-numbers`)
+        .then((r) => r.json())
+        .then((data) => { if (data.ok) setNextNumbers(data); })
+        .catch(() => {});
     }
-  }, [open, defaultEpicId]);
+  }, [open, defaultEpicId, apiBaseUrl]);
+
+  // Detect duplicate number prefix within the same scope
+  const numberConflict = useMemo(() => {
+    if (!fileName) return null;
+
+    const isEpic = type === 'Epic' && !epicId;
+    const context = isEpic ? 'epic' : epicId ? 'child' : 'standalone';
+    const prefix = extractNumberPrefix(fileName, context);
+    if (!prefix) return null;
+
+    const scopeTasks = epicId
+      ? tasks.filter((t) => t.parentId === epicId)
+      : tasks.filter((t) => !t.parentId && (context === 'epic' ? t.type?.toLowerCase() === 'epic' : t.type?.toLowerCase() !== 'epic'));
+
+    for (const t of scopeTasks) {
+      const existingFileName = t.id.includes('/') ? t.id.split('/').pop()! : t.id;
+      const existingPrefix = extractNumberPrefix(existingFileName, context);
+      if (existingPrefix && existingPrefix === prefix) {
+        return t;
+      }
+    }
+    return null;
+  }, [fileName, type, epicId, tasks]);
 
   const handleCreate = useCallback(async () => {
     if (!name.trim()) {
@@ -234,9 +313,12 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
     }
   }, [name, priority, type, status, model, agents, body, apiBaseUrl, showToast]);
 
-  const filePath = epicId
-    ? `Board/${epicId}/${fileName || '...'}.md`
-    : `Board/${fileName || '...'}.md`;
+  const isEpicType = type === 'Epic' && !epicId;
+  const filePath = isEpicType
+    ? `Board/${fileName || '...'}/epic.md`
+    : epicId
+      ? `Board/${epicId}/${fileName || '...'}.md`
+      : `Board/${fileName || '...'}.md`;
 
   return (
     <ModalOverlay isOpen={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }} isDismissable={!saving}>
@@ -266,7 +348,12 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
 
               {/* File Name + path preview */}
               <div>
-                <label className={labelClasses}>File Name</label>
+                <label className={labelClasses}>
+                  File Name
+                  {!fileNameManual && nextNumbers && (
+                    <span className="ml-2 text-xs font-normal text-tertiary">(auto-numbered)</span>
+                  )}
+                </label>
                 <input
                   type="text"
                   value={fileName}
@@ -277,38 +364,56 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
                 {fileName && (
                   <p className="mt-1 text-xs text-quaternary font-mono">{filePath}</p>
                 )}
+                {numberConflict && (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-utility-warning-700 dark:text-utility-warning-400">
+                    <Icon icon={AlertTriangle} className="size-3 shrink-0" />
+                    Duplicate number — already used by &quot;{numberConflict.name}&quot;
+                  </p>
+                )}
               </div>
 
               {/* Row: Priority + Type + Status */}
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className={labelClasses}>Priority</label>
-                  <select value={priority} onChange={(e) => setPriority(e.target.value)} className={selectClasses}>
-                    {PRIORITY_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
-                  </select>
+                  <div className="relative">
+                    <select value={priority} onChange={(e) => setPriority(e.target.value)} className={selectClasses}>
+                      {PRIORITY_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                    <ChevronDown className={selectChevronClasses} />
+                  </div>
                 </div>
                 <div>
                   <label className={labelClasses}>Type</label>
-                  <select value={type} onChange={(e) => setType(e.target.value)} className={selectClasses}>
-                    {TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
+                  <div className="relative">
+                    <select value={type} onChange={(e) => { setType(e.target.value); if (e.target.value === 'Epic') setEpicId(''); }} className={selectClasses}>
+                      {TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <ChevronDown className={selectChevronClasses} />
+                  </div>
                 </div>
                 <div>
                   <label className={labelClasses}>Status</label>
-                  <select value={status} onChange={(e) => setStatus(e.target.value)} className={selectClasses}>
-                    {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                  <div className="relative">
+                    <select value={status} onChange={(e) => setStatus(e.target.value)} className={selectClasses}>
+                      {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <ChevronDown className={selectChevronClasses} />
+                  </div>
                 </div>
               </div>
 
               {/* Model */}
               <div>
                 <label className={labelClasses}>Model</label>
-                <select value={model} onChange={(e) => setModel(e.target.value)} className={selectClasses}>
-                  {CLAUDE_TASK_MODELS.map((m) => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <select value={model} onChange={(e) => setModel(e.target.value)} className={selectClasses}>
+                    {CLAUDE_TASK_MODELS.map((m) => (
+                      <option key={m.value} value={m.value}>{m.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className={selectChevronClasses} />
+                </div>
               </div>
 
               {/* Agents */}
@@ -326,10 +431,18 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
               {/* Epic Parent */}
               <div>
                 <label className={labelClasses}>Epic Parent</label>
-                <select value={epicId} onChange={(e) => setEpicId(e.target.value)} className={selectClasses}>
-                  <option value="">None (standalone task)</option>
-                  {availableEpics.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-                </select>
+                <div className="relative">
+                  <select
+                    value={type === 'Epic' ? '' : epicId}
+                    onChange={(e) => setEpicId(e.target.value)}
+                    className={selectClasses}
+                    disabled={type === 'Epic'}
+                  >
+                    <option value="">{type === 'Epic' ? 'N/A (creating epic)' : 'None (standalone task)'}</option>
+                    {availableEpics.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+                  </select>
+                  <ChevronDown className={selectChevronClasses} />
+                </div>
               </div>
 
               {/* Body */}

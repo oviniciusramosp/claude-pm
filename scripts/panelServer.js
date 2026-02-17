@@ -2343,6 +2343,34 @@ app.get('/api/board/epic-folders', async (_req, res) => {
   }
 });
 
+// --- Next available numbers for auto-naming ---
+app.get('/api/board/next-numbers', async (_req, res) => {
+  const env = await readEnvPairs();
+  const boardDir = resolveBoardDir(env);
+
+  const boardConfig = {
+    board: {
+      dir: boardDir,
+      statuses: {
+        notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+        inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+        done: env.BOARD_STATUS_DONE || 'Done'
+      },
+      typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
+    }
+  };
+
+  try {
+    const client = new LocalBoardClient(boardConfig);
+    await client.initialize();
+    const numbers = await client.getNextNumbers();
+    res.json({ ok: true, ...numbers });
+  } catch (error) {
+    const msg = error.message || String(error);
+    res.status(500).json({ ok: false, message: msg });
+  }
+});
+
 function buildEpicFixPrompt(epicId, epicName, epicContent, epicFilePath, childTasks) {
   const childTasksList = childTasks
     .map((child) => `  - ${child.id}: ${child.name} (${child._filePath})`)

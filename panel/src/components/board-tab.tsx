@@ -90,8 +90,11 @@ function extractTaskCode(task: BoardTask): string | null {
     if (match) return `S${match[1]}.${match[2]}`;
   }
   const id = task.id.split('/')[0];
-  const match = id.match(/^(E\d+)/i);
-  if (match) return match[1].toUpperCase();
+  const epicMatch = id.match(/^(E\d+)/i);
+  if (epicMatch) return epicMatch[1].toUpperCase();
+  // Standalone task: t{NN}
+  const standaloneMatch = id.match(/^(t\d+)/i);
+  if (standaloneMatch) return standaloneMatch[1].toUpperCase();
   return null;
 }
 

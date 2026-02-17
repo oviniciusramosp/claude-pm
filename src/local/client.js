@@ -219,11 +219,42 @@ export class LocalBoardClient {
     const name = fields.name;
     if (!name) throw new Error('Task name is required');
 
+    const isEpic = (fields.type || '').toLowerCase() === 'epic' && !epicId;
     const slug = fileName || slugFromTitle(name);
-    const targetFileName = slug.endsWith('.md') ? slug : `${slug}.md`;
+    const cleanSlug = slug.replace(/\.md$/, '');
 
+    const frontmatterFields = {
+      name: fields.name,
+      priority: fields.priority || 'P1',
+      type: fields.type || 'UserStory',
+      status: fields.status || this.statuses.notStarted
+    };
+    if (fields.model) frontmatterFields.model = fields.model;
+    if (fields.agents) frontmatterFields.agents = fields.agents;
+
+    const header = serializeFrontmatter(frontmatterFields);
+    const content = header + '\n\n' + (body || `# ${fields.name}\n`);
+
+    if (isEpic) {
+      const epicDir = path.join(this.boardDir, cleanSlug);
+      try {
+        await fs.access(epicDir);
+        throw new Error(`Epic folder already exists: ${cleanSlug}`);
+      } catch (err) {
+        if (err.message.startsWith('Epic folder already exists')) throw err;
+      }
+
+      await fs.mkdir(epicDir, { recursive: true });
+      const epicFilePath = path.join(epicDir, 'epic.md');
+      await fs.writeFile(epicFilePath, content, 'utf8');
+      this._invalidateIndex();
+
+      return { taskId: cleanSlug, filePath: epicFilePath };
+    }
+
+    const targetFileName = `${cleanSlug}.md`;
     let targetDir = this.boardDir;
-    let taskId = slug.replace(/\.md$/, '');
+    let taskId = cleanSlug;
 
     if (epicId) {
       targetDir = path.join(this.boardDir, epicId);
@@ -242,24 +273,57 @@ export class LocalBoardClient {
       throw new Error(`File already exists: ${targetFileName}`);
     } catch (err) {
       if (err.message.startsWith('File already exists')) throw err;
-      // ENOENT is expected — file does not exist yet
     }
 
-    const frontmatterFields = {
-      name: fields.name,
-      priority: fields.priority || 'P1',
-      type: fields.type || 'UserStory',
-      status: fields.status || this.statuses.notStarted
-    };
-    if (fields.model) frontmatterFields.model = fields.model;
-    if (fields.agents) frontmatterFields.agents = fields.agents;
-
-    const header = serializeFrontmatter(frontmatterFields);
-    const content = header + '\n\n' + (body || `# ${fields.name}\n`);
     await fs.writeFile(targetPath, content, 'utf8');
     this._invalidateIndex();
 
     return { taskId, filePath: targetPath };
+  }
+
+  async getNextNumbers() {
+    let entries;
+    try {
+      entries = await fs.readdir(this.boardDir, { withFileTypes: true });
+    } catch {
+      return { nextStandalone: 1, nextEpic: 1, epicChildNext: {} };
+    }
+
+    let maxStandaloneNum = 0;
+    let maxEpicNum = 0;
+    const epicChildNext = {};
+
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name.endsWith('.md')) {
+        const m = entry.name.match(/^t(\d+)-/i);
+        if (m) maxStandaloneNum = Math.max(maxStandaloneNum, parseInt(m[1], 10));
+      } else if (entry.isDirectory()) {
+        const epicMatch = entry.name.match(/^E(\d+)/i);
+        if (epicMatch) maxEpicNum = Math.max(maxEpicNum, parseInt(epicMatch[1], 10));
+
+        let children;
+        try {
+          children = await fs.readdir(path.join(this.boardDir, entry.name), { withFileTypes: true });
+        } catch {
+          continue;
+        }
+
+        let maxChildNum = 0;
+        for (const child of children) {
+          if (child.isFile() && child.name !== 'epic.md' && child.name.endsWith('.md')) {
+            const cm = child.name.match(/^s\d+-(\d+)/i);
+            if (cm) maxChildNum = Math.max(maxChildNum, parseInt(cm[1], 10));
+          }
+        }
+        epicChildNext[entry.name] = maxChildNum + 1;
+      }
+    }
+
+    return {
+      nextStandalone: maxStandaloneNum + 1,
+      nextEpic: maxEpicNum + 1,
+      epicChildNext
+    };
   }
 
   async listEpicFolders() {
