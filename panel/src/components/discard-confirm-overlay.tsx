@@ -1,5 +1,6 @@
 // panel/src/components/discard-confirm-overlay.tsx
 
+import { useEffect, useRef } from 'react';
 import { Button } from '@/components/base/buttons/button';
 
 interface DiscardConfirmOverlayProps {
@@ -10,6 +11,15 @@ interface DiscardConfirmOverlayProps {
 }
 
 export function DiscardConfirmOverlay({ open, reviewing, onKeepEditing, onDiscard }: DiscardConfirmOverlayProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Auto-focus the dialog when it opens so it receives keyboard events
+  useEffect(() => {
+    if (open && dialogRef.current) {
+      dialogRef.current.focus();
+    }
+  }, [open]);
+
   if (!open) return null;
 
   return (
@@ -21,10 +31,22 @@ export function DiscardConfirmOverlay({ open, reviewing, onKeepEditing, onDiscar
       }}
     >
       <div
-        className="rounded-xl border border-secondary bg-primary p-6 shadow-2xl max-w-sm"
+        ref={dialogRef}
+        tabIndex={-1}
+        className="rounded-xl border border-secondary bg-primary p-6 shadow-2xl max-w-sm outline-hidden"
         onClick={(e) => {
           // Prevent clicks on the dialog from closing it
           e.stopPropagation();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.stopPropagation();
+            onKeepEditing();
+          } else if (e.key === 'Enter') {
+            e.stopPropagation();
+            e.preventDefault();
+            onDiscard();
+          }
         }}
       >
         <h4 className="text-base font-semibold text-primary">

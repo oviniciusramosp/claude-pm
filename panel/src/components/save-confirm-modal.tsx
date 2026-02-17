@@ -4,6 +4,7 @@ import { ArrowUpRight } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { LABEL_BY_KEY } from '../constants';
+import { handleModalKeyDown } from '@/utils/modal-keyboard';
 
 export function SaveConfirmModal({
   saveConfirm,
@@ -28,7 +29,15 @@ export function SaveConfirmModal({
     >
       <Modal className="sm:max-w-xl">
         <Dialog>
-          <div className="w-full rounded-xl border border-secondary bg-primary p-6 shadow-2xl">
+          <div
+            className="w-full rounded-xl border border-secondary bg-primary p-6 shadow-2xl"
+            onKeyDown={(e) => {
+              if (!busy.save) handleModalKeyDown(e, async () => {
+                setSaveConfirm({ open: false, changedKeys: [] });
+                await persistConfig({ restartApi: true });
+              });
+            }}
+          >
             <div className="space-y-2">
               <h3 className="m-0 text-lg font-semibold text-primary">Apply changes now?</h3>
               <p className="m-0 text-sm text-tertiary">The automation app is running. Restart to apply new settings immediately.</p>

@@ -5,6 +5,7 @@ import { Button } from '@/components/base/buttons/button';
 import { Toggle } from '@/components/base/toggle/toggle';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
+import { handleModalKeyDown } from '@/utils/modal-keyboard';
 import type { RuntimeSettings } from '../types';
 
 export function RuntimeSettingsModal({
@@ -30,7 +31,10 @@ export function RuntimeSettingsModal({
     >
       <Modal className="sm:max-w-xl">
         <Dialog>
-          <div className="w-full rounded-xl border border-secondary bg-primary p-6 shadow-2xl">
+          <div
+            className="w-full rounded-xl border border-secondary bg-primary p-6 shadow-2xl"
+            onKeyDown={(e) => handleModalKeyDown(e, () => setRuntimeSettingsModalOpen(false))}
+          >
             <div className="space-y-2">
               <h3 className="m-0 text-lg font-semibold text-primary">Runtime Settings</h3>
               <p className="m-0 text-sm text-tertiary">Applied immediately to the next task execution.</p>

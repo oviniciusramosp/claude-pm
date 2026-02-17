@@ -5,6 +5,7 @@ import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
 import { formatFeedTimestamp } from '../utils/log-helpers';
+import { handleModalKeyDown } from '@/utils/modal-keyboard';
 import type { LogEntry } from '../types';
 
 export function DebugErrorsModal({
@@ -24,7 +25,10 @@ export function DebugErrorsModal({
     <ModalOverlay isOpen={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }} isDismissable>
       <Modal className="sm:max-w-2xl">
         <Dialog>
-          <div className="w-full rounded-xl border border-secondary bg-primary p-6 shadow-2xl">
+          <div
+            className="w-full rounded-xl border border-secondary bg-primary p-6 shadow-2xl"
+            onKeyDown={(e) => handleModalKeyDown(e, onClose)}
+          >
             <div className="flex items-start gap-3">
               <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-utility-error-50 text-utility-error-600">
                 <Icon icon={AlertTriangle} className="size-5" />

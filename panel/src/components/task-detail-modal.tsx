@@ -1,14 +1,16 @@
 // panel/src/components/task-detail-modal.tsx
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { marked } from 'marked';
-import { AlertTriangle, ChevronDown, CpuChip01, Edit05, File06, Stars01, Trash01, Users01, X } from '@untitledui/icons';
+import { AlertTriangle, Beaker01, CheckCircle, CpuChip01, Edit05, File06, Flag01, Folder, GitBranch01, Stars01, Target02, Trash01, Users01, X, Zap } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
 import { DiscardConfirmOverlay } from './discard-confirm-overlay';
+import { Select, type SelectOption } from '@/components/base/select/select';
 import { BOARD_PRIORITY_COLORS, BOARD_TYPE_COLORS, CLAUDE_TASK_MODELS } from '../constants';
+import { handleModalKeyDown } from '@/utils/modal-keyboard';
 import type { BoardTask } from '../types';
 
 interface ModalError {
@@ -17,12 +19,50 @@ interface ModalError {
 }
 
 // --- Shared form constants ---
-const TYPE_OPTIONS = ['UserStory', 'Epic', 'Bug', 'Chore', 'Discovery'] as const;
-const PRIORITY_OPTIONS = ['P0', 'P1', 'P2', 'P3'] as const;
-const STATUS_OPTIONS = ['Not Started', 'In Progress', 'Done'] as const;
+type IconComponent = typeof Target02;
 
-const selectClasses = 'appearance-none w-full rounded-lg border border-secondary bg-primary pl-3 pr-9 py-2 text-sm text-primary shadow-xs focus:border-brand-solid focus:outline-none focus:ring-1 focus:ring-brand-solid';
-const selectChevronClasses = 'pointer-events-none absolute right-3 top-1/2 size-5 -translate-y-1/2 text-quaternary';
+const TYPE_ICON_MAP: Record<string, IconComponent> = {
+  UserStory: Target02,
+  Epic: Folder,
+  Bug: AlertTriangle,
+  Chore: Beaker01,
+  Discovery: Zap
+};
+
+const PRIORITY_ICON_MAP: Record<string, IconComponent> = {
+  P0: Flag01,
+  P1: Flag01,
+  P2: Flag01,
+  P3: Flag01
+};
+
+const STATUS_ICON_MAP: Record<string, IconComponent> = {
+  'Not Started': GitBranch01,
+  'In Progress': GitBranch01,
+  'Done': CheckCircle
+};
+
+const TYPE_OPTIONS: SelectOption[] = [
+  { value: 'UserStory', label: 'User Story', icon: TYPE_ICON_MAP.UserStory, badge: { color: BOARD_TYPE_COLORS.UserStory as any, text: 'UserStory' } },
+  { value: 'Epic', label: 'Epic', icon: TYPE_ICON_MAP.Epic, badge: { color: BOARD_TYPE_COLORS.Epic as any } },
+  { value: 'Bug', label: 'Bug', icon: TYPE_ICON_MAP.Bug, badge: { color: 'error' as any } },
+  { value: 'Chore', label: 'Chore', icon: TYPE_ICON_MAP.Chore, badge: { color: 'gray' as any } },
+  { value: 'Discovery', label: 'Discovery', icon: TYPE_ICON_MAP.Discovery, badge: { color: BOARD_TYPE_COLORS.Discovery as any } }
+];
+
+const PRIORITY_OPTIONS: SelectOption[] = [
+  { value: 'P0', label: 'P0 - Critical', icon: PRIORITY_ICON_MAP.P0, badge: { color: BOARD_PRIORITY_COLORS.P0 as any, text: 'P0' }, description: 'Drop everything and fix now' },
+  { value: 'P1', label: 'P1 - High', icon: PRIORITY_ICON_MAP.P1, badge: { color: BOARD_PRIORITY_COLORS.P1 as any, text: 'P1' }, description: 'Important, plan to address soon' },
+  { value: 'P2', label: 'P2 - Medium', icon: PRIORITY_ICON_MAP.P2, badge: { color: BOARD_PRIORITY_COLORS.P2 as any, text: 'P2' }, description: 'Normal priority' },
+  { value: 'P3', label: 'P3 - Low', icon: PRIORITY_ICON_MAP.P3, badge: { color: BOARD_PRIORITY_COLORS.P3 as any, text: 'P3' }, description: 'Nice to have, no rush' }
+];
+
+const STATUS_OPTIONS: SelectOption[] = [
+  { value: 'Not Started', label: 'Not Started', icon: STATUS_ICON_MAP['Not Started'], badge: { color: 'gray' as any } },
+  { value: 'In Progress', label: 'In Progress', icon: STATUS_ICON_MAP['In Progress'], badge: { color: 'brand' as any } },
+  { value: 'Done', label: 'Done', icon: STATUS_ICON_MAP.Done, badge: { color: 'success' as any } }
+];
+
 const inputClasses = 'w-full rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary shadow-xs focus:border-brand-solid focus:outline-none focus:ring-1 focus:ring-brand-solid';
 const labelClasses = 'block text-sm font-medium text-secondary mb-1';
 
@@ -95,6 +135,16 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
 
   // Action error (save/delete)
   const [actionError, setActionError] = useState<ModalError | null>(null);
+
+  // Convert CLAUDE_TASK_MODELS to SelectOption[]
+  const modelOptions = useMemo((): SelectOption[] => {
+    return CLAUDE_TASK_MODELS.map((m) => ({
+      value: m.value,
+      label: m.label,
+      icon: CpuChip01,
+      description: m.description
+    }));
+  }, []);
 
   // Delete
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -447,7 +497,16 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
     <ModalOverlay isOpen={open} onOpenChange={(nextOpen) => { if (!nextOpen) handleCloseAttempt(); }} isDismissable={!saving && !deleting}>
       <Modal className="sm:max-w-2xl">
         <Dialog>
-          <div className="w-full rounded-xl border border-secondary bg-primary shadow-2xl">
+          <div
+            className="w-full rounded-xl border border-secondary bg-primary shadow-2xl"
+            onKeyDown={(e) => {
+              if (editing) {
+                if (!saving && !reviewing) handleModalKeyDown(e, handleSave);
+              } else {
+                handleModalKeyDown(e, handleCloseAttempt);
+              }
+            }}
+          >
             {/* Header */}
             <div className="flex items-start justify-between gap-3 border-b border-secondary px-6 py-4">
               <div className="min-w-0 flex-1">
@@ -535,30 +594,30 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className={labelClasses}>Priority</label>
-                      <div className="relative">
-                        <select value={editPriority} onChange={(e) => setEditPriority(e.target.value)} className={selectClasses}>
-                          {PRIORITY_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
-                        </select>
-                        <ChevronDown className={selectChevronClasses} />
-                      </div>
+                      <Select
+                        value={editPriority}
+                        onChange={(value) => setEditPriority(value)}
+                        options={PRIORITY_OPTIONS}
+                        aria-label="Select task priority"
+                      />
                     </div>
                     <div>
                       <label className={labelClasses}>Type</label>
-                      <div className="relative">
-                        <select value={editType} onChange={(e) => setEditType(e.target.value)} className={selectClasses}>
-                          {TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                        <ChevronDown className={selectChevronClasses} />
-                      </div>
+                      <Select
+                        value={editType}
+                        onChange={(value) => setEditType(value)}
+                        options={TYPE_OPTIONS}
+                        aria-label="Select task type"
+                      />
                     </div>
                     <div>
                       <label className={labelClasses}>Status</label>
-                      <div className="relative">
-                        <select value={editStatus} onChange={(e) => setEditStatus(e.target.value)} className={selectClasses}>
-                          {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                        <ChevronDown className={selectChevronClasses} />
-                      </div>
+                      <Select
+                        value={editStatus}
+                        onChange={(value) => setEditStatus(value)}
+                        options={STATUS_OPTIONS}
+                        aria-label="Select task status"
+                      />
                     </div>
                   </div>
 
@@ -566,14 +625,12 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                   {editType !== 'Epic' && (
                     <div>
                       <label className={labelClasses}>Model</label>
-                      <div className="relative">
-                        <select value={editModel} onChange={(e) => setEditModel(e.target.value)} className={selectClasses}>
-                          {CLAUDE_TASK_MODELS.map((m) => (
-                            <option key={m.value} value={m.value}>{m.label}</option>
-                          ))}
-                        </select>
-                        <ChevronDown className={selectChevronClasses} />
-                      </div>
+                      <Select
+                        value={editModel}
+                        onChange={(value) => setEditModel(value)}
+                        options={modelOptions}
+                        aria-label="Select Claude model"
+                      />
                     </div>
                   )}
 

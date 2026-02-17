@@ -4,6 +4,7 @@ import { AlertTriangle } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
+import { handleModalKeyDown } from '@/utils/modal-keyboard';
 
 export function ErrorDetailModal({
   open,
@@ -20,7 +21,10 @@ export function ErrorDetailModal({
     <ModalOverlay isOpen={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }} isDismissable>
       <Modal className="sm:max-w-lg">
         <Dialog>
-          <div className="w-full rounded-xl border border-secondary bg-primary p-6 shadow-2xl">
+          <div
+            className="w-full rounded-xl border border-secondary bg-primary p-6 shadow-2xl"
+            onKeyDown={(e) => handleModalKeyDown(e, onClose)}
+          >
             <div className="flex items-start gap-3">
               <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-utility-error-50 text-utility-error-600">
                 <Icon icon={AlertTriangle} className="size-5" />

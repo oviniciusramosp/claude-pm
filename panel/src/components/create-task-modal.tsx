@@ -1,12 +1,14 @@
 // panel/src/components/create-task-modal.tsx
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ChevronDown, File06, Stars01 } from '@untitledui/icons';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, Beaker01, CheckCircle, CpuChip01, File06, Flag01, Folder, GitBranch01, Stars01, Target02, Zap } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
 import { DiscardConfirmOverlay } from './discard-confirm-overlay';
-import { CLAUDE_TASK_MODELS, CLAUDE_DEFAULT_TASK_MODEL } from '../constants';
+import { Select, type SelectOption } from '@/components/base/select/select';
+import { BOARD_PRIORITY_COLORS, BOARD_TYPE_COLORS, CLAUDE_TASK_MODELS, CLAUDE_DEFAULT_TASK_MODEL } from '../constants';
+import { handleModalKeyDown } from '@/utils/modal-keyboard';
 import type { BoardTask } from '../types';
 
 interface ModalError {
@@ -58,12 +60,50 @@ function extractNumberPrefix(fileName: string, context: 'standalone' | 'epic' | 
   return m ? m[1].toLowerCase() : null;
 }
 
-const TYPE_OPTIONS = ['UserStory', 'Epic', 'Bug', 'Chore', 'Discovery'] as const;
-const PRIORITY_OPTIONS = ['P0', 'P1', 'P2', 'P3'] as const;
-const STATUS_OPTIONS = ['Not Started', 'In Progress', 'Done'] as const;
+type IconComponent = typeof Target02;
 
-const selectClasses = 'appearance-none w-full rounded-lg border border-secondary bg-primary pl-3 pr-9 py-2 text-sm text-primary shadow-xs focus:border-brand-solid focus:outline-none focus:ring-1 focus:ring-brand-solid';
-const selectChevronClasses = 'pointer-events-none absolute right-3 top-1/2 size-5 -translate-y-1/2 text-quaternary';
+const TYPE_ICON_MAP: Record<string, IconComponent> = {
+  UserStory: Target02,
+  Epic: Folder,
+  Bug: AlertTriangle,
+  Chore: Beaker01,
+  Discovery: Zap
+};
+
+const PRIORITY_ICON_MAP: Record<string, IconComponent> = {
+  P0: Flag01,
+  P1: Flag01,
+  P2: Flag01,
+  P3: Flag01
+};
+
+const STATUS_ICON_MAP: Record<string, IconComponent> = {
+  'Not Started': GitBranch01,
+  'In Progress': GitBranch01,
+  'Done': CheckCircle
+};
+
+const TYPE_OPTIONS: SelectOption[] = [
+  { value: 'UserStory', label: 'User Story', icon: TYPE_ICON_MAP.UserStory, badge: { color: BOARD_TYPE_COLORS.UserStory as any, text: 'UserStory' } },
+  { value: 'Epic', label: 'Epic', icon: TYPE_ICON_MAP.Epic, badge: { color: BOARD_TYPE_COLORS.Epic as any } },
+  { value: 'Bug', label: 'Bug', icon: TYPE_ICON_MAP.Bug, badge: { color: 'error' as any } },
+  { value: 'Chore', label: 'Chore', icon: TYPE_ICON_MAP.Chore, badge: { color: 'gray' as any } },
+  { value: 'Discovery', label: 'Discovery', icon: TYPE_ICON_MAP.Discovery, badge: { color: BOARD_TYPE_COLORS.Discovery as any } }
+];
+
+const PRIORITY_OPTIONS: SelectOption[] = [
+  { value: 'P0', label: 'P0 - Critical', icon: PRIORITY_ICON_MAP.P0, badge: { color: BOARD_PRIORITY_COLORS.P0 as any, text: 'P0' }, description: 'Drop everything and fix now' },
+  { value: 'P1', label: 'P1 - High', icon: PRIORITY_ICON_MAP.P1, badge: { color: BOARD_PRIORITY_COLORS.P1 as any, text: 'P1' }, description: 'Important, plan to address soon' },
+  { value: 'P2', label: 'P2 - Medium', icon: PRIORITY_ICON_MAP.P2, badge: { color: BOARD_PRIORITY_COLORS.P2 as any, text: 'P2' }, description: 'Normal priority' },
+  { value: 'P3', label: 'P3 - Low', icon: PRIORITY_ICON_MAP.P3, badge: { color: BOARD_PRIORITY_COLORS.P3 as any, text: 'P3' }, description: 'Nice to have, no rush' }
+];
+
+const STATUS_OPTIONS: SelectOption[] = [
+  { value: 'Not Started', label: 'Not Started', icon: STATUS_ICON_MAP['Not Started'], badge: { color: 'gray' as any } },
+  { value: 'In Progress', label: 'In Progress', icon: STATUS_ICON_MAP['In Progress'], badge: { color: 'brand' as any } },
+  { value: 'Done', label: 'Done', icon: STATUS_ICON_MAP.Done, badge: { color: 'success' as any } }
+];
+
 const inputClasses = 'w-full rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary shadow-xs focus:border-brand-solid focus:outline-none focus:ring-1 focus:ring-brand-solid';
 const labelClasses = 'block text-sm font-medium text-secondary mb-1';
 
@@ -96,6 +136,29 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
       })
       .map((t) => ({ id: t.id, name: t.name }));
   }, [tasks]);
+
+  // Convert CLAUDE_TASK_MODELS to SelectOption[]
+  const modelOptions = useMemo((): SelectOption[] => {
+    return CLAUDE_TASK_MODELS.map((m) => ({
+      value: m.value,
+      label: m.label,
+      icon: CpuChip01,
+      description: m.description
+    }));
+  }, []);
+
+  // Convert availableEpics to SelectOption[]
+  const epicOptions = useMemo((): SelectOption[] => {
+    return [
+      { value: '', label: 'None (standalone task)', description: 'Create a standalone task' },
+      ...availableEpics.map((e) => ({
+        value: e.id,
+        label: e.name,
+        icon: Folder,
+        badge: { color: 'purple' as any, text: 'Epic' }
+      }))
+    ];
+  }, [availableEpics]);
 
   // Auto-generate fileName from name with number prefix
   useEffect(() => {
@@ -364,7 +427,10 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
     <ModalOverlay isOpen={open} onOpenChange={(nextOpen) => { if (!nextOpen) handleCloseAttempt(); }} isDismissable={!saving}>
       <Modal className="sm:max-w-xl">
         <Dialog>
-          <div className="w-full rounded-xl border border-secondary bg-primary shadow-2xl">
+          <div
+            className="w-full rounded-xl border border-secondary bg-primary shadow-2xl"
+            onKeyDown={(e) => { if (!saving && !reviewing) handleModalKeyDown(e, handleCreate); }}
+          >
             {/* Header */}
             <div className="flex items-center gap-2 border-b border-secondary px-6 py-4">
               <Icon icon={File06} className="size-5 text-tertiary" />
@@ -416,30 +482,30 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className={labelClasses}>Priority</label>
-                  <div className="relative">
-                    <select value={priority} onChange={(e) => setPriority(e.target.value)} className={selectClasses}>
-                      {PRIORITY_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
-                    </select>
-                    <ChevronDown className={selectChevronClasses} />
-                  </div>
+                  <Select
+                    value={priority}
+                    onChange={(value) => setPriority(value)}
+                    options={PRIORITY_OPTIONS}
+                    aria-label="Select task priority"
+                  />
                 </div>
                 <div>
                   <label className={labelClasses}>Type</label>
-                  <div className="relative">
-                    <select value={type} onChange={(e) => { setType(e.target.value); if (e.target.value === 'Epic') setEpicId(''); }} className={selectClasses}>
-                      {TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                    <ChevronDown className={selectChevronClasses} />
-                  </div>
+                  <Select
+                    value={type}
+                    onChange={(value) => { setType(value); if (value === 'Epic') setEpicId(''); }}
+                    options={TYPE_OPTIONS}
+                    aria-label="Select task type"
+                  />
                 </div>
                 <div>
                   <label className={labelClasses}>Status</label>
-                  <div className="relative">
-                    <select value={status} onChange={(e) => setStatus(e.target.value)} className={selectClasses}>
-                      {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    <ChevronDown className={selectChevronClasses} />
-                  </div>
+                  <Select
+                    value={status}
+                    onChange={(value) => setStatus(value)}
+                    options={STATUS_OPTIONS}
+                    aria-label="Select task status"
+                  />
                 </div>
               </div>
 
@@ -447,14 +513,12 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
               {type !== 'Epic' && (
                 <div>
                   <label className={labelClasses}>Model</label>
-                  <div className="relative">
-                    <select value={model} onChange={(e) => setModel(e.target.value)} className={selectClasses}>
-                      {CLAUDE_TASK_MODELS.map((m) => (
-                        <option key={m.value} value={m.value}>{m.label}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className={selectChevronClasses} />
-                  </div>
+                  <Select
+                    value={model}
+                    onChange={(value) => setModel(value)}
+                    options={modelOptions}
+                    aria-label="Select Claude model"
+                  />
                 </div>
               )}
 
@@ -476,17 +540,13 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
               {type !== 'Epic' && (
                 <div>
                   <label className={labelClasses}>Epic Parent</label>
-                  <div className="relative">
-                    <select
-                      value={epicId}
-                      onChange={(e) => setEpicId(e.target.value)}
-                      className={selectClasses}
-                    >
-                      <option value="">None (standalone task)</option>
-                      {availableEpics.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-                    </select>
-                    <ChevronDown className={selectChevronClasses} />
-                  </div>
+                  <Select
+                    value={epicId}
+                    onChange={(value) => setEpicId(value)}
+                    options={epicOptions}
+                    placeholder="Select an epic or leave as standalone"
+                    aria-label="Select epic parent"
+                  />
                 </div>
               )}
 

@@ -7,6 +7,7 @@ import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
 import { GIT_CONVENTIONAL_TYPE_COLORS } from '../constants';
+import { handleModalKeyDown } from '@/utils/modal-keyboard';
 import type { GitCommit as GitCommitType } from '../types';
 
 interface CommitDetailModalProps {
@@ -81,7 +82,10 @@ export function CommitDetailModal({ open, onClose, commit, apiBaseUrl, showToast
     <ModalOverlay isOpen={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }} isDismissable>
       <Modal className="sm:max-w-2xl">
         <Dialog>
-          <div className="w-full rounded-xl border border-secondary bg-primary shadow-2xl">
+          <div
+            className="w-full rounded-xl border border-secondary bg-primary shadow-2xl"
+            onKeyDown={(e) => handleModalKeyDown(e, onClose)}
+          >
             {/* Header */}
             <div className="flex items-start justify-between gap-3 border-b border-secondary px-6 py-4">
               <div className="min-w-0 flex-1">
