@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { parseFrontmatter, updateFrontmatterField } from './frontmatter.js';
-import { titleFromSlug, parseArrayField } from './helpers.js';
+import { parseFrontmatter, serializeFrontmatter, updateFrontmatterField } from './frontmatter.js';
+import { titleFromSlug, slugFromTitle, parseArrayField } from './helpers.js';
 
 export class LocalBoardClient {
   constructor(config) {
@@ -181,6 +181,108 @@ export class LocalBoardClient {
 
     const separator = '\n\n---\n\n';
     await fs.appendFile(task._filePath, separator + markdown.trim() + '\n');
+  }
+
+  async writeTaskMarkdown(taskId, content) {
+    const task = await this._findTaskById(taskId);
+    if (!task) {
+      throw new Error(`Task not found: ${taskId}`);
+    }
+    await fs.writeFile(task._filePath, content, 'utf8');
+    this._invalidateIndex();
+  }
+
+  async deleteTask(taskId, { deleteEpicFolder = false } = {}) {
+    const task = await this._findTaskById(taskId);
+    if (!task) {
+      throw new Error(`Task not found: ${taskId}`);
+    }
+
+    const deleted = [];
+    const taskIsEpic = task.type?.toLowerCase() === 'epic' ||
+      (this._taskIndex && [...this._taskIndex.values()].some((t) => t.parentId === task.id));
+
+    if (taskIsEpic && deleteEpicFolder) {
+      const epicDir = path.dirname(task._filePath);
+      await fs.rm(epicDir, { recursive: true });
+      deleted.push(epicDir);
+    } else {
+      await fs.unlink(task._filePath);
+      deleted.push(task._filePath);
+    }
+
+    this._invalidateIndex();
+    return deleted;
+  }
+
+  async createTask(fields, body = '', { epicId = null, fileName = null } = {}) {
+    const name = fields.name;
+    if (!name) throw new Error('Task name is required');
+
+    const slug = fileName || slugFromTitle(name);
+    const targetFileName = slug.endsWith('.md') ? slug : `${slug}.md`;
+
+    let targetDir = this.boardDir;
+    let taskId = slug.replace(/\.md$/, '');
+
+    if (epicId) {
+      targetDir = path.join(this.boardDir, epicId);
+      taskId = `${epicId}/${taskId}`;
+      try {
+        await fs.access(targetDir);
+      } catch {
+        throw new Error(`Epic folder not found: ${epicId}`);
+      }
+    }
+
+    const targetPath = path.join(targetDir, targetFileName);
+
+    try {
+      await fs.access(targetPath);
+      throw new Error(`File already exists: ${targetFileName}`);
+    } catch (err) {
+      if (err.message.startsWith('File already exists')) throw err;
+      // ENOENT is expected — file does not exist yet
+    }
+
+    const frontmatterFields = {
+      name: fields.name,
+      priority: fields.priority || 'P1',
+      type: fields.type || 'UserStory',
+      status: fields.status || this.statuses.notStarted
+    };
+    if (fields.model) frontmatterFields.model = fields.model;
+    if (fields.agents) frontmatterFields.agents = fields.agents;
+
+    const header = serializeFrontmatter(frontmatterFields);
+    const content = header + '\n\n' + (body || `# ${fields.name}\n`);
+    await fs.writeFile(targetPath, content, 'utf8');
+    this._invalidateIndex();
+
+    return { taskId, filePath: targetPath };
+  }
+
+  async listEpicFolders() {
+    let entries;
+    try {
+      entries = await fs.readdir(this.boardDir, { withFileTypes: true });
+    } catch {
+      return [];
+    }
+
+    const epics = [];
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const epicFile = path.join(this.boardDir, entry.name, 'epic.md');
+        try {
+          await fs.access(epicFile);
+          epics.push(entry.name);
+        } catch {
+          // Directory without epic.md — skip
+        }
+      }
+    }
+    return epics;
   }
 
   async _findTaskById(taskId) {

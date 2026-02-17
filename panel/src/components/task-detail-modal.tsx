@@ -1,8 +1,8 @@
 // panel/src/components/task-detail-modal.tsx
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { marked } from 'marked';
-import { CpuChip01, File06, Users01, X } from '@untitledui/icons';
+import { CpuChip01, Edit05, File06, Trash01, Users01, X } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
@@ -15,12 +15,28 @@ interface TaskDetailModalProps {
   onClose: () => void;
   task: BoardTask | null;
   apiBaseUrl: string;
+  showToast: (message: string, color?: 'success' | 'warning' | 'danger' | 'neutral') => void;
+  onSaved?: () => void;
+  onDeleted?: () => void;
 }
 
-export function TaskDetailModal({ open, onClose, task, apiBaseUrl }: TaskDetailModalProps) {
+export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, onSaved, onDeleted }: TaskDetailModalProps) {
   const [markdown, setMarkdown] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Edit mode
+  const [editing, setEditing] = useState(false);
+  const [editContent, setEditContent] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // Delete
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteEpicFolder, setDeleteEpicFolder] = useState(true);
+  const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const isEpic = task?.type?.toLowerCase() === 'epic';
 
   const fetchMarkdown = useCallback(async (taskId: string) => {
     setLoading(true);
@@ -49,7 +65,96 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl }: TaskDetailM
     if (open && task) {
       fetchMarkdown(task.id);
     }
+    // Reset state on open/close or task change
+    setEditing(false);
+    setEditContent('');
+    setConfirmDelete(false);
+    setDeleteEpicFolder(true);
+    if (confirmTimerRef.current) {
+      clearTimeout(confirmTimerRef.current);
+      confirmTimerRef.current = null;
+    }
   }, [open, task, fetchMarkdown]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    };
+  }, []);
+
+  const handleEdit = useCallback(() => {
+    setEditContent(markdown);
+    setEditing(true);
+  }, [markdown]);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditing(false);
+    setEditContent('');
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    if (!task) return;
+    setSaving(true);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/board/task-markdown`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId: task.id, content: editContent })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        showToast(payload?.message || 'Failed to save', 'danger');
+        return;
+      }
+      showToast('Task saved', 'success');
+      setEditing(false);
+      setMarkdown(editContent);
+      onSaved?.();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to save', 'danger');
+    } finally {
+      setSaving(false);
+    }
+  }, [task, apiBaseUrl, editContent, showToast, onSaved]);
+
+  const handleDeleteClick = useCallback(() => {
+    if (confirmDelete) {
+      // Second click — execute delete
+      handleDelete();
+    } else {
+      setConfirmDelete(true);
+      confirmTimerRef.current = setTimeout(() => {
+        setConfirmDelete(false);
+        confirmTimerRef.current = null;
+      }, 4000);
+    }
+  }, [confirmDelete]);
+
+  const handleDelete = useCallback(async () => {
+    if (!task) return;
+    setDeleting(true);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/board/task`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId: task.id, deleteEpicFolder: isEpic ? deleteEpicFolder : false })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        showToast(payload?.message || 'Failed to delete', 'danger');
+        return;
+      }
+      showToast(`Deleted "${task.name}"`, 'success');
+      onDeleted?.();
+      onClose();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to delete', 'danger');
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  }, [task, apiBaseUrl, isEpic, deleteEpicFolder, showToast, onDeleted, onClose]);
 
   const renderedHtml = markdown
     ? marked.parse(markdown, { async: false, gfm: true, breaks: true }) as string
@@ -59,7 +164,7 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl }: TaskDetailM
   const typeColor = task ? BOARD_TYPE_COLORS[task.type] : undefined;
 
   return (
-    <ModalOverlay isOpen={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }} isDismissable>
+    <ModalOverlay isOpen={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }} isDismissable={!saving && !deleting}>
       <Modal className="sm:max-w-2xl">
         <Dialog>
           <div className="w-full rounded-xl border border-secondary bg-primary shadow-2xl">
@@ -132,7 +237,16 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl }: TaskDetailM
                 </div>
               )}
 
-              {!loading && !error && renderedHtml && (
+              {!loading && !error && editing && (
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="w-full min-h-[40vh] resize-y rounded-lg border border-secondary bg-secondary p-3 font-mono text-sm text-primary focus:border-brand-solid focus:outline-none"
+                  spellCheck={false}
+                />
+              )}
+
+              {!loading && !error && !editing && renderedHtml && (
                 <div
                   className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-primary prose-p:text-secondary prose-li:text-secondary prose-strong:text-primary prose-a:text-brand-primary [&_input[type=checkbox]]:mr-2 [&_input[type=checkbox]]:accent-utility-success-500"
                   dangerouslySetInnerHTML={{ __html: renderedHtml }}
@@ -141,10 +255,62 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl }: TaskDetailM
             </div>
 
             {/* Footer */}
-            <div className="flex justify-end border-t border-secondary px-6 py-3">
-              <Button size="md" color="secondary" onPress={onClose}>
-                Close
-              </Button>
+            <div className="flex items-center border-t border-secondary px-6 py-3">
+              {/* Left side: Delete */}
+              {!editing && !loading && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    color={confirmDelete ? 'primary-destructive' : 'tertiary-destructive'}
+                    onPress={handleDeleteClick}
+                    isLoading={deleting}
+                    iconLeading={<Trash01 className="size-4" />}
+                  >
+                    {confirmDelete ? 'Confirm Delete?' : 'Delete'}
+                  </Button>
+                  {isEpic && confirmDelete && (
+                    <label className="flex items-center gap-1.5 text-xs text-tertiary">
+                      <input
+                        type="checkbox"
+                        checked={deleteEpicFolder}
+                        onChange={(e) => setDeleteEpicFolder(e.target.checked)}
+                        className="accent-utility-error-500"
+                      />
+                      Delete entire folder
+                    </label>
+                  )}
+                </div>
+              )}
+
+              {/* Right side: Edit/Save/Cancel/Close */}
+              <div className="ml-auto flex items-center gap-2">
+                {editing ? (
+                  <>
+                    <Button size="md" color="secondary" onPress={handleCancelEdit} isDisabled={saving}>
+                      Cancel
+                    </Button>
+                    <Button size="md" color="primary" onPress={handleSave} isLoading={saving}>
+                      Save
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    {!loading && !error && (
+                      <Button
+                        size="md"
+                        color="secondary"
+                        onPress={handleEdit}
+                        iconLeading={<Edit05 className="size-4" />}
+                      >
+                        Edit
+                      </Button>
+                    )}
+                    <Button size="md" color="secondary" onPress={onClose}>
+                      Close
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </Dialog>

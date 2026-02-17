@@ -13,7 +13,14 @@ import {
   BOARD_POLL_INTERVAL_MS
 } from '../constants';
 import { TaskDetailModal } from './task-detail-modal';
+import { CreateTaskModal } from './create-task-modal';
 import type { BoardTask } from '../types';
+
+const COLUMN_STATUS_MAP: Record<string, string> = {
+  not_started: 'Not Started',
+  in_progress: 'In Progress',
+  done: 'Done'
+};
 
 interface BoardTabProps {
   apiBaseUrl: string;
@@ -183,7 +190,24 @@ function AddStatusDropdown({ taskId, onAddStatus, disabled }: { taskId: string; 
   );
 }
 
-function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStatuses, showAddStatus, onAddStatus, addingStatus }: { task: BoardTask; epic: boolean; allTasks: BoardTask[]; onClick: () => void; onFix?: (taskId: string) => void; fixStatus?: { status: string; startedAt?: string; completedAt?: string; error?: string }; allFixStatuses?: Record<string, { status: string; startedAt?: string; completedAt?: string; error?: string }>; showAddStatus?: boolean; onAddStatus?: (taskId: string, status: string) => void; addingStatus?: boolean }) {
+interface BoardCardProps {
+  key?: React.Key;
+  task: BoardTask;
+  epic: boolean;
+  allTasks: BoardTask[];
+  onClick: () => void;
+  onFix?: (taskId: string) => void;
+  fixStatus?: { status: string; startedAt?: string; completedAt?: string; error?: string };
+  allFixStatuses?: Record<string, { status: string; startedAt?: string; completedAt?: string; error?: string }>;
+  showAddStatus?: boolean;
+  onAddStatus?: (taskId: string, status: string) => void;
+  addingStatus?: boolean;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+  dragging?: boolean;
+}
+
+function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStatuses, showAddStatus, onAddStatus, addingStatus, onDragStart, onDragEnd, dragging }: BoardCardProps) {
   const priorityColor = BOARD_PRIORITY_COLORS[task.priority] as any;
   const typeColor = BOARD_TYPE_COLORS[task.type] as any;
   const taskCode = extractTaskCode(task);
@@ -199,13 +223,17 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
     <div
       role="button"
       tabIndex={0}
+      draggable
       onClick={onClick}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
+      onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; onDragStart?.(); }}
+      onDragEnd={() => onDragEnd?.()}
       className={cx(
         'group relative cursor-pointer rounded-lg border bg-primary p-3 shadow-xs transition hover:shadow-md hover:border-brand-solid',
         epic ? 'border-l-4 border-l-utility-purple-500 border-secondary'
           : parentEpicInProgress ? 'border-utility-brand-200'
-          : 'border-secondary'
+          : 'border-secondary',
+        dragging && 'opacity-50'
       )}
     >
       {/* Row 1: Epic reference (only for child tasks) */}
@@ -330,6 +358,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const [selectedTask, setSelectedTask] = useState<BoardTask | null>(null);
   const [expandedEpics, setExpandedEpics] = useState(() => new Set<string>());
   const [addingStatus, setAddingStatus] = useState(false);
+  const [draggedTask, setDraggedTask] = useState<BoardTask | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
   const mountedRef = useRef(true);
 
   const toggleEpic = useCallback((epicId: string) => {
@@ -554,6 +585,44 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
     }
   }, [apiBaseUrl, showToast, fetchBoard]);
 
+  const handleDrop = useCallback(async (targetColumnKey: string) => {
+    setDragOverColumn(null);
+    if (!draggedTask) return;
+
+    const targetStatus = COLUMN_STATUS_MAP[targetColumnKey];
+    if (!targetStatus) return;
+    if (draggedTask.status?.toLowerCase() === targetStatus.toLowerCase()) {
+      setDraggedTask(null);
+      return;
+    }
+
+    const movedTask = draggedTask;
+    setDraggedTask(null);
+
+    // Optimistic update
+    setTasks((prev) => prev.map((t) =>
+      t.id === movedTask.id ? { ...t, status: targetStatus } : t
+    ));
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/board/update-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId: movedTask.id, status: targetStatus })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        showToast(payload?.message || 'Failed to move task', 'danger');
+        await fetchBoard(true);
+        return;
+      }
+      showToast(`Moved "${movedTask.name}" to ${targetStatus}`, 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to move task', 'danger');
+      await fetchBoard(true);
+    }
+  }, [draggedTask, apiBaseUrl, showToast, fetchBoard]);
+
   // Initial load + polling
   useEffect(() => {
     mountedRef.current = true;
@@ -612,6 +681,15 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
           )}
           <button
             type="button"
+            className="rounded-sm p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary"
+            onClick={() => setCreateModalOpen(true)}
+            aria-label="Create new task"
+            title="Create new task"
+          >
+            <Plus className="size-4" />
+          </button>
+          <button
+            type="button"
             className="rounded-sm p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary disabled:opacity-50"
             onClick={fixBoardOrder}
             disabled={fixing}
@@ -668,8 +746,24 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                 <span className="text-xs font-medium text-quaternary">{col.tasks.length}</span>
               </div>
 
-              {/* Cards - scrollable */}
-              <div className="flex-1 overflow-y-auto p-4">
+              {/* Cards - scrollable (drop zone) */}
+              <div
+                className={cx(
+                  'flex-1 overflow-y-auto p-4 transition-colors',
+                  dragOverColumn === col.key && col.statusMatch !== null && 'bg-utility-brand-50/30 ring-2 ring-inset ring-brand-solid rounded-b-lg'
+                )}
+                onDragOver={(e) => {
+                  if (col.statusMatch === null) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  setDragOverColumn(col.key);
+                }}
+                onDragLeave={() => setDragOverColumn(null)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  handleDrop(col.key);
+                }}
+              >
                 <div className="flex flex-col gap-2">
                   {loading && tasks.length === 0 ? (
                     <>
@@ -699,6 +793,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                             showAddStatus={isMissingStatus}
                             onAddStatus={isMissingStatus ? handleAddStatus : undefined}
                             addingStatus={addingStatus}
+                            onDragStart={() => setDraggedTask(task)}
+                            onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
+                            dragging={draggedTask?.id === task.id}
                           />
                         ));
                       }
@@ -745,6 +842,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   showAddStatus={isMissingStatus}
                                   onAddStatus={isMissingStatus ? handleAddStatus : undefined}
                                   addingStatus={addingStatus}
+                                  onDragStart={() => setDraggedTask(task)}
+                                  onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
+                                  dragging={draggedTask?.id === task.id}
                                 />
                                 <button
                                   type="button"
@@ -769,6 +869,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                         showAddStatus={isMissingStatus}
                                         onAddStatus={isMissingStatus ? handleAddStatus : undefined}
                                         addingStatus={addingStatus}
+                                        onDragStart={() => setDraggedTask(child)}
+                                        onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
+                                        dragging={draggedTask?.id === child.id}
                                       />
                                     ))}
                                   </div>
@@ -789,6 +892,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                               showAddStatus={isMissingStatus}
                               onAddStatus={isMissingStatus ? handleAddStatus : undefined}
                               addingStatus={addingStatus}
+                              onDragStart={() => setDraggedTask(task)}
+                              onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
+                              dragging={draggedTask?.id === task.id}
                             />
                           );
                         });
@@ -805,6 +911,16 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
         onClose={() => setSelectedTask(null)}
         task={selectedTask}
         apiBaseUrl={apiBaseUrl}
+        showToast={showToast}
+        onSaved={() => fetchBoard(true)}
+        onDeleted={() => { setSelectedTask(null); fetchBoard(true); }}
+      />
+      <CreateTaskModal
+        open={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        apiBaseUrl={apiBaseUrl}
+        showToast={showToast}
+        onCreated={() => fetchBoard(true)}
       />
     </section>
   );

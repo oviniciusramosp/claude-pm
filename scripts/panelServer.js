@@ -2159,6 +2159,157 @@ app.post('/api/board/update-status', async (req, res) => {
   }
 });
 
+// --- Save task markdown content ---
+app.post('/api/board/task-markdown', async (req, res) => {
+  const { taskId, content } = req.body;
+
+  if (!taskId || typeof taskId !== 'string') {
+    res.status(400).json({ ok: false, message: 'taskId is required' });
+    return;
+  }
+
+  if (content === undefined || content === null || typeof content !== 'string') {
+    res.status(400).json({ ok: false, message: 'content is required' });
+    return;
+  }
+
+  const env = await readEnvPairs();
+  const boardDir = resolveBoardDir(env);
+
+  const boardConfig = {
+    board: {
+      dir: boardDir,
+      statuses: {
+        notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+        inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+        done: env.BOARD_STATUS_DONE || 'Done'
+      },
+      typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
+    }
+  };
+
+  try {
+    const client = new LocalBoardClient(boardConfig);
+    await client.initialize();
+    await client.writeTaskMarkdown(taskId, content);
+    pushLog('success', LOG_SOURCE.panel, `Task file updated: ${taskId}`);
+    res.json({ ok: true, taskId });
+  } catch (error) {
+    const msg = error.message || String(error);
+    pushLog('error', LOG_SOURCE.panel, `Failed to save task markdown for ${taskId}: ${msg}`);
+    const status = msg.includes('not found') ? 404 : 500;
+    res.status(status).json({ ok: false, message: msg });
+  }
+});
+
+// --- Delete task ---
+app.delete('/api/board/task', async (req, res) => {
+  const { taskId, deleteEpicFolder } = req.body;
+
+  if (!taskId || typeof taskId !== 'string') {
+    res.status(400).json({ ok: false, message: 'taskId is required' });
+    return;
+  }
+
+  const env = await readEnvPairs();
+  const boardDir = resolveBoardDir(env);
+
+  const boardConfig = {
+    board: {
+      dir: boardDir,
+      statuses: {
+        notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+        inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+        done: env.BOARD_STATUS_DONE || 'Done'
+      },
+      typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
+    }
+  };
+
+  try {
+    const client = new LocalBoardClient(boardConfig);
+    await client.initialize();
+    const deleted = await client.deleteTask(taskId, { deleteEpicFolder: !!deleteEpicFolder });
+    pushLog('success', LOG_SOURCE.panel, `Task deleted: ${taskId}`);
+    res.json({ ok: true, taskId, deleted });
+  } catch (error) {
+    const msg = error.message || String(error);
+    pushLog('error', LOG_SOURCE.panel, `Failed to delete task ${taskId}: ${msg}`);
+    const status = msg.includes('not found') ? 404 : 500;
+    res.status(status).json({ ok: false, message: msg });
+  }
+});
+
+// --- Create new task ---
+app.post('/api/board/create-task', async (req, res) => {
+  const { name, priority, type, status, model, agents, body, fileName, epicId } = req.body;
+
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    res.status(400).json({ ok: false, message: 'name is required' });
+    return;
+  }
+
+  const env = await readEnvPairs();
+  const boardDir = resolveBoardDir(env);
+
+  const boardConfig = {
+    board: {
+      dir: boardDir,
+      statuses: {
+        notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+        inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+        done: env.BOARD_STATUS_DONE || 'Done'
+      },
+      typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
+    }
+  };
+
+  try {
+    const client = new LocalBoardClient(boardConfig);
+    await client.initialize();
+    const result = await client.createTask(
+      { name: name.trim(), priority, type, status, model, agents },
+      body || '',
+      { epicId: epicId || null, fileName: fileName || null }
+    );
+    pushLog('success', LOG_SOURCE.panel, `Task created: ${result.taskId}`);
+    res.json({ ok: true, taskId: result.taskId, filePath: result.filePath });
+  } catch (error) {
+    const msg = error.message || String(error);
+    pushLog('error', LOG_SOURCE.panel, `Failed to create task: ${msg}`);
+    const status = msg.includes('already exists') ? 409 : 500;
+    res.status(status).json({ ok: false, message: msg });
+  }
+});
+
+// --- List epic folders ---
+app.get('/api/board/epic-folders', async (_req, res) => {
+  const env = await readEnvPairs();
+  const boardDir = resolveBoardDir(env);
+
+  const boardConfig = {
+    board: {
+      dir: boardDir,
+      statuses: {
+        notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+        inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+        done: env.BOARD_STATUS_DONE || 'Done'
+      },
+      typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
+    }
+  };
+
+  try {
+    const client = new LocalBoardClient(boardConfig);
+    await client.initialize();
+    const folders = await client.listEpicFolders();
+    res.json({ ok: true, folders });
+  } catch (error) {
+    const msg = error.message || String(error);
+    res.status(500).json({ ok: false, message: msg });
+  }
+});
+
 function buildEpicFixPrompt(epicId, epicName, epicContent, epicFilePath, childTasks) {
   const childTasksList = childTasks
     .map((child) => `  - ${child.id}: ${child.name} (${child._filePath})`)
