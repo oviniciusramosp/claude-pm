@@ -19,7 +19,12 @@ Provide the path to an Epic folder (e.g., `Epic-Auth`) or the `epic.md` file ins
 4. Analyze the Epic description and generate user stories using the criteria below.
 5. **Show the user a summary** of all stories to be created (name, priority, 1-line description) and **ask for confirmation** before writing files.
 6. If confirmed, create each story as a `.md` file inside the Epic folder with proper YAML frontmatter and markdown body.
-7. Use kebab-case filenames derived from the story name (e.g., `implement-login-form.md`).
+7. Use the numbered filename pattern `S{epic}-{story}-{slug}.md` where:
+   - `{epic}` = Epic number extracted from the Epic folder name (e.g., "Epic-1" → 1, "E02" → 2)
+   - `{story}` = Sequential story number starting from 1
+   - `{slug}` = Kebab-case slug derived from the story name
+   - Example: For Epic-1, first story "Implement Login Form" → `S1-1-implement-login-form.md`
+   - If Epic has no number, use pattern `S{story}-{slug}.md` (e.g., `S1-implement-login.md`)
 
 ## Story Generation Criteria
 
@@ -87,7 +92,12 @@ status: Not Started
 ## Output Rules
 
 - Create files only inside the Epic folder (same directory as `epic.md`)
-- Use kebab-case filenames (e.g., `implement-login-form.md`, `add-validation-logic.md`)
+- Use numbered filename pattern `S{epic}-{story}-{slug}.md`:
+  - Extract Epic number from folder name (e.g., "Epic-1" → 1, "E02-Auth" → 2)
+  - Number stories sequentially starting from 1
+  - Convert story name to kebab-case slug
+  - Examples: `S1-1-implement-login-form.md`, `S1-2-add-validation-logic.md`, `S2-1-setup-database.md`
+  - If Epic has no number in its name, use `S{story}-{slug}.md` (e.g., `S1-implement-login.md`)
 - Each file must have valid YAML frontmatter with `name`, `priority`, `type`, and `status` fields
 - The `status` must always be `Not Started`
 - The `type` must always be `UserStory`

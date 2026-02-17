@@ -311,8 +311,13 @@ status: Not Started
 
 **Epic file naming**:
 - Main file MUST be named `epic.md`
-- Child files can use any kebab-case naming
-- Common pattern: `us-001-description.md`, `bug-fix-login.md`
+- Child files follow the pattern `S{epic}-{story}-{slug}.md`:
+  - `{epic}` = Epic number extracted from folder name (e.g., "Epic-1" → 1, "E02" → 2)
+  - `{story}` = Sequential story number (1, 2, 3, ...)
+  - `{slug}` = Kebab-case slug from story name
+- Examples: `S1-1-implement-login.md`, `S1-2-add-validation.md`, `S2-1-setup-database.md`
+- If Epic folder has no number, use `S{story}-{slug}.md` (e.g., `S1-implement-login.md`)
+- This pattern ensures clear execution order at a glance
 
 ### Task ID Resolution
 
@@ -470,7 +475,7 @@ Available on **Epic cards** on the Board tab via the "Generate" button (next to 
 1. The Epic's markdown is read and its description is sent to `POST /api/board/generate-stories`.
 2. The backend builds a prompt that instructs Claude to analyze the Epic and produce user stories.
 3. Claude Sonnet generates up to 15 user stories, each with: name, priority, full markdown body (acceptance criteria, technical tasks, tests, dependencies, standard completion criteria).
-4. Each story is saved as a `.md` file inside the Epic's folder using `slugFromTitle()` for the filename.
+4. Each story is saved as a `.md` file inside the Epic's folder using the numbered pattern `S{epic}-{story}-{slug}.md` (e.g., `S1-1-implement-login.md`, `S1-2-add-validation.md`). This pattern ensures clear execution order.
 5. The Epic auto-expands on the board and the board refreshes.
 
 **Concurrency**: Only one generation can run at a time (all Generate buttons are disabled during generation). A 3-minute timeout is used for the Claude call.

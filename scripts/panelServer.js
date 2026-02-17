@@ -9,7 +9,7 @@ import express from 'express';
 import { LocalBoardClient } from '../src/local/client.js';
 import { isEpicTask, sortCandidates } from '../src/selectTask.js';
 import { parseFrontmatter } from '../src/local/frontmatter.js';
-import { slugFromTitle } from '../src/local/helpers.js';
+import { generateStoryFileName } from '../src/local/helpers.js';
 
 dotenv.config();
 
@@ -3023,13 +3023,14 @@ app.post('/api/board/generate-stories', async (req, res) => {
     const { reply } = await runClaudePrompt(prompt, 'claude-sonnet-4-5-20250929', GENERATE_STORIES_TIMEOUT_MS);
     const stories = parseGenerateStoriesResponse(reply);
 
-    // Create each story as a task file
+    // Create each story as a task file with numbered pattern S{epic}-{story}-{slug}
     const created = [];
     let failed = 0;
 
-    for (const story of stories) {
+    for (let i = 0; i < stories.length; i++) {
+      const story = stories[i];
       try {
-        const fileName = slugFromTitle(story.name);
+        const fileName = generateStoryFileName(epicId, i, story.name);
         await client.createTask(
           { name: story.name, priority: story.priority, type: 'UserStory', status: 'Not Started' },
           story.body,
