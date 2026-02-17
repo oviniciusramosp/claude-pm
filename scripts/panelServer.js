@@ -2759,10 +2759,10 @@ app.post('/api/board/review-task', async (req, res) => {
     const { reply } = await runClaudePrompt(prompt, selectedModel, REVIEW_TIMEOUT_MS);
     const parsed = parseReviewResponse(reply);
 
-    pushLog('success', LOG_SOURCE.panel, `Task review completed: "${name.trim()}" — ${parsed.summary}`);
+    pushLog('success', LOG_SOURCE.claude, `Task review completed: "${name.trim()}" — ${parsed.summary}`);
     res.json({ ok: true, improvedBody: parsed.improvedBody, summary: parsed.summary });
   } catch (error) {
-    pushLog('error', LOG_SOURCE.panel, `Task review failed: ${error.message}`);
+    pushLog('error', LOG_SOURCE.claude, `Task review failed: ${error.message}`);
     res.status(500).json({ ok: false, message: error.message });
   } finally {
     reviewTaskState.running = false;
@@ -2961,10 +2961,10 @@ app.post('/api/board/generate-stories', async (req, res) => {
     }
 
     const summary = `Generated ${created.length} stories for "${epicName}"${failed > 0 ? ` (${failed} failed)` : ''}`;
-    pushLog('success', LOG_SOURCE.panel, summary);
+    pushLog('success', LOG_SOURCE.claude, summary);
     res.json({ ok: true, created, total: stories.length, failed });
   } catch (error) {
-    pushLog('error', LOG_SOURCE.panel, `Story generation failed: ${error.message}`);
+    pushLog('error', LOG_SOURCE.claude, `Story generation failed: ${error.message}`);
     res.status(500).json({ ok: false, message: error.message });
   } finally {
     generateStoriesState.running = false;
