@@ -52,6 +52,9 @@ const reviewTaskState = {
 const generateStoriesState = {
   running: false
 };
+const fixEpicStoriesState = {
+  running: false
+};
 const LOG_SOURCE = {
   panel: 'panel',
   claude: 'claude',
@@ -2959,6 +2962,162 @@ function parseGenerateStoriesResponse(reply) {
   return normalized;
 }
 
+function buildFixEpicStoriesPrompt({ epicName, stories }) {
+  const storiesList = stories.map((s, i) => {
+    const issues = [];
+    if (!s.hasTitle) issues.push('missing title');
+    if (!s.hasNumber) issues.push('missing number in filename');
+    if (!s.hasContent) issues.push('empty or too short content');
+    if (!s.hasAcs) issues.push('no acceptance criteria');
+    if (!s.hasModel) issues.push('no model defined');
+    if (!s.hasAgents) issues.push('no agents defined');
+    if (!s.hasType) issues.push('no type defined');
+    if (!s.hasPriority) issues.push('no priority defined');
+
+    return `Story ${i + 1}: ${s.name || '(no name)'}
+File: ${s.fileName}
+Issues: ${issues.join(', ')}
+
+Current frontmatter:
+---
+name: ${s.frontmatter?.name || '(missing)'}
+priority: ${s.frontmatter?.priority || '(missing)'}
+type: ${s.frontmatter?.type || '(missing)'}
+status: ${s.frontmatter?.status || '(missing)'}
+model: ${s.frontmatter?.model || '(missing)'}
+agents: ${s.frontmatter?.agents || '(missing)'}
+---
+
+Current body:
+${s.body?.slice(0, 500) || '(empty)'}
+`;
+  }).join('\n---\n\n');
+
+  return `You are a senior product manager and prompt engineering expert. Your job is to fix incomplete or malformed user stories in an Epic.
+
+<epic_name>${epicName}</epic_name>
+
+<stories_to_fix>
+${storiesList}
+</stories_to_fix>
+
+<instructions>
+1. For each story, fix all the issues listed:
+   - If missing title: generate a clear, concise name (imperative form, e.g., "Implement login form")
+   - If missing number: ensure the filename follows the pattern S{epic}-{story}-{slug} (e.g., S1-1-implement-login, S1-2-add-validation)
+   - If missing content: generate a complete markdown body following this structure:
+
+     # [Story Name]
+
+     **User Story**: As a [role], I want [goal] so that [benefit].
+
+     ## Acceptance Criteria
+     - [ ] First acceptance criterion (specific, testable, checkbox format)
+     - [ ] Second acceptance criterion
+     - [ ] Third acceptance criterion
+     (at least 3-5 ACs)
+
+     ## Technical Tasks
+     1. First technical task
+     2. Second technical task
+     (concrete implementation steps)
+
+     ## Tests
+     - Test case 1
+     - Test case 2
+     (specific test scenarios)
+
+     ## Dependencies
+     - Dependency 1 (or "None")
+
+     ## Standard Completion Criteria
+     - [ ] Tests written and passing
+     - [ ] TypeScript compiles without errors
+     - [ ] Linter passes
+     - [ ] Commit: \`feat(scope): story name [STORY-ID]\`
+
+   - If missing ACs: add 3-5 testable acceptance criteria as markdown checkboxes (\`- [ ] ...\`)
+   - If missing model: set \`model: claude-sonnet-4-5-20250929\`
+   - If missing agents: analyze the story and assign appropriate agents (e.g., "frontend", "backend", "design", "devops")
+   - If missing type: set \`type: UserStory\`
+   - If missing priority: analyze the story and assign P0 (critical), P1 (high), P2 (medium), or P3 (low)
+
+2. Return a JSON array with the fixed stories. Each story must have:
+   - fileName: the corrected filename (S{epic}-{story}-{slug} format)
+   - name: the story title
+   - priority: P0, P1, P2, or P3
+   - type: UserStory
+   - model: claude-sonnet-4-5-20250929 (or keep existing if valid)
+   - agents: array of agent names (e.g., ["frontend", "backend"])
+   - body: the complete markdown body with all sections
+</instructions>
+
+<output_format>
+Return ONLY a JSON array in this exact format (no markdown, no code blocks, no extra text):
+
+[
+  {
+    "fileName": "s1-1-implement-login",
+    "name": "Implement Login Page",
+    "priority": "P1",
+    "type": "UserStory",
+    "model": "claude-sonnet-4-5-20250929",
+    "agents": ["frontend", "design"],
+    "body": "# Implement Login Page\\n\\n**User Story**: As a user, I want to log in with my email and password so that I can access my account.\\n\\n## Acceptance Criteria\\n- [ ] Login form renders with email and password fields\\n- [ ] Form validates email format\\n- [ ] Submit button is disabled when form is invalid\\n\\n## Technical Tasks\\n1. Create login page component\\n2. Add form validation\\n\\n## Tests\\n- Login form renders correctly\\n- Validation works\\n\\n## Dependencies\\n- None\\n\\n## Standard Completion Criteria\\n- [ ] Tests written and passing\\n- [ ] TypeScript compiles without errors\\n- [ ] Linter passes\\n- [ ] Commit: \`feat(auth): implement login page [S1-1]\`"
+  }
+]
+</output_format>
+
+Important rules:
+- Keep existing good content when possible (don't regenerate everything if only a few fields are missing)
+- Ensure all acceptance criteria use checkbox format: \`- [ ] ...\`
+- Use proper escaping for newlines in the JSON body field
+- Return ONLY valid JSON, nothing else`;
+}
+
+function parseFixEpicStoriesResponse(reply) {
+  const text = String(reply || '').trim();
+
+  // Try to extract JSON from code blocks if wrapped
+  const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  const jsonStr = codeBlockMatch ? codeBlockMatch[1].trim() : text;
+
+  let stories;
+  try {
+    stories = JSON.parse(jsonStr);
+  } catch {
+    throw new Error('Claude did not return valid JSON. Raw response: ' + text.slice(0, 500));
+  }
+
+  if (!Array.isArray(stories)) {
+    throw new Error('Expected a JSON array of stories but got: ' + typeof stories);
+  }
+
+  // Validate and normalize
+  const normalized = [];
+  for (const s of stories) {
+    if (!s.fileName || typeof s.fileName !== 'string') continue;
+    if (!s.name || typeof s.name !== 'string') continue;
+    if (!s.body || typeof s.body !== 'string') continue;
+
+    normalized.push({
+      fileName: s.fileName.trim(),
+      name: s.name.trim(),
+      priority: ['P0', 'P1', 'P2', 'P3'].includes(s.priority) ? s.priority : 'P1',
+      type: s.type || 'UserStory',
+      model: s.model || 'claude-sonnet-4-5-20250929',
+      agents: Array.isArray(s.agents) ? s.agents : [],
+      body: s.body
+    });
+  }
+
+  if (normalized.length === 0) {
+    throw new Error('Claude returned no valid stories. Raw response: ' + text.slice(0, 500));
+  }
+
+  return normalized;
+}
+
 app.post('/api/board/generate-stories', async (req, res) => {
   const { epicId } = req.body;
 
@@ -3051,6 +3210,160 @@ app.post('/api/board/generate-stories', async (req, res) => {
     res.status(500).json({ ok: false, message: error.message });
   } finally {
     generateStoriesState.running = false;
+  }
+});
+
+app.post('/api/board/fix-epic-stories', async (req, res) => {
+  const { epicId } = req.body;
+
+  if (!epicId || typeof epicId !== 'string' || !epicId.trim()) {
+    res.status(400).json({ ok: false, message: 'epicId is required.' });
+    return;
+  }
+
+  if (fixEpicStoriesState.running) {
+    res.status(409).json({ ok: false, message: 'Story fix is already in progress. Please wait.' });
+    return;
+  }
+
+  fixEpicStoriesState.running = true;
+  pushLog('info', LOG_SOURCE.panel, `Fixing stories for Epic: "${epicId}"`);
+
+  try {
+    const env = await readEnvPairs();
+    const boardDir = resolveBoardDir(env);
+
+    const boardConfig = {
+      board: {
+        dir: boardDir,
+        statuses: {
+          notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+          inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+          done: env.BOARD_STATUS_DONE || 'Done'
+        },
+        typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
+      }
+    };
+
+    const client = new LocalBoardClient(boardConfig);
+    await client.initialize();
+
+    // Read epic markdown
+    const epicMarkdown = await client.getTaskMarkdown(epicId);
+    if (!epicMarkdown) {
+      res.status(404).json({ ok: false, message: `Epic not found: ${epicId}` });
+      return;
+    }
+
+    const { frontmatter: epicFields } = parseFrontmatter(epicMarkdown);
+    const epicName = (epicFields && epicFields.name) || epicId;
+
+    // Find all children
+    const allTasks = await client.listTasks();
+    const children = allTasks.filter((t) => t.parentId === epicId);
+
+    if (children.length === 0) {
+      res.status(400).json({ ok: false, message: 'Epic has no child stories to fix.' });
+      return;
+    }
+
+    // Validate each story and identify issues
+    const storiesToFix = [];
+    for (const child of children) {
+      const childMarkdown = await client.getTaskMarkdown(child.id);
+      if (!childMarkdown) continue;
+
+      const { frontmatter, body } = parseFrontmatter(childMarkdown);
+      const fileName = child.id.split('/').pop();
+
+      // Check what's missing
+      const hasTitle = !!(frontmatter?.name && frontmatter.name.trim());
+      const hasNumber = /^s\d+-\d+/i.test(fileName || '');
+      const hasContent = !!(body && body.trim().length >= 20);
+      const hasAcs = body ? /- \[ \]/g.test(body) : false;
+      const hasModel = !!(frontmatter?.model);
+      const hasAgents = !!(frontmatter?.agents && (Array.isArray(frontmatter.agents) ? frontmatter.agents.length > 0 : String(frontmatter.agents).trim().length > 0));
+      const hasType = !!(frontmatter?.type);
+      const hasPriority = !!(frontmatter?.priority);
+
+      const hasIssues = !hasTitle || !hasNumber || !hasContent || !hasAcs || !hasModel || !hasAgents || !hasType || !hasPriority;
+
+      if (hasIssues) {
+        storiesToFix.push({
+          id: child.id,
+          name: child.name,
+          fileName,
+          frontmatter,
+          body,
+          hasTitle,
+          hasNumber,
+          hasContent,
+          hasAcs,
+          hasModel,
+          hasAgents,
+          hasType,
+          hasPriority
+        });
+      }
+    }
+
+    if (storiesToFix.length === 0) {
+      res.json({ ok: true, message: 'All stories are complete. No fixes needed.', fixed: 0 });
+      return;
+    }
+
+    // Build prompt and call Claude
+    const prompt = buildFixEpicStoriesPrompt({
+      epicName,
+      stories: storiesToFix
+    });
+
+    const { reply } = await runClaudePrompt(prompt, 'claude-sonnet-4-5-20250929', GENERATE_STORIES_TIMEOUT_MS);
+    const fixedStories = parseFixEpicStoriesResponse(reply);
+
+    // Update each story
+    const fixed = [];
+    let failed = 0;
+
+    for (const story of fixedStories) {
+      try {
+        // Find the original story by matching fileName
+        const originalStory = storiesToFix.find((s) => s.fileName === story.fileName || s.name === story.name);
+        if (!originalStory) {
+          pushLog('warn', LOG_SOURCE.panel, `Could not find original story for "${story.name}"`);
+          failed++;
+          continue;
+        }
+
+        // Update the task
+        await client.updateTask(
+          originalStory.id,
+          {
+            name: story.name,
+            priority: story.priority,
+            type: story.type,
+            status: originalStory.frontmatter?.status || 'Not Started',
+            model: story.model,
+            agents: story.agents
+          },
+          story.body
+        );
+
+        fixed.push({ id: originalStory.id, name: story.name });
+      } catch (err) {
+        pushLog('warn', LOG_SOURCE.panel, `Failed to fix story "${story.name}": ${err.message}`);
+        failed++;
+      }
+    }
+
+    const summary = `Fixed ${fixed.length} of ${storiesToFix.length} stories for "${epicName}"${failed > 0 ? ` (${failed} failed)` : ''}`;
+    pushLog('success', LOG_SOURCE.claude, summary);
+    res.json({ ok: true, fixed: fixed.length, total: storiesToFix.length, failed });
+  } catch (error) {
+    pushLog('error', LOG_SOURCE.claude, `Story fix failed: ${error.message}`);
+    res.status(500).json({ ok: false, message: error.message });
+  } finally {
+    fixEpicStoriesState.running = false;
   }
 });
 

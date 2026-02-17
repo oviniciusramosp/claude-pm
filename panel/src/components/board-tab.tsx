@@ -374,6 +374,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createDefaultEpicId, setCreateDefaultEpicId] = useState<string | undefined>(undefined);
   const [generatingEpicId, setGeneratingEpicId] = useState(null as string | null);
+  const [fixingEpicId, setFixingEpicId] = useState(null as string | null);
   const [boardExists, setBoardExists] = useState<boolean | null>(null);
   const [boardDir, setBoardDir] = useState<string | null>(null);
   const [creatingBoard, setCreatingBoard] = useState(false);
@@ -703,6 +704,40 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
     }
   }, [apiBaseUrl, showToast, fetchBoard]);
 
+  const handleFixEpicStories = useCallback(async (epicId: string) => {
+    setFixingEpicId(epicId);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/board/fix-epic-stories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ epicId })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        showToast(payload?.message || 'Failed to fix stories', 'danger');
+        return;
+      }
+      if (payload.fixed === 0 && payload.total === 0) {
+        showToast(payload.message || 'All stories are complete', 'neutral');
+        return;
+      }
+      const msg = payload.failed > 0
+        ? `Fixed ${payload.fixed} of ${payload.total} stories (${payload.failed} failed)`
+        : `Fixed ${payload.fixed} stories`;
+      showToast(msg, payload.failed > 0 ? 'warning' : 'success');
+      setExpandedEpics((prev) => {
+        const next = new Set(prev);
+        next.add(epicId);
+        return next;
+      });
+      await fetchBoard(true);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to fix stories', 'danger');
+    } finally {
+      setFixingEpicId(null);
+    }
+  }, [apiBaseUrl, showToast, fetchBoard]);
+
   // Initial load + polling (check board existence first)
   useEffect(() => {
     mountedRef.current = true;
@@ -941,12 +976,12 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   <button
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); handleGenerateStories(task.id); }}
-                                    disabled={generatingEpicId !== null}
+                                    disabled={generatingEpicId !== null || fixingEpicId !== null}
                                     className={cx(
                                       'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
                                       generatingEpicId === task.id
                                         ? 'text-brand-secondary bg-utility-brand-50'
-                                        : generatingEpicId !== null
+                                        : (generatingEpicId !== null || fixingEpicId !== null)
                                           ? 'text-quaternary cursor-not-allowed'
                                           : 'text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50'
                                     )}
@@ -956,6 +991,25 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       ? <RefreshCw01 className="size-3 animate-spin" />
                                       : <Stars01 className="size-3" />}
                                     <span>{generatingEpicId === task.id ? 'Generating...' : 'Generate'}</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleFixEpicStories(task.id); }}
+                                    disabled={generatingEpicId !== null || fixingEpicId !== null}
+                                    className={cx(
+                                      'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
+                                      fixingEpicId === task.id
+                                        ? 'text-utility-warning-600 bg-utility-warning-50'
+                                        : (generatingEpicId !== null || fixingEpicId !== null)
+                                          ? 'text-quaternary cursor-not-allowed'
+                                          : 'text-tertiary hover:text-utility-warning-600 hover:bg-utility-warning-50'
+                                    )}
+                                    title={fixingEpicId === task.id ? 'Fixing stories...' : `Fix incomplete stories in ${task.name}`}
+                                  >
+                                    {fixingEpicId === task.id
+                                      ? <RefreshCw01 className="size-3 animate-spin" />
+                                      : <Tool01 className="size-3" />}
+                                    <span>{fixingEpicId === task.id ? 'Fixing...' : 'Fix'}</span>
                                   </button>
                                 </div>
                               </div>
@@ -1033,12 +1087,12 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   <button
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); handleGenerateStories(task.id); }}
-                                    disabled={generatingEpicId !== null}
+                                    disabled={generatingEpicId !== null || fixingEpicId !== null}
                                     className={cx(
                                       'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
                                       generatingEpicId === task.id
                                         ? 'text-brand-secondary bg-utility-brand-50'
-                                        : generatingEpicId !== null
+                                        : (generatingEpicId !== null || fixingEpicId !== null)
                                           ? 'text-quaternary cursor-not-allowed'
                                           : 'text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50'
                                     )}
@@ -1048,6 +1102,25 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       ? <RefreshCw01 className="size-3 animate-spin" />
                                       : <Stars01 className="size-3" />}
                                     <span>{generatingEpicId === task.id ? 'Generating...' : 'Generate'}</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleFixEpicStories(task.id); }}
+                                    disabled={generatingEpicId !== null || fixingEpicId !== null}
+                                    className={cx(
+                                      'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
+                                      fixingEpicId === task.id
+                                        ? 'text-utility-warning-600 bg-utility-warning-50'
+                                        : (generatingEpicId !== null || fixingEpicId !== null)
+                                          ? 'text-quaternary cursor-not-allowed'
+                                          : 'text-tertiary hover:text-utility-warning-600 hover:bg-utility-warning-50'
+                                    )}
+                                    title={fixingEpicId === task.id ? 'Fixing stories...' : `Fix incomplete stories in ${task.name}`}
+                                  >
+                                    {fixingEpicId === task.id
+                                      ? <RefreshCw01 className="size-3 animate-spin" />
+                                      : <Tool01 className="size-3" />}
+                                    <span>{fixingEpicId === task.id ? 'Fixing...' : 'Fix'}</span>
                                   </button>
                                   </>
                                 )}
@@ -1110,12 +1183,12 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   <button
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); handleGenerateStories(task.id); }}
-                                    disabled={generatingEpicId !== null}
+                                    disabled={generatingEpicId !== null || fixingEpicId !== null}
                                     className={cx(
                                       'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
                                       generatingEpicId === task.id
                                         ? 'text-brand-secondary bg-utility-brand-50'
-                                        : generatingEpicId !== null
+                                        : (generatingEpicId !== null || fixingEpicId !== null)
                                           ? 'text-quaternary cursor-not-allowed'
                                           : 'text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50'
                                     )}
@@ -1125,6 +1198,25 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       ? <RefreshCw01 className="size-3 animate-spin" />
                                       : <Stars01 className="size-3" />}
                                     <span>{generatingEpicId === task.id ? 'Generating...' : 'Generate'}</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleFixEpicStories(task.id); }}
+                                    disabled={generatingEpicId !== null || fixingEpicId !== null}
+                                    className={cx(
+                                      'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
+                                      fixingEpicId === task.id
+                                        ? 'text-utility-warning-600 bg-utility-warning-50'
+                                        : (generatingEpicId !== null || fixingEpicId !== null)
+                                          ? 'text-quaternary cursor-not-allowed'
+                                          : 'text-tertiary hover:text-utility-warning-600 hover:bg-utility-warning-50'
+                                    )}
+                                    title={fixingEpicId === task.id ? 'Fixing stories...' : `Fix incomplete stories in ${task.name}`}
+                                  >
+                                    {fixingEpicId === task.id
+                                      ? <RefreshCw01 className="size-3 animate-spin" />
+                                      : <Tool01 className="size-3" />}
+                                    <span>{fixingEpicId === task.id ? 'Fixing...' : 'Fix'}</span>
                                   </button>
                                 </div>
                               </div>
