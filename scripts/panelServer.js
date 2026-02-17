@@ -874,6 +874,46 @@ function buildClaudePromptCommand(model) {
   return command;
 }
 
+async function runClaudePromptViaApi(prompt, model) {
+  const token = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  if (!token) {
+    throw new Error('CLAUDE_CODE_OAUTH_TOKEN is required to use Anthropic API directly');
+  }
+
+  const workdir = path.resolve(cwd, process.env.CLAUDE_WORKDIR || '.');
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': token,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: model || 'claude-sonnet-4-5-20250929',
+      max_tokens: 4096,
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Anthropic API error (${response.status}): ${errorText}`);
+  }
+
+  const data = await response.json();
+  const reply = data.content?.[0]?.text || '';
+
+  return {
+    reply: reply.trim(),
+    workdir
+  };
+}
+
 function runClaudePrompt(prompt, model, customTimeoutMs) {
   return new Promise((resolve, reject) => {
     const command = buildClaudePromptCommand(model);
@@ -2487,7 +2527,7 @@ Now examine the codebase and update the task file with accurate AC completion st
 
 app.post('/api/claude/chat', async (req, res) => {
   const message = String(req.body?.message || '').trim();
-  const model = req.body?.model || '';
+  const model = req.body?.model || 'claude-sonnet-4-5-20250929';
 
   if (!message) {
     res.status(400).json({ ok: false, message: 'Message is required.' });
@@ -2508,7 +2548,8 @@ app.post('/api/claude/chat', async (req, res) => {
   pushLog('info', LOG_SOURCE.chatUser, truncateText(message));
 
   try {
-    const { reply, workdir } = await runClaudePrompt(message, model);
+    // Use Anthropic API directly to avoid "Claude Code cannot be launched inside another Claude Code session" error
+    const { reply, workdir } = await runClaudePromptViaApi(message, model);
     const normalizedReply = reply || '(Claude returned empty output)';
     pushLog('success', LOG_SOURCE.chatClaude, truncateText(normalizedReply));
     res.json({

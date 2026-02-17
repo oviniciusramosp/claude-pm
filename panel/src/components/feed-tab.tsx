@@ -1,7 +1,7 @@
 // panel/src/components/feed-tab.tsx
 
 import React, { type RefObject, useLayoutEffect, useState, useMemo } from 'react';
-import { ChevronDown, ChevronRight, Copy01, CpuChip01, Send01, TerminalBrowser, Check } from '@untitledui/icons';
+import { ChevronDown, ChevronRight, Copy01, CpuChip01, Send01, TerminalBrowser, Check, ChevronSelectorVertical } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { cx } from '@/utils/cx';
 import {
@@ -444,6 +444,8 @@ export function FeedTab({
   logFeedRef,
   chatDraft,
   setChatDraft,
+  chatModel,
+  setChatModel,
   sendClaudeChatMessage,
   copyLiveFeedMessage,
   busy,
@@ -454,6 +456,8 @@ export function FeedTab({
   logFeedRef: RefObject<HTMLDivElement | null>;
   chatDraft: string;
   setChatDraft: (value: string) => void;
+  chatModel: string;
+  setChatModel: (value: string) => void;
   sendClaudeChatMessage: () => void;
   copyLiveFeedMessage: (message: string) => void;
   busy: Record<string, any>;
@@ -715,6 +719,26 @@ export function FeedTab({
             Boolean(busy.chat) && 'bg-disabled_subtle ring-disabled'
           )}
         >
+          <div className="relative shrink-0">
+            <select
+              value={chatModel}
+              onChange={(e) => setChatModel(e.target.value)}
+              disabled={Boolean(busy.chat)}
+              className={cx(
+                'h-9 appearance-none rounded-md border border-secondary bg-primary px-3 pr-8 text-sm text-primary outline-hidden transition-colors',
+                'hover:border-secondary_hover focus:border-brand focus:ring-2 focus:ring-brand/20',
+                Boolean(busy.chat) && 'cursor-not-allowed opacity-50'
+              )}
+              aria-label="Select Claude model"
+            >
+              <option value="claude-sonnet-4-5-20250929">Sonnet 4.5</option>
+              <option value="claude-opus-4-6">Opus 4.6</option>
+              <option value="claude-haiku-4-5-20251001">Haiku 4.5</option>
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+              <Icon icon={ChevronSelectorVertical} className="size-4 text-tertiary" />
+            </div>
+          </div>
           <textarea
             aria-label="Chat prompt"
             placeholder="Ask Claude about this project..."
