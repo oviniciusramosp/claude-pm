@@ -18,7 +18,7 @@ export function ToastNotification({ toasts, onDismiss }: ToastContainerProps) {
   }
 
   return (
-    <div className="fixed bottom-4 left-1/2 z-[2000] w-[min(92vw,440px)] -translate-x-1/2 flex flex-col gap-3 pointer-events-none">
+    <div className="fixed bottom-4 right-4 z-[2000] w-[min(92vw,440px)] flex flex-col gap-3 pointer-events-none">
       {toasts.map((toast, index) => (
         <div
           key={toast.id}

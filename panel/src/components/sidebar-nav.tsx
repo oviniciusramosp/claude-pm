@@ -26,6 +26,7 @@ export function SidebarNav({
   setRuntimeSettingsModalOpen,
   disabledTabs,
   errorCount,
+  unreadFeedCount,
   onDebugClick,
   sidebarOpen,
   setSidebarOpen
@@ -47,6 +48,7 @@ export function SidebarNav({
   setRuntimeSettingsModalOpen: (open: boolean) => void;
   disabledTabs?: Set<string>;
   errorCount: number;
+  unreadFeedCount: number;
   onDebugClick: () => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
@@ -89,6 +91,8 @@ export function SidebarNav({
         {SIDEBAR_NAV_ITEMS.map((item) => {
           const isActive = activeTab === item.key;
           const isDisabled = disabledTabs?.has(item.key);
+          const isFeedTab = item.key === 'feed';
+          const showBadge = isFeedTab && unreadFeedCount > 0;
           return (
             <button
               key={item.key}
@@ -108,6 +112,11 @@ export function SidebarNav({
             >
               <Icon icon={item.icon} className="size-5" />
               <span>{item.label}</span>
+              {showBadge ? (
+                <span className="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-utility-brand-600 text-[11px] font-semibold text-white">
+                  {unreadFeedCount > 99 ? '99+' : unreadFeedCount}
+                </span>
+              ) : null}
             </button>
           );
         })}

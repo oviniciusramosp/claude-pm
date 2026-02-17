@@ -54,6 +54,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
   const [debugModalOpen, setDebugModalOpen] = useState(false);
   const [boardRefreshTrigger, setBoardRefreshTrigger] = useState(0);
   const [fixingTaskId, setFixingTaskId] = useState(null);
+  const [unreadFeedCount, setUnreadFeedCount] = useState(0);
   const logFeedRef = useRef(null);
   const didResolveInitialTabRef = useRef(false);
 
@@ -228,6 +229,11 @@ export function App({ mode = 'light', setMode = () => {} }) {
         const parsed = JSON.parse(event.data);
         appendLog(parsed);
         refreshStatus().catch(() => {});
+
+        // Increment unread counter if not on feed tab
+        if (activeTab !== NAV_TAB_KEYS.feed) {
+          setUnreadFeedCount((prev) => prev + 1);
+        }
 
         const msg = String(parsed.message || '');
         if (
@@ -539,7 +545,14 @@ export function App({ mode = 'light', setMode = () => {} }) {
 
       <SidebarNav
         activeTab={activeTab}
-        setActiveTab={(tab) => { setActiveTab(tab); setSidebarOpen(false); }}
+        setActiveTab={(tab) => {
+          setActiveTab(tab);
+          setSidebarOpen(false);
+          // Clear unread count when switching to feed tab
+          if (tab === NAV_TAB_KEYS.feed) {
+            setUnreadFeedCount(0);
+          }
+        }}
         isDark={isDark}
         onThemeToggle={onThemeToggle}
         apiRunning={apiRunning}
@@ -563,6 +576,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
         setRuntimeSettingsModalOpen={setRuntimeSettingsModalOpen}
         disabledTabs={disabledTabs}
         errorCount={collectedErrors.length}
+        unreadFeedCount={unreadFeedCount}
         onDebugClick={() => setDebugModalOpen(true)}
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
