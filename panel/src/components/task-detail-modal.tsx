@@ -46,16 +46,16 @@ const TYPE_OPTIONS: SelectOption[] = [
 ];
 
 const PRIORITY_OPTIONS: SelectOption[] = [
-  { value: 'P0', label: '- Critical', badge: { color: BOARD_PRIORITY_COLORS.P0 as any, text: 'P0' }, description: 'Drop everything and fix now' },
-  { value: 'P1', label: '- High', badge: { color: BOARD_PRIORITY_COLORS.P1 as any, text: 'P1' }, description: 'Important, plan to address soon' },
-  { value: 'P2', label: '- Medium', badge: { color: BOARD_PRIORITY_COLORS.P2 as any, text: 'P2' }, description: 'Normal priority' },
-  { value: 'P3', label: '- Low', badge: { color: BOARD_PRIORITY_COLORS.P3 as any, text: 'P3' }, description: 'Nice to have, no rush' }
+  { value: 'P0', label: 'Critical', badge: { color: BOARD_PRIORITY_COLORS.P0 as any, text: 'P0' }, description: 'Drop everything and fix now' },
+  { value: 'P1', label: 'High', badge: { color: BOARD_PRIORITY_COLORS.P1 as any, text: 'P1' }, description: 'Important, plan to address soon' },
+  { value: 'P2', label: 'Medium', badge: { color: BOARD_PRIORITY_COLORS.P2 as any, text: 'P2' }, description: 'Normal priority' },
+  { value: 'P3', label: 'Low', badge: { color: BOARD_PRIORITY_COLORS.P3 as any, text: 'P3' }, description: 'Nice to have, no rush' }
 ];
 
 const STATUS_OPTIONS: SelectOption[] = [
-  { value: 'Not Started', label: 'Not Started', badge: { color: 'gray' as any } },
-  { value: 'In Progress', label: 'In Progress', badge: { color: 'brand' as any } },
-  { value: 'Done', label: 'Done', badge: { color: 'success' as any } }
+  { value: 'Not Started', label: '', badge: { color: 'gray' as any, text: 'Not Started' } },
+  { value: 'In Progress', label: '', badge: { color: 'brand' as any, text: 'In Progress' } },
+  { value: 'Done', label: '', badge: { color: 'success' as any, text: 'Done' } }
 ];
 
 const inputClasses = 'w-full rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary shadow-xs focus:border-brand-solid focus:outline-none focus:ring-1 focus:ring-brand-solid';

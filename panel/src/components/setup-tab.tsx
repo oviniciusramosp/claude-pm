@@ -136,7 +136,7 @@ export function SetupTab({
                                 options={field.selectOptions.map((opt): SelectOption => ({
                                   value: opt.value,
                                   label: opt.label,
-                                  icon: opt.value === '' ? undefined : field.icon,
+                                  icon: field.icon,
                                   description: opt.description
                                 }))}
                                 size="md"
