@@ -598,7 +598,7 @@ export function App({ mode = 'light', setMode = () => {} }) {
         setSidebarOpen={setSidebarOpen}
       />
 
-      <main className="flex h-screen flex-1 flex-col lg:ml-[280px]">
+      <main className="flex h-screen max-w-[100vw] flex-1 flex-col overflow-x-hidden lg:ml-[280px] lg:max-w-[calc(100vw-280px)]">
         <div className="flex items-center gap-3 border-b border-secondary bg-primary/90 px-4 py-3 backdrop-blur-xl lg:hidden">
           <button
             type="button"
