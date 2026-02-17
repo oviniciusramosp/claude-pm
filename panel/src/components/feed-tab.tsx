@@ -480,13 +480,13 @@ export function FeedTab({
   }, [logs, logFeedRef]);
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col gap-4 rounded-xl border border-secondary bg-primary p-4 shadow-sm">
+    <section className="flex min-h-0 flex-1 flex-col gap-3 rounded-xl border border-secondary bg-primary p-3 shadow-sm sm:gap-4 sm:p-4">
       <div className="space-y-1">
-        <h2 className="m-0 inline-flex items-center gap-2 text-xl font-semibold text-primary">
+        <h2 className="m-0 inline-flex items-center gap-2 text-lg font-semibold text-primary sm:text-xl">
           <Icon icon={TerminalBrowser} className="size-5" />
           Live Feed
         </h2>
-        <p className="m-0 text-sm text-tertiary">Unified stream for panel, app and direct Claude chat.</p>
+        <p className="m-0 hidden text-sm text-tertiary sm:block">Unified stream for panel, app and direct Claude chat.</p>
       </div>
 
       {/* Fix in progress banner */}
@@ -716,92 +716,99 @@ export function FeedTab({
       <div className="space-y-2">
         <div
           className={cx(
-            'flex items-end gap-2 rounded-lg bg-primary p-2 shadow-xs ring-1 ring-primary ring-inset transition-shadow duration-100 ease-linear',
+            'flex flex-col gap-2 rounded-lg bg-primary p-2 shadow-xs ring-1 ring-primary ring-inset transition-shadow duration-100 ease-linear sm:flex-row sm:items-end',
             'has-[:focus]:ring-2 has-[:focus]:ring-brand',
             isChatDisabled && 'bg-disabled_subtle ring-disabled'
           )}
         >
-          <div className="relative shrink-0">
-            <select
-              value={chatModel}
-              onChange={(e) => setChatModel(e.target.value)}
-              disabled={isChatDisabled}
-              className={cx(
-                'h-9 appearance-none rounded-md border border-secondary bg-primary px-3 pr-8 text-sm text-primary outline-hidden transition-colors',
-                'hover:border-secondary_hover focus:border-brand focus:ring-2 focus:ring-brand/20',
-                isChatDisabled && 'cursor-not-allowed opacity-50'
-              )}
-              aria-label="Select Claude model"
-            >
-              <option value="claude-sonnet-4-5-20250929">Sonnet 4.5</option>
-              <option value="claude-opus-4-6">Opus 4.6</option>
-              <option value="claude-haiku-4-5-20251001">Haiku 4.5</option>
-            </select>
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
-              <Icon icon={ChevronSelectorVertical} className="size-4 text-tertiary" />
+          <div className="flex items-end gap-2 sm:contents">
+            <div className="relative shrink-0">
+              <select
+                value={chatModel}
+                onChange={(e) => setChatModel(e.target.value)}
+                disabled={isChatDisabled}
+                className={cx(
+                  'h-9 appearance-none rounded-md border border-secondary bg-primary px-3 pr-8 text-sm text-primary outline-hidden transition-colors',
+                  'hover:border-secondary_hover focus:border-brand focus:ring-2 focus:ring-brand/20',
+                  isChatDisabled && 'cursor-not-allowed opacity-50'
+                )}
+                aria-label="Select Claude model"
+              >
+                <option value="claude-sonnet-4-5-20250929">Sonnet 4.5</option>
+                <option value="claude-opus-4-6">Opus 4.6</option>
+                <option value="claude-haiku-4-5-20251001">Haiku 4.5</option>
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                <Icon icon={ChevronSelectorVertical} className="size-4 text-tertiary" />
+              </div>
+            </div>
+            <div className="flex-1 sm:hidden">
+              {/* spacer to push select left on mobile row */}
             </div>
           </div>
-          <textarea
-            aria-label="Chat prompt"
-            placeholder={
-              claudeWorking
-                ? 'Claude is working on a task...'
-                : fixingTaskId
-                  ? 'Claude is fixing acceptance criteria...'
-                  : 'Ask Claude about this project...'
-            }
-            value={chatDraft}
-            disabled={isChatDisabled}
-            rows={1}
-            onChange={(e) => {
-              setChatDraft(e.target.value);
-              const el = e.target;
-              el.style.height = 'auto';
-              el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                if (!isChatDisabled) {
-                  sendClaudeChatMessage();
-                }
-              }
-            }}
-            className={cx(
-              'min-w-0 flex-1 resize-none bg-transparent py-1 pl-2 text-md text-primary outline-hidden placeholder:text-placeholder',
-              isChatDisabled && 'cursor-not-allowed text-disabled'
-            )}
-          />
-          {isChatDisabled ? (
-            <Tooltip
-              title="Claude is busy"
-              description={
+          <div className="flex items-end gap-2">
+            <textarea
+              aria-label="Chat prompt"
+              placeholder={
                 claudeWorking
-                  ? `Currently executing: ${orchestratorState?.currentTaskName || orchestratorState?.currentTaskId}`
+                  ? 'Claude is working on a task...'
                   : fixingTaskId
-                    ? `Fixing acceptance criteria for: ${fixingTaskId}`
-                    : 'Processing a request...'
+                    ? 'Claude is fixing acceptance criteria...'
+                    : 'Ask Claude about this project...'
               }
-              delay={200}
-            >
-              <TooltipTrigger className="shrink-0">
-                <span className="inline-flex rounded-xs bg-disabled p-2 shadow-xs cursor-not-allowed">
-                  <Icon icon={Send01} className="size-4 text-fg-disabled" />
-                </span>
-              </TooltipTrigger>
-            </Tooltip>
-          ) : (
-            <Button
-              size="sm"
-              color="primary"
-              iconLeading={Send01}
-              className="shrink-0 rounded-xs p-2! [&_svg]:!size-4"
-              isLoading={Boolean(busy.chat)}
-              isDisabled={!chatDraft.trim()}
-              onPress={sendClaudeChatMessage}
-              aria-label="Send"
+              value={chatDraft}
+              disabled={isChatDisabled}
+              rows={1}
+              onChange={(e) => {
+                setChatDraft(e.target.value);
+                const el = e.target;
+                el.style.height = 'auto';
+                el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  if (!isChatDisabled) {
+                    sendClaudeChatMessage();
+                  }
+                }
+              }}
+              className={cx(
+                'min-w-0 flex-1 resize-none bg-transparent py-1 pl-2 text-md text-primary outline-hidden placeholder:text-placeholder',
+                isChatDisabled && 'cursor-not-allowed text-disabled'
+              )}
             />
-          )}
+            {isChatDisabled ? (
+              <Tooltip
+                title="Claude is busy"
+                description={
+                  claudeWorking
+                    ? `Currently executing: ${orchestratorState?.currentTaskName || orchestratorState?.currentTaskId}`
+                    : fixingTaskId
+                      ? `Fixing acceptance criteria for: ${fixingTaskId}`
+                      : 'Processing a request...'
+                }
+                delay={200}
+              >
+                <TooltipTrigger className="shrink-0">
+                  <span className="inline-flex rounded-xs bg-disabled p-2 shadow-xs cursor-not-allowed">
+                    <Icon icon={Send01} className="size-4 text-fg-disabled" />
+                  </span>
+                </TooltipTrigger>
+              </Tooltip>
+            ) : (
+              <Button
+                size="sm"
+                color="primary"
+                iconLeading={Send01}
+                className="shrink-0 rounded-xs p-2! [&_svg]:!size-4"
+                isLoading={Boolean(busy.chat)}
+                isDisabled={!chatDraft.trim()}
+                onPress={sendClaudeChatMessage}
+                aria-label="Send"
+              />
+            )}
+          </div>
         </div>
       </div>
     </section>

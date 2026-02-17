@@ -815,17 +815,17 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   return (
     <section className="flex flex-col gap-5">
       {/* Header */}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
-          <Icon icon={Columns03} className="size-5 text-tertiary" />
-          <h2 className="text-lg font-semibold text-primary">Board Preview</h2>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <Icon icon={Columns03} className="size-5 shrink-0 text-tertiary" />
+          <h2 className="truncate text-lg font-semibold text-primary">Board</h2>
           {totalCount > 0 && (
             <Badge size="sm" color="gray">{totalCount}</Badge>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1 shrink-0 sm:gap-3">
           {lastRefreshed && (
-            <span className="text-xs text-quaternary">
+            <span className="hidden text-xs text-quaternary sm:inline">
               Updated {lastRefreshed.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
             </span>
           )}
@@ -909,11 +909,11 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
 
       {/* Board columns */}
       {showBoard && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4" style={{ height: 'calc(100vh - 220px)' }}>
+        <div className="flex h-[calc(100vh-280px)] snap-x snap-mandatory gap-4 overflow-x-auto pb-4 sm:snap-none sm:grid sm:grid-cols-2 sm:overflow-x-visible sm:pb-0 lg:h-[calc(100vh-220px)] lg:grid-cols-4">
           {columns.map((col) => (
             <div
               key={col.key}
-              className="flex flex-col rounded-lg border border-secondary bg-primary shadow-xs overflow-hidden"
+              className="flex w-[85vw] shrink-0 snap-center flex-col rounded-lg border border-secondary bg-primary shadow-xs overflow-hidden sm:w-auto sm:shrink"
             >
               {/* Column header - fixed */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-secondary shrink-0">
