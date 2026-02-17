@@ -1,7 +1,7 @@
 // panel/src/components/board-tab.tsx
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Columns03, CpuChip01, Folder, FolderPlus, Plus, RefreshCw01, Tool01, Users01 } from '@untitledui/icons';
+import { ChevronDown, Columns03, CpuChip01, Folder, FolderPlus, Plus, RefreshCw01, Stars01, Tool01, Users01 } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { cx } from '@/utils/cx';
@@ -365,6 +365,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createDefaultEpicId, setCreateDefaultEpicId] = useState<string | undefined>(undefined);
+  const [generatingEpicId, setGeneratingEpicId] = useState(null as string | null);
   const [boardExists, setBoardExists] = useState<boolean | null>(null);
   const [boardDir, setBoardDir] = useState<string | null>(null);
   const [creatingBoard, setCreatingBoard] = useState(false);
@@ -664,6 +665,36 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
     }
   }, [draggedTask, apiBaseUrl, showToast, fetchBoard]);
 
+  const handleGenerateStories = useCallback(async (epicId: string) => {
+    setGeneratingEpicId(epicId);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/board/generate-stories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ epicId })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        showToast(payload?.message || 'Failed to generate stories', 'danger');
+        return;
+      }
+      const msg = payload.failed > 0
+        ? `Generated ${payload.created.length} of ${payload.total} stories (${payload.failed} failed)`
+        : `Generated ${payload.created.length} stories`;
+      showToast(msg, payload.failed > 0 ? 'warning' : 'success');
+      setExpandedEpics((prev) => {
+        const next = new Set(prev);
+        next.add(epicId);
+        return next;
+      });
+      await fetchBoard(true);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to generate stories', 'danger');
+    } finally {
+      setGeneratingEpicId(null);
+    }
+  }, [apiBaseUrl, showToast, fetchBoard]);
+
   // Initial load + polling (check board existence first)
   useEffect(() => {
     mountedRef.current = true;
@@ -889,15 +920,36 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                             return (
                               <div key={task.id} className="flex flex-col gap-1">
                                 {card}
-                                <button
-                                  type="button"
-                                  onClick={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
-                                  className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
-                                  title={`Add task to ${task.name}`}
-                                >
-                                  <Plus className="size-3" />
-                                  <span>Add task</span>
-                                </button>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
+                                    className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
+                                    title={`Add task to ${task.name}`}
+                                  >
+                                    <Plus className="size-3" />
+                                    <span>Add task</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleGenerateStories(task.id); }}
+                                    disabled={generatingEpicId !== null}
+                                    className={cx(
+                                      'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
+                                      generatingEpicId === task.id
+                                        ? 'text-brand-secondary bg-utility-brand-50'
+                                        : generatingEpicId !== null
+                                          ? 'text-quaternary cursor-not-allowed'
+                                          : 'text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50'
+                                    )}
+                                    title={generatingEpicId === task.id ? 'Generating stories...' : `Auto-generate stories for ${task.name}`}
+                                  >
+                                    {generatingEpicId === task.id
+                                      ? <RefreshCw01 className="size-3 animate-spin" />
+                                      : <Stars01 className="size-3" />}
+                                    <span>{generatingEpicId === task.id ? 'Generating...' : 'Generate'}</span>
+                                  </button>
+                                </div>
                               </div>
                             );
                           }
@@ -961,6 +1013,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   <span>{children.length} {children.length === 1 ? 'story' : 'stories'}</span>
                                 </button>
                                 {(col.key === 'not_started' || col.key === 'missing_status') && (
+                                  <>
                                   <button
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
@@ -969,6 +1022,26 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   >
                                     <Plus className="size-3" />
                                   </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleGenerateStories(task.id); }}
+                                    disabled={generatingEpicId !== null}
+                                    className={cx(
+                                      'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
+                                      generatingEpicId === task.id
+                                        ? 'text-brand-secondary bg-utility-brand-50'
+                                        : generatingEpicId !== null
+                                          ? 'text-quaternary cursor-not-allowed'
+                                          : 'text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50'
+                                    )}
+                                    title={generatingEpicId === task.id ? 'Generating stories...' : `Auto-generate stories for ${task.name}`}
+                                  >
+                                    {generatingEpicId === task.id
+                                      ? <RefreshCw01 className="size-3 animate-spin" />
+                                      : <Stars01 className="size-3" />}
+                                    <span>{generatingEpicId === task.id ? 'Generating...' : 'Generate'}</span>
+                                  </button>
+                                  </>
                                 )}
                               </div>
                                 {expanded && (
@@ -1016,15 +1089,36 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
                                   dragging={draggedTask?.id === task.id}
                                 />
-                                <button
-                                  type="button"
-                                  onClick={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
-                                  className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
-                                  title={`Add task to ${task.name}`}
-                                >
-                                  <Plus className="size-3" />
-                                  <span>Add task</span>
-                                </button>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
+                                    className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
+                                    title={`Add task to ${task.name}`}
+                                  >
+                                    <Plus className="size-3" />
+                                    <span>Add task</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleGenerateStories(task.id); }}
+                                    disabled={generatingEpicId !== null}
+                                    className={cx(
+                                      'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
+                                      generatingEpicId === task.id
+                                        ? 'text-brand-secondary bg-utility-brand-50'
+                                        : generatingEpicId !== null
+                                          ? 'text-quaternary cursor-not-allowed'
+                                          : 'text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50'
+                                    )}
+                                    title={generatingEpicId === task.id ? 'Generating stories...' : `Auto-generate stories for ${task.name}`}
+                                  >
+                                    {generatingEpicId === task.id
+                                      ? <RefreshCw01 className="size-3 animate-spin" />
+                                      : <Stars01 className="size-3" />}
+                                    <span>{generatingEpicId === task.id ? 'Generating...' : 'Generate'}</span>
+                                  </button>
+                                </div>
                               </div>
                             );
                           }

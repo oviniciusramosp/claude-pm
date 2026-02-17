@@ -1,10 +1,11 @@
 // panel/src/components/create-task-modal.tsx
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ChevronDown, File06, Stars01 } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
+import { DiscardConfirmOverlay } from './discard-confirm-overlay';
 import { CLAUDE_TASK_MODELS, CLAUDE_DEFAULT_TASK_MODEL } from '../constants';
 import type { BoardTask } from '../types';
 
@@ -81,6 +82,9 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
   const [reviewing, setReviewing] = useState(false);
   const [lastError, setLastError] = useState<ModalError | null>(null);
   const [nextNumbers, setNextNumbers] = useState<NextNumbers | null>(null);
+  const [bodyBeforeReview, setBodyBeforeReview] = useState<string | null>(null);
+  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
+  const reviewAbortRef = useRef<AbortController | null>(null);
 
   // Derive available epic folders from tasks (exclude Done epics)
   const availableEpics = useMemo(() => {
@@ -140,6 +144,9 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
       setEpicId(defaultEpicId || '');
       setLastError(null);
       setNextNumbers(null);
+      setBodyBeforeReview(null);
+      setConfirmCloseOpen(false);
+      reviewAbortRef.current = null;
 
       fetch(`${apiBaseUrl}/api/board/next-numbers`)
         .then((r) => r.json())
@@ -170,6 +177,24 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
     }
     return null;
   }, [fileName, type, epicId, tasks]);
+
+  const isDirty = useMemo(() => !!(name.trim() || body.trim()), [name, body]);
+
+  const handleCloseAttempt = useCallback(() => {
+    if (reviewing || isDirty) {
+      setConfirmCloseOpen(true);
+    } else {
+      onClose();
+    }
+  }, [reviewing, isDirty, onClose]);
+
+  const handleConfirmDiscard = useCallback(() => {
+    if (reviewAbortRef.current) {
+      reviewAbortRef.current.abort();
+    }
+    setConfirmCloseOpen(false);
+    onClose();
+  }, [onClose]);
 
   const handleCreate = useCallback(async () => {
     if (!name.trim()) {
@@ -254,8 +279,12 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
       return;
     }
 
+    setBodyBeforeReview(body);
     setReviewing(true);
     setLastError(null);
+
+    const controller = new AbortController();
+    reviewAbortRef.current = controller;
 
     const url = `${apiBaseUrl}/api/board/review-task`;
 
@@ -271,7 +300,8 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
           model: model || undefined,
           agents: agents || undefined,
           body: body.trim()
-        })
+        }),
+        signal: controller.signal
       });
 
       const contentType = response.headers.get('content-type') || '';
@@ -294,6 +324,7 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
             `Timestamp:    ${new Date().toISOString()}`
           ].join('\n')
         });
+        setBodyBeforeReview(null);
         return;
       }
 
@@ -302,14 +333,22 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
         showToast(payload.summary || 'Task reviewed and improved', 'success');
       } else {
         showToast('Review completed but no changes suggested', 'neutral');
+        setBodyBeforeReview(null);
       }
     } catch (err: any) {
+      if (err.name === 'AbortError') {
+        showToast('Review cancelled', 'neutral');
+        setBodyBeforeReview(null);
+        return;
+      }
       setLastError({
         message: err.message || 'Review failed',
         details: `Error: ${err.message}\nTimestamp: ${new Date().toISOString()}`
       });
+      setBodyBeforeReview(null);
     } finally {
       setReviewing(false);
+      reviewAbortRef.current = null;
     }
   }, [name, priority, type, status, model, agents, body, apiBaseUrl, showToast]);
 
@@ -321,7 +360,8 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
       : `Board/${fileName || '...'}.md`;
 
   return (
-    <ModalOverlay isOpen={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }} isDismissable={!saving}>
+    <>
+    <ModalOverlay isOpen={open} onOpenChange={(nextOpen) => { if (!nextOpen) handleCloseAttempt(); }} isDismissable={!saving}>
       <Modal className="sm:max-w-xl">
         <Dialog>
           <div className="w-full rounded-xl border border-secondary bg-primary shadow-2xl">
@@ -481,9 +521,19 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
 
             {/* Footer */}
             <div className="flex justify-end gap-2 border-t border-secondary px-6 py-3">
-              <Button size="md" color="secondary" onPress={onClose} isDisabled={saving || reviewing}>
+              <Button size="md" color="secondary" onPress={handleCloseAttempt} isDisabled={saving}>
                 Cancel
               </Button>
+              {bodyBeforeReview !== null && !reviewing && (
+                <Button
+                  size="md"
+                  color="tertiary"
+                  onPress={() => { setBody(bodyBeforeReview); setBodyBeforeReview(null); }}
+                  isDisabled={saving}
+                >
+                  Undo Review
+                </Button>
+              )}
               <Button
                 size="md"
                 color="secondary"
@@ -502,5 +552,12 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
         </Dialog>
       </Modal>
     </ModalOverlay>
+    <DiscardConfirmOverlay
+      open={confirmCloseOpen}
+      reviewing={reviewing}
+      onKeepEditing={() => setConfirmCloseOpen(false)}
+      onDiscard={handleConfirmDiscard}
+    />
+    </>
   );
 }

@@ -1,12 +1,13 @@
 // panel/src/components/task-detail-modal.tsx
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { marked } from 'marked';
-import { AlertTriangle, CpuChip01, Edit05, File06, Stars01, Trash01, Users01, X } from '@untitledui/icons';
+import { AlertTriangle, ChevronDown, CpuChip01, Edit05, File06, Stars01, Trash01, Users01, X } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
+import { DiscardConfirmOverlay } from './discard-confirm-overlay';
 import { BOARD_PRIORITY_COLORS, BOARD_TYPE_COLORS, CLAUDE_TASK_MODELS } from '../constants';
 import type { BoardTask } from '../types';
 
@@ -20,7 +21,8 @@ const TYPE_OPTIONS = ['UserStory', 'Epic', 'Bug', 'Chore', 'Discovery'] as const
 const PRIORITY_OPTIONS = ['P0', 'P1', 'P2', 'P3'] as const;
 const STATUS_OPTIONS = ['Not Started', 'In Progress', 'Done'] as const;
 
-const selectClasses = 'w-full rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary shadow-xs focus:border-brand-solid focus:outline-none focus:ring-1 focus:ring-brand-solid';
+const selectClasses = 'appearance-none w-full rounded-lg border border-secondary bg-primary pl-3 pr-9 py-2 text-sm text-primary shadow-xs focus:border-brand-solid focus:outline-none focus:ring-1 focus:ring-brand-solid';
+const selectChevronClasses = 'pointer-events-none absolute right-3 top-1/2 size-5 -translate-y-1/2 text-quaternary';
 const inputClasses = 'w-full rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary shadow-xs focus:border-brand-solid focus:outline-none focus:ring-1 focus:ring-brand-solid';
 const labelClasses = 'block text-sm font-medium text-secondary mb-1';
 
@@ -87,6 +89,9 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
   const [extraFrontmatter, setExtraFrontmatter] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [bodyBeforeReview, setBodyBeforeReview] = useState<string | null>(null);
+  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
+  const reviewAbortRef = useRef<AbortController | null>(null);
 
   // Action error (save/delete)
   const [actionError, setActionError] = useState<ModalError | null>(null);
@@ -128,6 +133,9 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
     }
     setEditing(false);
     setReviewing(false);
+    setBodyBeforeReview(null);
+    setConfirmCloseOpen(false);
+    reviewAbortRef.current = null;
     setConfirmDelete(false);
     setDeleteEpicFolder(true);
     setActionError(null);
@@ -166,6 +174,7 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
 
   const handleCancelEdit = useCallback(() => {
     setEditing(false);
+    setBodyBeforeReview(null);
   }, []);
 
   const handleSave = useCallback(async () => {
@@ -250,8 +259,12 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
       return;
     }
 
+    setBodyBeforeReview(editBody);
     setReviewing(true);
     setActionError(null);
+
+    const controller = new AbortController();
+    reviewAbortRef.current = controller;
 
     const url = `${apiBaseUrl}/api/board/review-task`;
 
@@ -267,7 +280,8 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
           model: editModel || undefined,
           agents: editAgents || undefined,
           body: editBody.trim()
-        })
+        }),
+        signal: controller.signal
       });
 
       const contentType = response.headers.get('content-type') || '';
@@ -290,6 +304,7 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
             `Timestamp:    ${new Date().toISOString()}`
           ].join('\n')
         });
+        setBodyBeforeReview(null);
         return;
       }
 
@@ -298,16 +313,53 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
         showToast(payload.summary || 'Task reviewed and improved', 'success');
       } else {
         showToast('Review completed but no changes suggested', 'neutral');
+        setBodyBeforeReview(null);
       }
     } catch (err: any) {
+      if (err.name === 'AbortError') {
+        showToast('Review cancelled', 'neutral');
+        setBodyBeforeReview(null);
+        return;
+      }
       setActionError({
         message: err.message || 'Review failed',
         details: `Error: ${err.message}\nTimestamp: ${new Date().toISOString()}`
       });
+      setBodyBeforeReview(null);
     } finally {
       setReviewing(false);
+      reviewAbortRef.current = null;
     }
   }, [editName, editPriority, editType, editStatus, editModel, editAgents, editBody, apiBaseUrl, showToast]);
+
+  // Dirty check: only relevant in editing mode
+  const initialBody = useMemo(() => {
+    const { body } = parseFrontmatter(markdown);
+    return body;
+  }, [markdown]);
+
+  const isDirty = useMemo(() => {
+    if (!editing) return false;
+    return editBody !== initialBody ||
+      editName !== (task?.name || '') ||
+      editStatus !== (task?.status || '');
+  }, [editing, editBody, initialBody, editName, editStatus, task]);
+
+  const handleCloseAttempt = useCallback(() => {
+    if (editing && (reviewing || isDirty)) {
+      setConfirmCloseOpen(true);
+    } else {
+      onClose();
+    }
+  }, [editing, reviewing, isDirty, onClose]);
+
+  const handleConfirmDiscard = useCallback(() => {
+    if (reviewAbortRef.current) {
+      reviewAbortRef.current.abort();
+    }
+    setConfirmCloseOpen(false);
+    onClose();
+  }, [onClose]);
 
   const handleDeleteClick = useCallback(() => {
     if (confirmDelete) {
@@ -391,7 +443,8 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
   const typeColor = task ? BOARD_TYPE_COLORS[task.type] : undefined;
 
   return (
-    <ModalOverlay isOpen={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }} isDismissable={!saving && !deleting}>
+    <>
+    <ModalOverlay isOpen={open} onOpenChange={(nextOpen) => { if (!nextOpen) handleCloseAttempt(); }} isDismissable={!saving && !deleting}>
       <Modal className="sm:max-w-2xl">
         <Dialog>
           <div className="w-full rounded-xl border border-secondary bg-primary shadow-2xl">
@@ -443,7 +496,7 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
               <button
                 type="button"
                 className="shrink-0 rounded-sm p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary"
-                onClick={onClose}
+                onClick={handleCloseAttempt}
                 aria-label="Close"
               >
                 <X className="size-5" />
@@ -482,32 +535,44 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className={labelClasses}>Priority</label>
-                      <select value={editPriority} onChange={(e) => setEditPriority(e.target.value)} className={selectClasses}>
-                        {PRIORITY_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
-                      </select>
+                      <div className="relative">
+                        <select value={editPriority} onChange={(e) => setEditPriority(e.target.value)} className={selectClasses}>
+                          {PRIORITY_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                        <ChevronDown className={selectChevronClasses} />
+                      </div>
                     </div>
                     <div>
                       <label className={labelClasses}>Type</label>
-                      <select value={editType} onChange={(e) => setEditType(e.target.value)} className={selectClasses}>
-                        {TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
-                      </select>
+                      <div className="relative">
+                        <select value={editType} onChange={(e) => setEditType(e.target.value)} className={selectClasses}>
+                          {TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                        <ChevronDown className={selectChevronClasses} />
+                      </div>
                     </div>
                     <div>
                       <label className={labelClasses}>Status</label>
-                      <select value={editStatus} onChange={(e) => setEditStatus(e.target.value)} className={selectClasses}>
-                        {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-                      </select>
+                      <div className="relative">
+                        <select value={editStatus} onChange={(e) => setEditStatus(e.target.value)} className={selectClasses}>
+                          {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                        <ChevronDown className={selectChevronClasses} />
+                      </div>
                     </div>
                   </div>
 
                   {/* Model */}
                   <div>
                     <label className={labelClasses}>Model</label>
-                    <select value={editModel} onChange={(e) => setEditModel(e.target.value)} className={selectClasses}>
-                      {CLAUDE_TASK_MODELS.map((m) => (
-                        <option key={m.value} value={m.value}>{m.label}</option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <select value={editModel} onChange={(e) => setEditModel(e.target.value)} className={selectClasses}>
+                        {CLAUDE_TASK_MODELS.map((m) => (
+                          <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className={selectChevronClasses} />
+                    </div>
                   </div>
 
                   {/* Agents */}
@@ -602,6 +667,16 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                     <Button size="md" color="secondary" onPress={handleCancelEdit} isDisabled={saving || reviewing}>
                       Cancel
                     </Button>
+                    {bodyBeforeReview !== null && !reviewing && (
+                      <Button
+                        size="md"
+                        color="tertiary"
+                        onPress={() => { setEditBody(bodyBeforeReview); setBodyBeforeReview(null); }}
+                        isDisabled={saving}
+                      >
+                        Undo Review
+                      </Button>
+                    )}
                     <Button
                       size="md"
                       color="secondary"
@@ -628,7 +703,7 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                         Edit
                       </Button>
                     )}
-                    <Button size="md" color="secondary" onPress={onClose}>
+                    <Button size="md" color="secondary" onPress={handleCloseAttempt}>
                       Close
                     </Button>
                   </>
@@ -639,5 +714,12 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
         </Dialog>
       </Modal>
     </ModalOverlay>
+    <DiscardConfirmOverlay
+      open={confirmCloseOpen}
+      reviewing={reviewing}
+      onKeepEditing={() => setConfirmCloseOpen(false)}
+      onDiscard={handleConfirmDiscard}
+    />
+    </>
   );
 }

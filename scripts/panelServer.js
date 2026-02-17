@@ -8,6 +8,8 @@ import dotenv from 'dotenv';
 import express from 'express';
 import { LocalBoardClient } from '../src/local/client.js';
 import { isEpicTask, sortCandidates } from '../src/selectTask.js';
+import { parseFrontmatter } from '../src/local/frontmatter.js';
+import { slugFromTitle } from '../src/local/helpers.js';
 
 dotenv.config();
 
@@ -45,6 +47,9 @@ const claudeChatState = {
   running: false
 };
 const reviewTaskState = {
+  running: false
+};
+const generateStoriesState = {
   running: false
 };
 const LOG_SOURCE = {
@@ -219,14 +224,41 @@ function parseProcessLogLine(rawLine, fallbackLevel = 'info') {
   const loggerMatch = clean.match(LOGGER_PREFIX_REGEX);
   if (loggerMatch) {
     const parsedLevel = normalizeUiLogLevel(loggerMatch[1], normalizeUiLogLevel(fallbackLevel));
-    const parsedMessage = String(loggerMatch[2] || '')
+    const fullMessage = String(loggerMatch[2] || '')
       .replace(LOGGER_TIMESTAMP_SUFFIX_REGEX, '')
       .trim();
 
+    // Extract metadata from message format: "message | key=value | key=value"
+    const parts = fullMessage.split('|').map(p => p.trim());
+    const parsedMessage = parts[0] || clean;
+    const meta = {};
+
+    // Parse key=value pairs from remaining parts
+    for (let i = 1; i < parts.length; i++) {
+      const pair = parts[i];
+      const eqIndex = pair.indexOf('=');
+      if (eqIndex > 0) {
+        const key = pair.slice(0, eqIndex).trim();
+        let value = pair.slice(eqIndex + 1).trim();
+
+        // Try to parse JSON values
+        if (value === 'true') value = true;
+        else if (value === 'false') value = false;
+        else if (value === 'null') value = null;
+        else if (/^\d+$/.test(value)) value = Number(value);
+        else if (value.startsWith('"') && value.endsWith('"')) {
+          value = value.slice(1, -1);
+        }
+
+        meta[key] = value;
+      }
+    }
+
     return {
       level: parsedLevel,
-      message: parsedMessage || clean,
-      fromLogger: true
+      message: parsedMessage,
+      fromLogger: true,
+      ...(Object.keys(meta).length > 0 && { meta })
     };
   }
 
@@ -2634,6 +2666,208 @@ app.post('/api/board/review-task', async (req, res) => {
     res.status(500).json({ ok: false, message: error.message });
   } finally {
     reviewTaskState.running = false;
+  }
+});
+
+// --- Generate Stories from Epic ---
+
+const GENERATE_STORIES_TIMEOUT_MS = 180000; // 3 minutes
+
+function buildGenerateStoriesPrompt({ epicName, epicBody, existingChildren }) {
+  const childList = existingChildren.length > 0
+    ? existingChildren.map((c) => `- ${c.name}`).join('\n')
+    : '(none)';
+
+  return `You are a senior product manager and prompt engineering expert. Your job is to analyze an Epic description and break it down into concrete, actionable user stories.
+
+<epic>
+<name>${epicName}</name>
+<body>
+${epicBody}
+</body>
+</epic>
+
+<existing_children>
+${childList}
+</existing_children>
+
+<instructions>
+1. Analyze the Epic description and identify all distinct features, behaviors, or capabilities.
+2. For each feature, create a user story with:
+   - A clear, concise name (imperative form, e.g., "Implement login form")
+   - A priority: P0 (critical), P1 (high), P2 (medium), P3 (low)
+   - A complete markdown body following this structure:
+
+     # [Story Name]
+
+     **User Story**: As a [role], I want [goal] so that [benefit].
+
+     ## Acceptance Criteria
+     - [ ] First acceptance criterion (specific, testable, checkbox format)
+     - [ ] Second acceptance criterion
+     (... more as needed, typically 3-8 per story)
+
+     ## Technical Tasks
+     1. First implementation step with specific file paths when possible
+     2. Second implementation step
+     (... numbered, sequential steps)
+
+     ## Tests
+     - Describe what should be tested
+     - Mention specific test file paths if applicable
+     - Or "N/A — infrastructure task" if no tests needed
+
+     ## Dependencies
+     - List any prerequisites, blocking tasks, or required packages
+     - Or "None" if standalone
+
+     ## Standard Completion Criteria
+     - [ ] Tests written and passing (or N/A)
+     - [ ] TypeScript compiles without errors
+     - [ ] Linter passes
+     - [ ] Commit message follows conventional commits format
+
+3. DO NOT duplicate stories that already exist (see existing_children above).
+4. Each story should be small enough for a single developer to complete in one session.
+5. Order stories logically — foundational work first, then features that build on it.
+6. Generate between 2 and 15 stories. Do not generate more than 15.
+7. Use imperative language: "Implement X", "Add Y", "Create Z".
+</instructions>
+
+<output_format>
+Return ONLY a valid JSON array. No markdown code blocks, no explanation text — just the raw JSON.
+
+Each element must have:
+- "name": string (story name)
+- "priority": string ("P0", "P1", "P2", or "P3")
+- "body": string (complete markdown body with \\n for newlines)
+
+Example:
+[
+  {
+    "name": "Implement user registration form",
+    "priority": "P1",
+    "body": "# Implement User Registration Form\\n\\n**User Story**: As a new user, I want to register ...\\n\\n## Acceptance Criteria\\n- [ ] Registration form renders ...\\n..."
+  }
+]
+</output_format>`;
+}
+
+function parseGenerateStoriesResponse(reply) {
+  const text = String(reply || '').trim();
+
+  // Try to extract JSON from code blocks if wrapped
+  const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  const jsonStr = codeBlockMatch ? codeBlockMatch[1].trim() : text;
+
+  let stories;
+  try {
+    stories = JSON.parse(jsonStr);
+  } catch {
+    throw new Error('Claude did not return valid JSON. Raw response: ' + text.slice(0, 500));
+  }
+
+  if (!Array.isArray(stories)) {
+    throw new Error('Expected a JSON array of stories but got: ' + typeof stories);
+  }
+
+  // Validate and normalize
+  const normalized = [];
+  for (const s of stories) {
+    if (!s.name || typeof s.name !== 'string') continue;
+    if (!s.body || typeof s.body !== 'string') continue;
+    normalized.push({
+      name: s.name.trim(),
+      priority: ['P0', 'P1', 'P2', 'P3'].includes(s.priority) ? s.priority : 'P1',
+      body: s.body
+    });
+    if (normalized.length >= 15) break; // Hard cap
+  }
+
+  if (normalized.length === 0) {
+    throw new Error('Claude returned no valid stories. Raw response: ' + text.slice(0, 500));
+  }
+
+  return normalized;
+}
+
+app.post('/api/board/generate-stories', async (req, res) => {
+  const { epicId } = req.body;
+
+  if (!epicId || typeof epicId !== 'string' || !epicId.trim()) {
+    res.status(400).json({ ok: false, message: 'epicId is required.' });
+    return;
+  }
+
+  if (generateStoriesState.running) {
+    res.status(409).json({ ok: false, message: 'Story generation is already in progress. Please wait.' });
+    return;
+  }
+
+  generateStoriesState.running = true;
+  pushLog('info', LOG_SOURCE.panel, `Generating stories for Epic: "${epicId}"`);
+
+  try {
+    const boardConfig = resolveBoardConfig();
+    const client = new LocalBoardClient(boardConfig);
+    await client.initialize();
+
+    // Read epic markdown
+    const epicMarkdown = await client.getTaskMarkdown(epicId);
+    if (!epicMarkdown) {
+      res.status(404).json({ ok: false, message: `Epic not found: ${epicId}` });
+      return;
+    }
+
+    const { frontmatter: epicFields, body: epicBody } = parseFrontmatter(epicMarkdown);
+    const epicName = (epicFields && epicFields.name) || epicId;
+
+    if (!epicBody || epicBody.trim().length < 20) {
+      res.status(400).json({ ok: false, message: 'Epic has no description or description is too short. Add content to the Epic before generating stories.' });
+      return;
+    }
+
+    // Find existing children to avoid duplication
+    const allTasks = await client.listTasks();
+    const existingChildren = allTasks.filter((t) => t.parentId === epicId);
+
+    // Build prompt and call Claude
+    const prompt = buildGenerateStoriesPrompt({
+      epicName,
+      epicBody: epicBody.trim(),
+      existingChildren: existingChildren.map((c) => ({ name: c.name }))
+    });
+
+    const { reply } = await runClaudePrompt(prompt, 'claude-sonnet-4-5-20250929', GENERATE_STORIES_TIMEOUT_MS);
+    const stories = parseGenerateStoriesResponse(reply);
+
+    // Create each story as a task file
+    const created = [];
+    let failed = 0;
+
+    for (const story of stories) {
+      try {
+        const fileName = slugFromTitle(story.name);
+        await client.createTask(
+          { name: story.name, priority: story.priority, type: 'UserStory', status: 'Not Started' },
+          story.body,
+          { epicId, fileName }
+        );
+        created.push({ name: story.name, fileName });
+      } catch (err) {
+        pushLog('warn', LOG_SOURCE.panel, `Failed to create story "${story.name}": ${err.message}`);
+        failed++;
+      }
+    }
+
+    const summary = `Generated ${created.length} stories for "${epicName}"${failed > 0 ? ` (${failed} failed)` : ''}`;
+    pushLog('success', LOG_SOURCE.panel, summary);
+    res.json({ ok: true, created, total: stories.length, failed });
+  } catch (error) {
+    pushLog('error', LOG_SOURCE.panel, `Story generation failed: ${error.message}`);
+    res.status(500).json({ ok: false, message: error.message });
+  } finally {
+    generateStoriesState.running = false;
   }
 });
 
