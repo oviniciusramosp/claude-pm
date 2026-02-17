@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertOctagon, Asterisk02, ChevronDown, LayersThree01, Moon01, PauseCircle, PlayCircle, Settings01, StopCircle, Sun } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
+import { Tooltip, TooltipTrigger } from './base/tooltip/tooltip';
 import { cx } from '@/utils/cx';
 import { SIDEBAR_NAV_ITEMS } from '../constants';
 import { Icon } from './icon';
@@ -113,7 +114,7 @@ export function SidebarNav({
               <Icon icon={item.icon} className="size-5" />
               <span>{item.label}</span>
               {showBadge ? (
-                <span className="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-utility-brand-600 text-[11px] font-bold text-white dark:bg-utility-brand-900 dark:text-utility-brand-200">
+                <span className="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-utility-brand-600 text-[11px] font-bold text-white dark:bg-utility-brand-800 dark:text-utility-brand-300">
                   {unreadFeedCount > 99 ? '99+' : unreadFeedCount}
                 </span>
               ) : null}
@@ -127,23 +128,45 @@ export function SidebarNav({
 
       {/* Controls */}
       <div className="mt-4 space-y-3 px-3">
-        <div className="flex items-center gap-2 px-3">
+        <div className="flex flex-col gap-2 px-3">
           <p className="m-0 text-[11px] font-semibold uppercase tracking-wider text-quaternary">Controls</p>
           <div className="flex items-center gap-2">
-            <StatusBadge
-              color={appError ? 'error' : apiRunning ? 'success' : 'gray'}
-              connectionState={apiRunning ? 'active' : 'inactive'}
-              onClick={appError ? onAppBadgeClick : undefined}
+            <Tooltip
+              title={appError ? "App Error" : apiRunning ? "App Running" : "App Stopped"}
+              description={appError ? "Click to view error details" : apiRunning ? "Panel is connected and operational" : "Panel is not running"}
             >
-              App
-            </StatusBadge>
-            <StatusBadge
-              color={apiError ? 'error' : apiHealthStatus.connectionState === 'active' ? 'success' : 'gray'}
-              connectionState={apiHealthStatus.connectionState === 'active' ? 'active' : 'inactive'}
-              onClick={apiError ? onApiBadgeClick : undefined}
+              <TooltipTrigger
+                onPress={appError ? onAppBadgeClick : undefined}
+                isDisabled={!appError}
+                className="cursor-default"
+              >
+                <StatusBadge
+                  color={appError ? 'error' : apiRunning ? 'success' : 'gray'}
+                  connectionState={apiRunning ? 'active' : 'inactive'}
+                  onClick={appError ? onAppBadgeClick : undefined}
+                >
+                  App
+                </StatusBadge>
+              </TooltipTrigger>
+            </Tooltip>
+            <Tooltip
+              title={apiError ? "API Error" : apiHealthStatus.connectionState === 'active' ? "API Connected" : "API Disconnected"}
+              description={apiError ? "Click to view error details" : apiHealthStatus.connectionState === 'active' ? "Automation API is healthy and responding" : "Automation API is not responding"}
             >
-              API
-            </StatusBadge>
+              <TooltipTrigger
+                onPress={apiError ? onApiBadgeClick : undefined}
+                isDisabled={!apiError}
+                className="cursor-default"
+              >
+                <StatusBadge
+                  color={apiError ? 'error' : apiHealthStatus.connectionState === 'active' ? 'success' : 'gray'}
+                  connectionState={apiHealthStatus.connectionState === 'active' ? 'active' : 'inactive'}
+                  onClick={apiError ? onApiBadgeClick : undefined}
+                >
+                  API
+                </StatusBadge>
+              </TooltipTrigger>
+            </Tooltip>
           </div>
         </div>
 
@@ -262,7 +285,7 @@ export function SidebarNav({
           <Icon icon={AlertOctagon} className="size-5" />
           <span>Debug Errors</span>
           {errorCount > 0 ? (
-            <span className="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-utility-error-600 text-[11px] font-bold text-white dark:bg-utility-error-900 dark:text-utility-error-200">
+            <span className="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-utility-error-600 text-[11px] font-bold text-white dark:bg-utility-error-800 dark:text-utility-error-300">
               {errorCount > 99 ? '99+' : errorCount}
             </span>
           ) : null}
