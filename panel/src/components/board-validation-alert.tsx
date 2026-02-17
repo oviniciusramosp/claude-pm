@@ -1,6 +1,7 @@
 // panel/src/components/board-validation-alert.tsx
 
-import { AlertCircle, CheckCircle, AlertTriangle, XCircle } from '@untitledui/icons';
+import { AlertCircle, CheckCircle, AlertTriangle, FolderPlus, XCircle } from '@untitledui/icons';
+import { Button } from '@/components/base/buttons/button';
 import { Icon } from './icon';
 import { cx } from '@/utils/cx';
 import { useEffect, useState } from 'react';
@@ -42,10 +43,56 @@ export function BoardValidationAlert({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [boardExists, setBoardExists] = useState<boolean | null>(null);
+  const [boardDir, setBoardDir] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    fetchValidation();
+    checkBoardAndValidate();
   }, [apiBaseUrl]);
+
+  async function checkBoardExists(): Promise<boolean> {
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/board/exists`);
+      if (!response.ok) return true; // assume exists on error, fall through to validation
+      const data = await response.json();
+      setBoardDir(data.boardDir || null);
+      setBoardExists(data.exists);
+      return data.exists;
+    } catch {
+      return true; // assume exists on error
+    }
+  }
+
+  async function checkBoardAndValidate() {
+    setLoading(true);
+    setError(null);
+
+    const exists = await checkBoardExists();
+    if (!exists) {
+      setLoading(false);
+      return;
+    }
+
+    await fetchValidation();
+  }
+
+  async function createBoardDirectory() {
+    setCreating(true);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/board/create-directory`, { method: 'POST' });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || 'Failed to create Board directory');
+      }
+      setBoardExists(true);
+      await fetchValidation();
+    } catch (err: any) {
+      setError(err.message || 'Failed to create Board directory');
+    } finally {
+      setCreating(false);
+    }
+  }
 
   async function fetchValidation() {
     setLoading(true);
@@ -111,6 +158,43 @@ export function BoardValidationAlert({
     );
   }
 
+  // Board directory does not exist — show "Create Board" prompt
+  if (boardExists === false) {
+    return (
+      <div className="rounded-lg border border-warning-200 bg-warning-50 p-4 dark:border-warning-500/30 dark:bg-warning-950/30">
+        <div className="space-y-3">
+          <div className="flex items-start gap-3">
+            <Icon icon={AlertTriangle} className="size-5 shrink-0 text-warning-600 dark:text-warning-400" />
+            <div className="flex-1 space-y-1">
+              <p className="m-0 text-sm font-medium text-warning-900 dark:text-warning-100">
+                Board directory not found
+              </p>
+              <p className="m-0 text-sm text-warning-700 dark:text-warning-300">
+                The target directory does not have a <code className="rounded bg-warning-100 px-1 py-0.5 text-xs dark:bg-warning-900/30">Board/</code> folder yet. Create it to start adding tasks.
+              </p>
+              {boardDir && (
+                <p className="m-0 text-xs text-warning-600 dark:text-warning-400 font-mono truncate" title={boardDir}>
+                  {boardDir}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="border-t border-warning-200/50 pt-3 dark:border-warning-500/20">
+            <Button
+              size="sm"
+              color="primary"
+              iconLeading={FolderPlus}
+              isLoading={creating}
+              onPress={createBoardDirectory}
+            >
+              Create Board Folder
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (error) {
     return (
       <div className="rounded-lg border border-error-200 bg-error-50 p-4 dark:border-error-500/30 dark:bg-error-950/30">
@@ -126,7 +210,7 @@ export function BoardValidationAlert({
           </div>
           <div className="flex gap-2 border-t border-error-200/50 pt-3 dark:border-error-500/20">
             <button
-              onClick={fetchValidation}
+              onClick={checkBoardAndValidate}
               className="rounded-md border border-error-300 bg-white px-3 py-1.5 text-xs font-medium text-error-900 hover:bg-error-50 dark:border-error-600 dark:bg-error-950 dark:text-error-100 dark:hover:bg-error-900/50"
             >
               Retry
@@ -244,7 +328,7 @@ export function BoardValidationAlert({
                     </p>
                     {err.suggestion && (
                       <p className="m-0 mt-1 text-xs text-error-700 dark:text-error-300">
-                        💡 {err.suggestion}
+                        {err.suggestion}
                       </p>
                     )}
                   </div>
@@ -265,7 +349,7 @@ export function BoardValidationAlert({
                     </p>
                     {err.suggestion && (
                       <p className="m-0 mt-1 text-xs text-error-700 dark:text-error-300">
-                        💡 {err.suggestion}
+                        {err.suggestion}
                       </p>
                     )}
                   </div>
@@ -305,7 +389,7 @@ export function BoardValidationAlert({
                     </p>
                     {warn.suggestion && (
                       <p className="m-0 mt-1 text-xs text-warning-700 dark:text-warning-300">
-                        💡 {warn.suggestion}
+                        {warn.suggestion}
                       </p>
                     )}
                   </div>
@@ -334,7 +418,7 @@ export function BoardValidationAlert({
 
             {/* Refresh button */}
             <button
-              onClick={fetchValidation}
+              onClick={checkBoardAndValidate}
               className="w-full rounded-md border border-current/20 py-1.5 text-xs font-medium hover:bg-black/5 dark:hover:bg-white/5"
             >
               Refresh Validation

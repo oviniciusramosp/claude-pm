@@ -1,7 +1,7 @@
 // panel/src/components/board-tab.tsx
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Columns03, CpuChip01, Folder, Plus, RefreshCw01, Tool01, Users01 } from '@untitledui/icons';
+import { ChevronDown, Columns03, CpuChip01, Folder, FolderPlus, Plus, RefreshCw01, Tool01, Users01 } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { cx } from '@/utils/cx';
@@ -361,7 +361,26 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const [draggedTask, setDraggedTask] = useState<BoardTask | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createDefaultEpicId, setCreateDefaultEpicId] = useState<string | undefined>(undefined);
+  const [boardExists, setBoardExists] = useState<boolean | null>(null);
+  const [boardDir, setBoardDir] = useState<string | null>(null);
+  const [creatingBoard, setCreatingBoard] = useState(false);
   const mountedRef = useRef(true);
+
+  const checkBoardExists = useCallback(async (): Promise<boolean> => {
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/board/exists`);
+      if (!response.ok) return true;
+      const data = await response.json();
+      if (mountedRef.current) {
+        setBoardExists(data.exists);
+        setBoardDir(data.boardDir || null);
+      }
+      return data.exists;
+    } catch {
+      return true; // assume exists on error, fall through to normal fetch
+    }
+  }, [apiBaseUrl]);
 
   const toggleEpic = useCallback((epicId: string) => {
     setExpandedEpics((prev) => {
@@ -486,6 +505,25 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
     },
     [apiBaseUrl, showToast]
   );
+
+  const createBoardDirectory = useCallback(async () => {
+    setCreatingBoard(true);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/board/create-directory`, { method: 'POST' });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        showToast(data.message || 'Failed to create Board directory', 'danger');
+        return;
+      }
+      setBoardExists(true);
+      showToast('Board directory created successfully', 'success');
+      await fetchBoard();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to create Board directory', 'danger');
+    } finally {
+      if (mountedRef.current) setCreatingBoard(false);
+    }
+  }, [apiBaseUrl, showToast, fetchBoard]);
 
   const fixBoardOrder = useCallback(async () => {
     setFixing(true);
@@ -623,16 +661,27 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
     }
   }, [draggedTask, apiBaseUrl, showToast, fetchBoard]);
 
-  // Initial load + polling
+  // Initial load + polling (check board existence first)
   useEffect(() => {
     mountedRef.current = true;
-    fetchBoard();
-    const interval = setInterval(() => fetchBoard(true), BOARD_POLL_INTERVAL_MS);
+    (async () => {
+      const exists = await checkBoardExists();
+      if (exists) {
+        fetchBoard();
+      } else {
+        setLoading(false);
+      }
+    })();
+    const interval = setInterval(async () => {
+      if (boardExists !== false) {
+        fetchBoard(true);
+      }
+    }, BOARD_POLL_INTERVAL_MS);
     return () => {
       mountedRef.current = false;
       clearInterval(interval);
     };
-  }, [fetchBoard]);
+  }, [fetchBoard, checkBoardExists]);
 
   // SSE-triggered refresh
   useEffect(() => {
@@ -651,8 +700,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   }, [tasks]);
 
   const totalCount = tasks.length;
-  const showErrorBanner = boardError && !loading && tasks.length === 0;
-  const showBoard = tasks.length > 0 || (loading && !showErrorBanner) || (!boardError && !loading);
+  const showBoardMissing = boardExists === false && !loading;
+  const showErrorBanner = boardError && !loading && tasks.length === 0 && !showBoardMissing;
+  const showBoard = !showBoardMissing && (tasks.length > 0 || (loading && !showErrorBanner) || (!boardError && !loading));
 
   const handleViewDetails = useCallback(() => {
     if (!boardError) return;
@@ -682,7 +732,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
           <button
             type="button"
             className="rounded-sm p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary"
-            onClick={() => setCreateModalOpen(true)}
+            onClick={() => { setCreateDefaultEpicId(undefined); setCreateModalOpen(true); }}
             aria-label="Create new task"
             title="Create new task"
           >
@@ -709,6 +759,37 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
           </button>
         </div>
       </div>
+
+      {/* Board directory missing state */}
+      {showBoardMissing && (
+        <div className="flex flex-1 items-center justify-center">
+          <div className="rounded-xl border border-dashed border-secondary bg-secondary p-10 text-center max-w-md">
+            <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-utility-warning-50">
+              <Icon icon={FolderPlus} className="size-6 text-warning-primary" />
+            </div>
+            <h3 className="text-base font-semibold text-primary">Board directory not found</h3>
+            <p className="mt-2 text-sm text-tertiary">
+              The target project does not have a <code className="rounded bg-quaternary px-1 py-0.5 text-xs">Board/</code> folder. Create it to start managing tasks.
+            </p>
+            {boardDir && (
+              <p className="mt-1 text-xs text-quaternary font-mono truncate" title={boardDir}>
+                {boardDir}
+              </p>
+            )}
+            <div className="mt-5">
+              <Button
+                size="md"
+                color="primary"
+                iconLeading={FolderPlus}
+                isLoading={creatingBoard}
+                onPress={createBoardDirectory}
+              >
+                Create Board Folder
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Error state */}
       {showErrorBanner && (
@@ -780,24 +861,45 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                       const isMissingStatus = col.key === 'missing_status';
 
                       if (!isCollapsible) {
-                        return col.tasks.map((task) => (
-                          <BoardCard
-                            key={task.id}
-                            task={task}
-                            epic={isEpic(task, tasks)}
-                            allTasks={tasks}
-                            onClick={() => setSelectedTask(task)}
-                            onFix={handleFixTask}
-                            fixStatus={fixStatus[task.id]}
-                            allFixStatuses={fixStatus}
-                            showAddStatus={isMissingStatus}
-                            onAddStatus={isMissingStatus ? handleAddStatus : undefined}
-                            addingStatus={addingStatus}
-                            onDragStart={() => setDraggedTask(task)}
-                            onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
-                            dragging={draggedTask?.id === task.id}
-                          />
-                        ));
+                        return col.tasks.map((task) => {
+                          const taskIsEpic = isEpic(task, tasks);
+                          const showAddButton = isMissingStatus && taskIsEpic;
+                          const card = (
+                            <BoardCard
+                              key={showAddButton ? undefined : task.id}
+                              task={task}
+                              epic={taskIsEpic}
+                              allTasks={tasks}
+                              onClick={() => setSelectedTask(task)}
+                              onFix={handleFixTask}
+                              fixStatus={fixStatus[task.id]}
+                              allFixStatuses={fixStatus}
+                              showAddStatus={isMissingStatus}
+                              onAddStatus={isMissingStatus ? handleAddStatus : undefined}
+                              addingStatus={addingStatus}
+                              onDragStart={() => setDraggedTask(task)}
+                              onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
+                              dragging={draggedTask?.id === task.id}
+                            />
+                          );
+                          if (showAddButton) {
+                            return (
+                              <div key={task.id} className="flex flex-col gap-1">
+                                {card}
+                                <button
+                                  type="button"
+                                  onClick={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
+                                  className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
+                                  title={`Add task to ${task.name}`}
+                                >
+                                  <Plus className="size-3" />
+                                  <span>Add task</span>
+                                </button>
+                              </div>
+                            );
+                          }
+                          return card;
+                        });
                       }
 
                       // Sort by execution order: group by epic root, parent before children
@@ -846,6 +948,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
                                   dragging={draggedTask?.id === task.id}
                                 />
+                                <div className="flex items-center gap-1">
                                 <button
                                   type="button"
                                   onClick={() => toggleEpic(task.id)}
@@ -854,6 +957,17 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   <ChevronDown className={cx('size-3 transition-transform', !expanded && '-rotate-90')} />
                                   <span>{children.length} {children.length === 1 ? 'story' : 'stories'}</span>
                                 </button>
+                                {(col.key === 'not_started' || col.key === 'missing_status') && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
+                                    className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
+                                    title={`Add task to ${task.name}`}
+                                  >
+                                    <Plus className="size-3" />
+                                  </button>
+                                )}
+                              </div>
                                 {expanded && (
                                   <div className="ml-2 border-l-2 border-utility-purple-200 pl-2 flex flex-col gap-2">
                                     {children.map((child) => (
@@ -879,11 +993,43 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                               </div>
                             );
                           }
+                          const taskIsEpic = isEpic(task, tasks);
+                          const showAddButton = (col.key === 'not_started' || col.key === 'missing_status') && taskIsEpic;
+                          if (showAddButton) {
+                            return (
+                              <div key={task.id} className="flex flex-col gap-1">
+                                <BoardCard
+                                  task={task}
+                                  epic={taskIsEpic}
+                                  allTasks={tasks}
+                                  onClick={() => setSelectedTask(task)}
+                                  onFix={handleFixTask}
+                                  fixStatus={fixStatus[task.id]}
+                                  allFixStatuses={fixStatus}
+                                  showAddStatus={isMissingStatus}
+                                  onAddStatus={isMissingStatus ? handleAddStatus : undefined}
+                                  addingStatus={addingStatus}
+                                  onDragStart={() => setDraggedTask(task)}
+                                  onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
+                                  dragging={draggedTask?.id === task.id}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
+                                  className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
+                                  title={`Add task to ${task.name}`}
+                                >
+                                  <Plus className="size-3" />
+                                  <span>Add task</span>
+                                </button>
+                              </div>
+                            );
+                          }
                           return (
                             <BoardCard
                               key={task.id}
                               task={task}
-                              epic={isEpic(task, tasks)}
+                              epic={taskIsEpic}
                               allTasks={tasks}
                               onClick={() => setSelectedTask(task)}
                               onFix={handleFixTask}
@@ -914,13 +1060,17 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
         showToast={showToast}
         onSaved={() => fetchBoard(true)}
         onDeleted={() => { setSelectedTask(null); fetchBoard(true); }}
+        onShowErrorDetail={onShowErrorDetail}
       />
       <CreateTaskModal
         open={createModalOpen}
-        onClose={() => setCreateModalOpen(false)}
+        onClose={() => { setCreateModalOpen(false); setCreateDefaultEpicId(undefined); }}
         apiBaseUrl={apiBaseUrl}
         showToast={showToast}
         onCreated={() => fetchBoard(true)}
+        tasks={tasks}
+        defaultEpicId={createDefaultEpicId}
+        onShowErrorDetail={onShowErrorDetail}
       />
     </section>
   );

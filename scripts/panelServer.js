@@ -1615,6 +1615,36 @@ app.get('/validate-board', async (_req, res) => {
   }
 });
 
+app.get('/api/board/exists', async (_req, res) => {
+  const env = await readEnvPairs();
+  const boardDir = resolveBoardDir(env);
+
+  try {
+    const stat = await fs.stat(boardDir);
+    res.json({ ok: true, exists: stat.isDirectory(), boardDir });
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      res.json({ ok: true, exists: false, boardDir });
+    } else {
+      res.status(500).json({ ok: false, message: error.message });
+    }
+  }
+});
+
+app.post('/api/board/create-directory', async (_req, res) => {
+  const env = await readEnvPairs();
+  const boardDir = resolveBoardDir(env);
+
+  try {
+    await fs.mkdir(boardDir, { recursive: true });
+    pushLog('info', LOG_SOURCE.panel, `Board directory created: ${boardDir}`);
+    res.json({ ok: true, boardDir });
+  } catch (error) {
+    pushLog('error', LOG_SOURCE.panel, `Failed to create Board directory: ${error.message}`);
+    res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
 app.post('/api/board/fix-order', async (_req, res) => {
   const env = await readEnvPairs();
   const boardDir = resolveBoardDir(env);
