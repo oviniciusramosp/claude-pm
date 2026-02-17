@@ -14,6 +14,8 @@ export interface SelectOption {
     text?: string;
   };
   icon?: React.ComponentType<{ className?: string }>;
+  iconColor?: string;
+  labelColor?: string;
   description?: string;
   disabled?: boolean;
 }
@@ -168,15 +170,24 @@ export function Select({
         <div className="flex items-center gap-2 min-w-0 flex-1">
           {selectedOption ? (
             <>
-              {selectedOption.icon && (
-                <Icon icon={selectedOption.icon} className="size-4 shrink-0 text-tertiary" />
-              )}
-              <span className="truncate">{selectedOption.label}</span>
               {selectedOption.badge && (
                 <Badge size="sm" color={selectedOption.badge.color}>
                   {selectedOption.badge.text || selectedOption.label}
                 </Badge>
               )}
+              {selectedOption.icon && (
+                <Icon
+                  icon={selectedOption.icon}
+                  className="size-4 shrink-0"
+                  style={selectedOption.iconColor ? { color: selectedOption.iconColor } : undefined}
+                />
+              )}
+              <span
+                className="truncate"
+                style={selectedOption.labelColor ? { color: selectedOption.labelColor } : undefined}
+              >
+                {selectedOption.label}
+              </span>
             </>
           ) : (
             <span className="text-quaternary">{placeholder}</span>
@@ -212,19 +223,26 @@ export function Select({
                 role="option"
                 aria-selected={isSelected}
               >
+                {option.badge && (
+                  <Badge size="sm" color={option.badge.color}>
+                    {option.badge.text || option.label}
+                  </Badge>
+                )}
                 {option.icon && (
-                  <Icon icon={option.icon} className="size-4 shrink-0 text-tertiary" />
+                  <Icon
+                    icon={option.icon}
+                    className="size-4 shrink-0"
+                    style={option.iconColor ? { color: option.iconColor } : undefined}
+                  />
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className={cx('text-sm truncate', isSelected ? 'font-medium text-brand-secondary' : 'text-primary')}>
+                    <span
+                      className={cx('text-sm truncate', isSelected ? 'font-medium' : '')}
+                      style={option.labelColor ? { color: option.labelColor } : undefined}
+                    >
                       {option.label}
                     </span>
-                    {option.badge && (
-                      <Badge size="sm" color={option.badge.color}>
-                        {option.badge.text || option.label}
-                      </Badge>
-                    )}
                   </div>
                   {option.description && (
                     <p className="text-xs text-tertiary mt-0.5">{option.description}</p>

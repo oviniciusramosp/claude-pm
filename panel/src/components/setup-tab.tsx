@@ -16,6 +16,7 @@ import { Button } from '@/components/base/buttons/button';
 import { Input } from '@/components/base/input/input';
 import { Toggle } from '@/components/base/toggle/toggle';
 import { Tooltip, TooltipTrigger } from '@/components/base/tooltip/tooltip';
+import { Select, type SelectOption } from '@/components/base/select/select';
 import { cx } from '@/utils/cx';
 import {
   SETUP_SECTIONS,
@@ -126,23 +127,20 @@ export function SetupTab({
                         <div className="flex items-stretch gap-2">
                           <div className="relative min-w-0 flex-1">
                             {field.selectOptions ? (
-                              <>
-                                <select
-                                  aria-label={field.label}
-                                  value={config[field.key] || ''}
-                                  onChange={(e) => {
-                                    setConfig((prev) => ({ ...prev, [field.key]: e.target.value }));
-                                  }}
-                                  className="appearance-none w-full h-11 rounded-sm border border-secondary bg-primary pl-3 pr-9 py-2 text-sm text-primary transition hover:border-secondary_hover focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
-                                >
-                                  {field.selectOptions.map((option) => (
-                                    <option key={option.value} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </select>
-                                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-5 -translate-y-1/2 text-quaternary" />
-                              </>
+                              <Select
+                                aria-label={field.label}
+                                value={config[field.key] || ''}
+                                onChange={(value) => {
+                                  setConfig((prev) => ({ ...prev, [field.key]: value }));
+                                }}
+                                options={field.selectOptions.map((opt): SelectOption => ({
+                                  value: opt.value,
+                                  label: opt.label,
+                                  icon: opt.value === '' ? undefined : field.icon,
+                                  description: opt.description
+                                }))}
+                                size="md"
+                              />
                             ) : (
                               <Input
                                 size="md"

@@ -2,14 +2,14 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { marked } from 'marked';
-import { AlertTriangle, Beaker01, CheckCircle, CpuChip01, Edit05, File06, Flag01, Folder, GitBranch01, Stars01, Target02, Trash01, Users01, X, Zap } from '@untitledui/icons';
+import { AlertTriangle, Beaker01, CornerUpLeft, CpuChip01, Edit05, File06, Folder, Stars01, Target02, Trash01, Users01, X, Zap } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
 import { DiscardConfirmOverlay } from './discard-confirm-overlay';
 import { Select, type SelectOption } from '@/components/base/select/select';
-import { BOARD_PRIORITY_COLORS, BOARD_TYPE_COLORS, CLAUDE_TASK_MODELS } from '../constants';
+import { BOARD_PRIORITY_COLORS, CLAUDE_TASK_MODELS } from '../constants';
 import { handleModalKeyDown } from '@/utils/modal-keyboard';
 import type { BoardTask } from '../types';
 
@@ -29,38 +29,33 @@ const TYPE_ICON_MAP: Record<string, IconComponent> = {
   Discovery: Zap
 };
 
-const PRIORITY_ICON_MAP: Record<string, IconComponent> = {
-  P0: Flag01,
-  P1: Flag01,
-  P2: Flag01,
-  P3: Flag01
-};
-
-const STATUS_ICON_MAP: Record<string, IconComponent> = {
-  'Not Started': GitBranch01,
-  'In Progress': GitBranch01,
-  'Done': CheckCircle
+const TYPE_COLOR_MAP: Record<string, string> = {
+  UserStory: 'rgb(var(--color-brand-600))',
+  Epic: 'rgb(var(--color-purple-600))',
+  Bug: 'rgb(var(--color-error-600))',
+  Chore: 'rgb(var(--color-gray-600))',
+  Discovery: 'rgb(var(--color-indigo-600))'
 };
 
 const TYPE_OPTIONS: SelectOption[] = [
-  { value: 'UserStory', label: 'User Story', icon: TYPE_ICON_MAP.UserStory, badge: { color: BOARD_TYPE_COLORS.UserStory as any, text: 'UserStory' } },
-  { value: 'Epic', label: 'Epic', icon: TYPE_ICON_MAP.Epic, badge: { color: BOARD_TYPE_COLORS.Epic as any } },
-  { value: 'Bug', label: 'Bug', icon: TYPE_ICON_MAP.Bug, badge: { color: 'error' as any } },
-  { value: 'Chore', label: 'Chore', icon: TYPE_ICON_MAP.Chore, badge: { color: 'gray' as any } },
-  { value: 'Discovery', label: 'Discovery', icon: TYPE_ICON_MAP.Discovery, badge: { color: BOARD_TYPE_COLORS.Discovery as any } }
+  { value: 'UserStory', label: 'User Story', icon: TYPE_ICON_MAP.UserStory, iconColor: TYPE_COLOR_MAP.UserStory, labelColor: TYPE_COLOR_MAP.UserStory },
+  { value: 'Epic', label: 'Epic', icon: TYPE_ICON_MAP.Epic, iconColor: TYPE_COLOR_MAP.Epic, labelColor: TYPE_COLOR_MAP.Epic },
+  { value: 'Bug', label: 'Bug', icon: TYPE_ICON_MAP.Bug, iconColor: TYPE_COLOR_MAP.Bug, labelColor: TYPE_COLOR_MAP.Bug },
+  { value: 'Chore', label: 'Chore', icon: TYPE_ICON_MAP.Chore, iconColor: TYPE_COLOR_MAP.Chore, labelColor: TYPE_COLOR_MAP.Chore },
+  { value: 'Discovery', label: 'Discovery', icon: TYPE_ICON_MAP.Discovery, iconColor: TYPE_COLOR_MAP.Discovery, labelColor: TYPE_COLOR_MAP.Discovery }
 ];
 
 const PRIORITY_OPTIONS: SelectOption[] = [
-  { value: 'P0', label: 'P0 - Critical', icon: PRIORITY_ICON_MAP.P0, badge: { color: BOARD_PRIORITY_COLORS.P0 as any, text: 'P0' }, description: 'Drop everything and fix now' },
-  { value: 'P1', label: 'P1 - High', icon: PRIORITY_ICON_MAP.P1, badge: { color: BOARD_PRIORITY_COLORS.P1 as any, text: 'P1' }, description: 'Important, plan to address soon' },
-  { value: 'P2', label: 'P2 - Medium', icon: PRIORITY_ICON_MAP.P2, badge: { color: BOARD_PRIORITY_COLORS.P2 as any, text: 'P2' }, description: 'Normal priority' },
-  { value: 'P3', label: 'P3 - Low', icon: PRIORITY_ICON_MAP.P3, badge: { color: BOARD_PRIORITY_COLORS.P3 as any, text: 'P3' }, description: 'Nice to have, no rush' }
+  { value: 'P0', label: '- Critical', badge: { color: BOARD_PRIORITY_COLORS.P0 as any, text: 'P0' }, description: 'Drop everything and fix now' },
+  { value: 'P1', label: '- High', badge: { color: BOARD_PRIORITY_COLORS.P1 as any, text: 'P1' }, description: 'Important, plan to address soon' },
+  { value: 'P2', label: '- Medium', badge: { color: BOARD_PRIORITY_COLORS.P2 as any, text: 'P2' }, description: 'Normal priority' },
+  { value: 'P3', label: '- Low', badge: { color: BOARD_PRIORITY_COLORS.P3 as any, text: 'P3' }, description: 'Nice to have, no rush' }
 ];
 
 const STATUS_OPTIONS: SelectOption[] = [
-  { value: 'Not Started', label: 'Not Started', icon: STATUS_ICON_MAP['Not Started'], badge: { color: 'gray' as any } },
-  { value: 'In Progress', label: 'In Progress', icon: STATUS_ICON_MAP['In Progress'], badge: { color: 'brand' as any } },
-  { value: 'Done', label: 'Done', icon: STATUS_ICON_MAP.Done, badge: { color: 'success' as any } }
+  { value: 'Not Started', label: 'Not Started', badge: { color: 'gray' as any } },
+  { value: 'In Progress', label: 'In Progress', badge: { color: 'brand' as any } },
+  { value: 'Done', label: 'Done', badge: { color: 'success' as any } }
 ];
 
 const inputClasses = 'w-full rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary shadow-xs focus:border-brand-solid focus:outline-none focus:ring-1 focus:ring-brand-solid';
@@ -654,9 +649,40 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                     <textarea
                       value={editBody}
                       onChange={(e) => setEditBody(e.target.value)}
+                      placeholder={
+                        editType === 'Epic'
+                          ? "# Epic Goal\n\n## Scope\n\n## Acceptance Criteria\n- [ ] First criterion\n- [ ] Second criterion"
+                          : "# Description\n\n## Acceptance Criteria\n- [ ] First criterion\n- [ ] Second criterion"
+                      }
                       className="w-full min-h-[30vh] resize-y rounded-lg border border-secondary bg-secondary p-3 font-mono text-sm text-primary focus:border-brand-solid focus:outline-none"
                       spellCheck={false}
                     />
+
+                    {/* Review with Claude button */}
+                    <div className="mt-3 flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        color="secondary"
+                        onPress={handleReview}
+                        isLoading={reviewing}
+                        isDisabled={saving || !editBody.trim()}
+                        iconLeading={<Stars01 className="size-4" />}
+                      >
+                        Review with Claude
+                      </Button>
+                      {bodyBeforeReview !== null && !reviewing && (
+                        <button
+                          type="button"
+                          onClick={() => { setEditBody(bodyBeforeReview); setBodyBeforeReview(null); }}
+                          disabled={saving}
+                          className="rounded-md p-2 text-tertiary hover:bg-primary_hover hover:text-secondary transition disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Undo review"
+                          aria-label="Undo review"
+                        >
+                          <CornerUpLeft className="size-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -727,26 +753,6 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                   <>
                     <Button size="md" color="secondary" onPress={handleCancelEdit} isDisabled={saving || reviewing}>
                       Cancel
-                    </Button>
-                    {bodyBeforeReview !== null && !reviewing && (
-                      <Button
-                        size="md"
-                        color="tertiary"
-                        onPress={() => { setEditBody(bodyBeforeReview); setBodyBeforeReview(null); }}
-                        isDisabled={saving}
-                      >
-                        Undo Review
-                      </Button>
-                    )}
-                    <Button
-                      size="md"
-                      color="secondary"
-                      onPress={handleReview}
-                      isLoading={reviewing}
-                      isDisabled={saving || !editBody.trim()}
-                      iconLeading={<Stars01 className="size-4" />}
-                    >
-                      Review with Claude
                     </Button>
                     <Button size="md" color="primary" onPress={handleSave} isLoading={saving} isDisabled={reviewing}>
                       Save
