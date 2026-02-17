@@ -13,8 +13,20 @@ export function DiscardConfirmOverlay({ open, reviewing, onKeepEditing, onDiscar
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay/50 backdrop-blur-sm">
-      <div className="rounded-xl border border-secondary bg-primary p-6 shadow-2xl max-w-sm">
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-overlay/50 backdrop-blur-sm"
+      onClick={(e) => {
+        // Prevent clicks from passing through to the modal behind
+        e.stopPropagation();
+      }}
+    >
+      <div
+        className="rounded-xl border border-secondary bg-primary p-6 shadow-2xl max-w-sm"
+        onClick={(e) => {
+          // Prevent clicks on the dialog from closing it
+          e.stopPropagation();
+        }}
+      >
         <h4 className="text-base font-semibold text-primary">
           {reviewing ? 'Cancel review?' : 'Discard changes?'}
         </h4>

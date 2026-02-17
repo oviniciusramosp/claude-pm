@@ -562,30 +562,34 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                     </div>
                   </div>
 
-                  {/* Model */}
-                  <div>
-                    <label className={labelClasses}>Model</label>
-                    <div className="relative">
-                      <select value={editModel} onChange={(e) => setEditModel(e.target.value)} className={selectClasses}>
-                        {CLAUDE_TASK_MODELS.map((m) => (
-                          <option key={m.value} value={m.value}>{m.label}</option>
-                        ))}
-                      </select>
-                      <ChevronDown className={selectChevronClasses} />
+                  {/* Model - hidden for Epics */}
+                  {editType !== 'Epic' && (
+                    <div>
+                      <label className={labelClasses}>Model</label>
+                      <div className="relative">
+                        <select value={editModel} onChange={(e) => setEditModel(e.target.value)} className={selectClasses}>
+                          {CLAUDE_TASK_MODELS.map((m) => (
+                            <option key={m.value} value={m.value}>{m.label}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className={selectChevronClasses} />
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  {/* Agents */}
-                  <div>
-                    <label className={labelClasses}>Agents</label>
-                    <input
-                      type="text"
-                      value={editAgents}
-                      onChange={(e) => setEditAgents(e.target.value)}
-                      placeholder="frontend, design"
-                      className={inputClasses}
-                    />
-                  </div>
+                  {/* Agents - hidden for Epics */}
+                  {editType !== 'Epic' && (
+                    <div>
+                      <label className={labelClasses}>Agents</label>
+                      <input
+                        type="text"
+                        value={editAgents}
+                        onChange={(e) => setEditAgents(e.target.value)}
+                        placeholder="frontend, design"
+                        className={inputClasses}
+                      />
+                    </div>
+                  )}
 
                   {/* Body */}
                   <div>

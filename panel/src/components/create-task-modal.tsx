@@ -443,47 +443,52 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
                 </div>
               </div>
 
-              {/* Model */}
-              <div>
-                <label className={labelClasses}>Model</label>
-                <div className="relative">
-                  <select value={model} onChange={(e) => setModel(e.target.value)} className={selectClasses}>
-                    {CLAUDE_TASK_MODELS.map((m) => (
-                      <option key={m.value} value={m.value}>{m.label}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className={selectChevronClasses} />
+              {/* Model - hidden for Epics */}
+              {type !== 'Epic' && (
+                <div>
+                  <label className={labelClasses}>Model</label>
+                  <div className="relative">
+                    <select value={model} onChange={(e) => setModel(e.target.value)} className={selectClasses}>
+                      {CLAUDE_TASK_MODELS.map((m) => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className={selectChevronClasses} />
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Agents */}
-              <div>
-                <label className={labelClasses}>Agents</label>
-                <input
-                  type="text"
-                  value={agents}
-                  onChange={(e) => setAgents(e.target.value)}
-                  placeholder="frontend, design"
-                  className={inputClasses}
-                />
-              </div>
-
-              {/* Epic Parent */}
-              <div>
-                <label className={labelClasses}>Epic Parent</label>
-                <div className="relative">
-                  <select
-                    value={type === 'Epic' ? '' : epicId}
-                    onChange={(e) => setEpicId(e.target.value)}
-                    className={selectClasses}
-                    disabled={type === 'Epic'}
-                  >
-                    <option value="">{type === 'Epic' ? 'N/A (creating epic)' : 'None (standalone task)'}</option>
-                    {availableEpics.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-                  </select>
-                  <ChevronDown className={selectChevronClasses} />
+              {/* Agents - hidden for Epics */}
+              {type !== 'Epic' && (
+                <div>
+                  <label className={labelClasses}>Agents</label>
+                  <input
+                    type="text"
+                    value={agents}
+                    onChange={(e) => setAgents(e.target.value)}
+                    placeholder="frontend, design"
+                    className={inputClasses}
+                  />
                 </div>
-              </div>
+              )}
+
+              {/* Epic Parent - hidden for Epics */}
+              {type !== 'Epic' && (
+                <div>
+                  <label className={labelClasses}>Epic Parent</label>
+                  <div className="relative">
+                    <select
+                      value={epicId}
+                      onChange={(e) => setEpicId(e.target.value)}
+                      className={selectClasses}
+                    >
+                      <option value="">None (standalone task)</option>
+                      {availableEpics.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+                    </select>
+                    <ChevronDown className={selectChevronClasses} />
+                  </div>
+                </div>
+              )}
 
               {/* Body */}
               <div>
