@@ -35,6 +35,7 @@ Board/                          Orchestrator                    Claude Code
 - **Review with Claude** — One-click AI review of task descriptions. Claude Sonnet optimizes acceptance criteria, technical tasks, and tests following prompt engineering best practices. Includes undo and cancel support.
 - **Auto-generate stories** — Generate up to 15 user stories from an Epic description. Claude reads the Epic, creates `.md` files with full ACs, technical tasks, tests, and dependencies.
 - **Unsaved changes protection** — Create and edit modals guard against accidental data loss with confirmation dialogs. In-progress reviews are cancelled on close.
+- **CLI slash commands** — `/project:review-task` and `/project:generate-stories` bring the same AI features to the Claude Code CLI, no panel required.
 - **CLAUDE.md injection** — Automatically injects automation instructions into your target project's `CLAUDE.md`.
 - **Model flexibility** — Specify different Claude models per task (Opus, Sonnet, Haiku) or override globally.
 - **Git integration** — Panel includes commit history viewer and diff inspection.
@@ -420,19 +421,27 @@ Start the panel with `npm run panel` and open `http://localhost:4100`.
 
 ## AI-Assisted Task Writing
 
-The panel includes two Claude-powered features that help you write better tasks without leaving the UI.
+The project provides two Claude-powered features for writing better tasks. They are available **both in the panel UI and as CLI slash commands**.
 
 ### Review with Claude
 
-Inside both the **Create Task** and **Edit Task** modals, click "Review with Claude" to send the task content to Claude Sonnet for optimization. Claude improves acceptance criteria, technical tasks, tests, and overall structure following prompt engineering best practices.
+**Panel:** Inside both the **Create Task** and **Edit Task** modals, click "Review with Claude" to send the task content to Claude Sonnet for optimization. Claude improves acceptance criteria, technical tasks, tests, and overall structure following prompt engineering best practices.
 
 - **Undo**: After a review, click "Undo Review" to revert to the original content.
 - **Cancel**: If you close the modal while a review is running, the review is cancelled automatically.
 - **Dirty-check**: If you have unsaved changes, closing the modal shows a confirmation dialog to prevent accidental data loss.
 
+**CLI:** Run the slash command directly in Claude Code (no panel required):
+
+```
+/project:review-task Board/my-task.md
+```
+
+Claude reads the file, reviews it using the same criteria, shows a diff, and asks for confirmation before overwriting.
+
 ### Generate Stories from Epic
 
-After creating an Epic with a description of the features you want, click the **"Generate"** button that appears next to the "+" button on Epic cards in the board.
+**Panel:** After creating an Epic with a description of the features you want, click the **"Generate"** button that appears next to the "+" button on Epic cards in the board.
 
 Claude reads the Epic description and automatically creates up to 15 user story `.md` files, each with:
 - Name and priority
@@ -443,6 +452,23 @@ Claude reads the Epic description and automatically creates up to 15 user story 
 - Standard completion criteria
 
 The generated stories appear as children of the Epic. Both manual ("+" button) and AI-generated story creation coexist.
+
+**CLI:** Run the slash command directly in Claude Code (no panel required):
+
+```
+/project:generate-stories Board/Epic-Auth
+```
+
+Claude reads the `epic.md`, identifies existing children to avoid duplication, generates stories, shows a summary, and asks for confirmation before creating the files.
+
+### Slash Commands Reference
+
+These commands are available in any Claude Code session inside this project (via `.claude/commands/`):
+
+| Command | Description |
+|---------|-------------|
+| `/project:review-task <path>` | Review and optimize a task `.md` file |
+| `/project:generate-stories <epic>` | Generate user stories from an Epic description |
 
 ## Available Scripts
 
@@ -596,6 +622,9 @@ Product Manager/
 │   ├── panelServer.js         # Panel Express backend (SSE, process management)
 │   ├── claudeManual.js        # CLI chat/manual prompt scripts
 │   └── setupClaudeMd.js       # CLAUDE.md regeneration
+├── .claude/commands/            # Claude Code slash commands
+│   ├── review-task.md          # /project:review-task — AI task review
+│   └── generate-stories.md    # /project:generate-stories — Epic story generation
 ├── .env.example                # Configuration template
 └── CLAUDE.md                   # Automation playbook for Claude
 ```

@@ -477,6 +477,24 @@ Available on **Epic cards** on the Board tab via the "Generate" button (next to 
 
 **Existing children**: The prompt includes existing child task names to avoid generating duplicate stories.
 
+### CLI Slash Commands
+
+Both AI features are also available as Claude Code slash commands (`.claude/commands/`), usable from the CLI without the panel running:
+
+| Command | Description |
+|---------|-------------|
+| `/project:review-task <path>` | Review and optimize a task `.md` file. Reads the file, applies the same review criteria as the panel, shows a diff, and asks for confirmation before overwriting. |
+| `/project:generate-stories <epic>` | Generate user stories from an Epic. Reads `epic.md`, identifies existing children, generates stories, shows a summary, and asks for confirmation before creating files. |
+
+**Usage examples:**
+```bash
+claude
+> /project:review-task Board/implement-login.md
+> /project:generate-stories Board/Epic-Auth
+```
+
+The slash commands use Claude's own model (whatever is active in the session) rather than forcing a specific model. The prompts mirror the panel's review and generation criteria exactly.
+
 ## First-Time Setup
 Setup is done through the visual panel at `http://localhost:4100`.
 
@@ -872,6 +890,9 @@ Product Manager/
 │   ├── panelServer.js      # Panel Express backend
 │   ├── claudeManual.js     # CLI chat/manual scripts
 │   └── setupClaudeMd.js    # CLAUDE.md generator
+├── .claude/commands/        # Claude Code slash commands
+│   ├── review-task.md      # /project:review-task — AI task review
+│   └── generate-stories.md # /project:generate-stories — Epic story generation
 ├── .env                    # Runtime config (not committed)
 ├── .env.example            # Template
 └── .data/runs.json         # Execution history (generated)
