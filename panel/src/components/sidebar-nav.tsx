@@ -128,7 +128,7 @@ export function SidebarNav({
 
       {/* Controls */}
       <div className="mt-4 space-y-3 px-3">
-        <div className="flex flex-col gap-2 px-3">
+        <div className="flex items-center justify-between gap-2 px-3">
           <p className="m-0 text-[11px] font-semibold uppercase tracking-wider text-quaternary">Controls</p>
           <div className="flex items-center gap-2">
             <Tooltip
