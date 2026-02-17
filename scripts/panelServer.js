@@ -2976,7 +2976,21 @@ app.post('/api/board/generate-stories', async (req, res) => {
   pushLog('info', LOG_SOURCE.panel, `Generating stories for Epic: "${epicId}"`);
 
   try {
-    const boardConfig = resolveBoardConfig();
+    const env = await readEnvPairs();
+    const boardDir = resolveBoardDir(env);
+
+    const boardConfig = {
+      board: {
+        dir: boardDir,
+        statuses: {
+          notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+          inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+          done: env.BOARD_STATUS_DONE || 'Done'
+        },
+        typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
+      }
+    };
+
     const client = new LocalBoardClient(boardConfig);
     await client.initialize();
 

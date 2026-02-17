@@ -181,7 +181,7 @@ export function logToneClasses(level: string, side = 'incoming', directClaude = 
     return 'bg-brand-secondary text-brand-primary';
   }
   if (side === 'outgoing') {
-    return 'bg-brand-secondary text-brand-primary';
+    return 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100';
   }
   return 'bg-primary text-secondary';
 }
