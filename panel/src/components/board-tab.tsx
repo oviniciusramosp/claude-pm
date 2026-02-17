@@ -152,24 +152,28 @@ function AddStatusDropdown({ taskId, onAddStatus, disabled }: { taskId: string; 
 
   return (
     <div className="relative" ref={dropdownRef}>
-      <button
-        type="button"
-        onClick={(e: any) => {
-          e.stopPropagation();
-          if (!disabled) setIsOpen(!isOpen);
-        }}
-        disabled={disabled}
-        className={cx(
-          'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition',
-          disabled
-            ? 'bg-utility-gray-100 text-utility-gray-400 cursor-not-allowed'
-            : 'bg-utility-brand-50 text-utility-brand-700 hover:bg-utility-brand-100 border border-utility-brand-200'
-        )}
-        title="Add status to this task"
+      <Tooltip
+        title={disabled ? "Adding status..." : "Add status"}
+        description={disabled ? "Please wait while the status is being updated" : "Choose a status for this task"}
       >
-        <Plus className="size-3" />
-        <span>Add Status</span>
-      </button>
+        <button
+          type="button"
+          onClick={(e: any) => {
+            e.stopPropagation();
+            if (!disabled) setIsOpen(!isOpen);
+          }}
+          disabled={disabled}
+          className={cx(
+            'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition',
+            disabled
+              ? 'bg-utility-gray-100 text-utility-gray-400 cursor-not-allowed'
+              : 'bg-utility-brand-50 text-utility-brand-700 hover:bg-utility-brand-100 border border-utility-brand-200'
+          )}
+        >
+          <Plus className="size-3" />
+          <span>Add Status</span>
+        </button>
+      </Tooltip>
       {isOpen && (
         <div className="absolute top-full left-0 z-50 mt-1 w-40 rounded-lg border border-secondary bg-primary shadow-lg">
           {statusOptions.map((option) => (
@@ -270,35 +274,34 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
         </p>
         <div className="flex items-center gap-2 shrink-0">
           {onFix && (
-            <button
-              type="button"
-              onClick={(e: any) => {
-                e.stopPropagation();
-                if (!isAnyFixing) {
-                  onFix(task.id);
-                }
-              }}
-              disabled={isAnyFixing}
-              className={cx(
-                'transition-opacity rounded-md p-1.5 shadow-sm',
-                isAnyFixing
-                  ? 'bg-utility-gray-100 border border-utility-gray-200 cursor-not-allowed opacity-60'
-                  : 'bg-utility-brand-50 hover:bg-utility-brand-100 border border-utility-brand-200',
-                isFixing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-              )}
-              title={
-                isAnyFixing
-                  ? (isFixing ? 'Fixing this task...' : 'Another task is being fixed')
-                  : 'Fix ACs with Claude'
-              }
-              aria-label="Fix acceptance criteria"
+            <Tooltip
+              title={isAnyFixing ? (isFixing ? "Fixing task" : "Another task is being fixed") : "Fix ACs with Claude"}
+              description={isAnyFixing ? (isFixing ? "Claude is fixing this task's acceptance criteria" : "Wait for the current fix to complete") : "Use Claude AI to fix incomplete acceptance criteria"}
             >
-              {isFixing ? (
-                <RefreshCw01 className="size-3.5 text-utility-brand-600 animate-spin" />
-              ) : (
-                <Tool01 className={cx('size-3.5', isAnyFixing ? 'text-utility-gray-400' : 'text-utility-brand-600')} />
-              )}
-            </button>
+              <button
+                type="button"
+                onClick={(e: any) => {
+                  e.stopPropagation();
+                  if (!isAnyFixing) {
+                    onFix(task.id);
+                  }
+                }}
+                disabled={isAnyFixing}
+                className={cx(
+                  'transition-opacity rounded-md p-1.5 shadow-sm',
+                  isAnyFixing
+                    ? 'bg-utility-gray-100 border border-utility-gray-200 cursor-not-allowed opacity-60'
+                    : 'bg-utility-brand-50 hover:bg-utility-brand-100 border border-utility-brand-200',
+                  isFixing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                )}
+              >
+                {isFixing ? (
+                  <RefreshCw01 className="size-3.5 text-utility-brand-600 animate-spin" />
+                ) : (
+                  <Tool01 className={cx('size-3.5', isAnyFixing ? 'text-utility-gray-400' : 'text-utility-brand-600')} />
+                )}
+              </button>
+            </Tooltip>
           )}
           {progressTotal > 0 && <AcDonut done={progressDone} total={progressTotal} label={epic ? 'tasks' : 'ACs'} />}
         </div>
