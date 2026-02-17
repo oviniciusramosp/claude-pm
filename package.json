@@ -1,6 +1,6 @@
 {
   "name": "product-manager-automation",
-  "version": "1.52.4",
+  "version": "1.53.0",
   "description": "Product Manager automation with local file-based board + Claude Code",
   "type": "module",
   "engines": {
@@ -11,6 +11,7 @@
     "start": "NODE_OPTIONS='--disable-warning=DEP0040' node src/index.js",
     "test": "node --test",
     "panel": "npm run panel:build && node scripts/panelServer.js",
+    "panel:public": "npm run panel:build && node scripts/panelServer.js --public",
     "panel:build": "vite build --config panel/vite.config.mjs",
     "panel:dev": "vite --config panel/vite.config.mjs",
     "panel:kill": "bash scripts/killPanel.sh",
@@ -25,6 +26,7 @@
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
     "marked": "^17.0.2",
+    "qrcode": "^1.5.4",
     "react": "^19.2.4",
     "react-aria-components": "^1.15.1",
     "react-dom": "^19.2.4",

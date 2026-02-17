@@ -1,7 +1,8 @@
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import os from 'node:os';
+import { spawn, execFile } from 'node:child_process';
 import readline from 'node:readline';
 import process from 'node:process';
 import dotenv from 'dotenv';
@@ -32,6 +33,94 @@ function envEnabled(value, fallback = false) {
 
 const panelAutoOpen = envEnabled(process.env.PANEL_AUTO_OPEN, true);
 const panelAutoStartApi = envEnabled(process.env.PANEL_AUTO_START_API, false);
+const isPublicMode = process.argv.includes('--public');
+
+// ── Network helpers ────────────────────────────────────────────────────
+
+function getLocalNetworkIp() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return null;
+}
+
+const tunnelState = {
+  child: null,
+  url: null,
+  status: 'inactive', // inactive | starting | active | error
+  error: null
+};
+
+function startCloudflaredTunnel() {
+  tunnelState.status = 'starting';
+  tunnelState.error = null;
+
+  execFile('which', ['cloudflared'], (err) => {
+    if (err) {
+      tunnelState.status = 'error';
+      tunnelState.error = 'cloudflared not found. Install with: brew install cloudflared';
+      console.error('❌ cloudflared not found. Install with: brew install cloudflared');
+      return;
+    }
+
+    const tunnelChild = spawn('cloudflared', ['tunnel', '--url', `http://localhost:${panelPort}`], {
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    tunnelState.child = tunnelChild;
+
+    const urlPattern = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/;
+
+    tunnelChild.stderr.on('data', (data) => {
+      const line = data.toString();
+      const match = line.match(urlPattern);
+      if (match && tunnelState.status !== 'active') {
+        tunnelState.url = match[0];
+        tunnelState.status = 'active';
+        console.log(`🌐 Cloudflare Tunnel active: ${tunnelState.url}`);
+      }
+    });
+
+    tunnelChild.stdout.on('data', (data) => {
+      const line = data.toString();
+      const match = line.match(urlPattern);
+      if (match && tunnelState.status !== 'active') {
+        tunnelState.url = match[0];
+        tunnelState.status = 'active';
+        console.log(`🌐 Cloudflare Tunnel active: ${tunnelState.url}`);
+      }
+    });
+
+    tunnelChild.on('error', (error) => {
+      tunnelState.status = 'error';
+      tunnelState.error = error.message;
+      console.error(`❌ Cloudflare Tunnel error: ${error.message}`);
+    });
+
+    tunnelChild.on('close', (code) => {
+      if (tunnelState.status === 'active') {
+        console.log('🛑 Cloudflare Tunnel closed.');
+      }
+      tunnelState.child = null;
+      tunnelState.url = null;
+      tunnelState.status = 'inactive';
+    });
+  });
+}
+
+function stopCloudflaredTunnel() {
+  if (tunnelState.child) {
+    tunnelState.child.kill('SIGTERM');
+    tunnelState.child = null;
+    tunnelState.url = null;
+    tunnelState.status = 'inactive';
+  }
+}
 
 const state = {
   api: {
@@ -1291,6 +1380,17 @@ app.get('/panel/*', (req, res, next) => {
     if (error) {
       next(error);
     }
+  });
+});
+
+app.get('/api/server/info', (_req, res) => {
+  const lanIp = getLocalNetworkIp();
+  res.json({
+    localUrl: `http://localhost:${panelPort}`,
+    lanUrl: lanIp ? `http://${lanIp}:${panelPort}` : null,
+    tunnelUrl: tunnelState.url,
+    tunnelStatus: tunnelState.status,
+    tunnelError: tunnelState.error
   });
 });
 
@@ -3832,6 +3932,15 @@ async function startServer() {
       }
     }
 
+    if (isPublicMode) {
+      startCloudflaredTunnel();
+    } else {
+      const lanIp = getLocalNetworkIp();
+      if (lanIp) {
+        console.log(`📱 LAN access: http://${lanIp}:${panelPort}`);
+      }
+    }
+
     autoStartApiIfNeeded().catch((error) => {
       pushLog('error', LOG_SOURCE.panel, `Failed API auto-start check: ${error.message}`);
     });
@@ -3845,6 +3954,9 @@ async function startServer() {
   // Graceful shutdown handlers
   function gracefulShutdown(signal) {
     console.log(`\n🛑 Received ${signal}, shutting down gracefully...`);
+
+    // Stop Cloudflare Tunnel if running
+    stopCloudflaredTunnel();
 
     // Stop managed API process if running
     if (state.api.child) {

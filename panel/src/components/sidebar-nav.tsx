@@ -8,6 +8,7 @@ import { cx } from '@/utils/cx';
 import { SIDEBAR_NAV_ITEMS } from '../constants';
 import { Icon } from './icon';
 import { StatusBadge } from './status-badge';
+import { AccessMenu } from './access-menu';
 
 export function SidebarNav({
   activeTab,
@@ -55,6 +56,7 @@ export function SidebarNav({
   setSidebarOpen: (open: boolean) => void;
 }) {
   const [workMenuOpen, setWorkMenuOpen] = useState(false);
+  const [accessMenuOpen, setAccessMenuOpen] = useState(false);
   const workMenuRef = useRef(null);
 
   useEffect(() => {
@@ -78,13 +80,23 @@ export function SidebarNav({
         'lg:translate-x-0'
       )}
     >
-      {/* Header */}
-      <div className="flex items-center gap-3 px-5 pb-4 pt-5">
-        <Icon icon={Asterisk02} className="size-6 shrink-0 text-brand-primary" />
-        <div className="min-w-0">
-          <h1 className="m-0 truncate text-md font-semibold text-primary">PM Automation</h1>
-          <p className="m-0 text-xs text-tertiary">Board + Claude Panel</p>
-        </div>
+      {/* Header — clickable for access menu */}
+      <div className="relative px-3 pb-4 pt-5">
+        <button
+          type="button"
+          className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 transition hover:bg-primary_hover"
+          onClick={() => setAccessMenuOpen((prev) => !prev)}
+          aria-expanded={accessMenuOpen}
+          aria-label="Show access QR code"
+        >
+          <Icon icon={Asterisk02} className="size-6 shrink-0 text-brand-primary" />
+          <div className="min-w-0 text-left">
+            <h1 className="m-0 truncate text-md font-semibold text-primary">PM Automation</h1>
+            <p className="m-0 text-xs text-tertiary">Board + Claude Panel</p>
+          </div>
+          <Icon icon={ChevronDown} className={cx('ml-auto size-4 shrink-0 text-quaternary transition-transform', accessMenuOpen && 'rotate-180')} />
+        </button>
+        <AccessMenu open={accessMenuOpen} onClose={() => setAccessMenuOpen(false)} />
       </div>
 
       {/* Navigation */}
