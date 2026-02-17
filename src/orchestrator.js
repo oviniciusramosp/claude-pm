@@ -540,7 +540,20 @@ export class Orchestrator {
 
             this.logger.success(`Opus review approved: "${taskLabel(task)}"`);
           } catch (reviewError) {
-            const errorNote = `## Opus Review Error (${new Date().toISOString()})\nReview failed: ${reviewError.message}\n`;
+            // Build detailed error note for task markdown
+            const errorDetails = [];
+            errorDetails.push(`**Error**: ${reviewError.message}`);
+            if (reviewError.exitCode !== undefined) {
+              errorDetails.push(`**Exit Code**: ${reviewError.exitCode}`);
+            }
+            if (reviewError.signal) {
+              errorDetails.push(`**Signal**: ${reviewError.signal}`);
+            }
+            if (reviewError.stderr) {
+              const stderrPreview = reviewError.stderr.slice(0, 500);
+              errorDetails.push(`**Stderr**:\n\`\`\`\n${stderrPreview}${reviewError.stderr.length > 500 ? '\n...(truncated)' : ''}\n\`\`\``);
+            }
+            const errorNote = `## Opus Review Error (${new Date().toISOString()})\n${errorDetails.join('\n\n')}\n`;
             await this.boardClient.appendMarkdown(task.id, errorNote);
             await this.runStore.markFailed(task, `Opus review error: ${reviewError.message}`);
 
@@ -553,6 +566,7 @@ export class Orchestrator {
               break;
             }
 
+            // Log concise message to Live Feed
             this.logger.error(`Opus review failed for "${taskLabel(task)}": ${reviewError.message}`);
 
             const shouldHaltReview = this.watchdog.recordFailure(task.id, task.name);
@@ -876,7 +890,20 @@ export class Orchestrator {
 
             this.logger.success(`Opus review approved: "${taskLabel(task)}"`);
           } catch (reviewError) {
-            const errorNote = `## Opus Review Error (${new Date().toISOString()})\nReview failed: ${reviewError.message}\n`;
+            // Build detailed error note for task markdown
+            const errorDetails = [];
+            errorDetails.push(`**Error**: ${reviewError.message}`);
+            if (reviewError.exitCode !== undefined) {
+              errorDetails.push(`**Exit Code**: ${reviewError.exitCode}`);
+            }
+            if (reviewError.signal) {
+              errorDetails.push(`**Signal**: ${reviewError.signal}`);
+            }
+            if (reviewError.stderr) {
+              const stderrPreview = reviewError.stderr.slice(0, 500);
+              errorDetails.push(`**Stderr**:\n\`\`\`\n${stderrPreview}${reviewError.stderr.length > 500 ? '\n...(truncated)' : ''}\n\`\`\``);
+            }
+            const errorNote = `## Opus Review Error (${new Date().toISOString()})\n${errorDetails.join('\n\n')}\n`;
             await this.boardClient.appendMarkdown(task.id, errorNote);
             await this.runStore.markFailed(task, `Opus review error: ${reviewError.message}`);
 
@@ -889,6 +916,7 @@ export class Orchestrator {
               break;
             }
 
+            // Log concise message to Live Feed
             this.logger.error(`Opus review failed for "${taskLabel(task)}": ${reviewError.message}`);
 
             const shouldHaltReview = this.watchdog.recordFailure(task.id, task.name);
@@ -1224,7 +1252,20 @@ export class Orchestrator {
           const reviewNotes = buildTaskCompletionNotes(task, reviewExecution);
           await this.boardClient.appendMarkdown(task.id, `## Epic Review Approved (${new Date().toISOString()})\n` + reviewNotes);
         } catch (reviewError) {
-          const errorNote = `## Epic Review Error (${new Date().toISOString()})\nReview failed: ${reviewError.message}\n`;
+          // Build detailed error note for task markdown
+          const errorDetails = [];
+          errorDetails.push(`**Error**: ${reviewError.message}`);
+          if (reviewError.exitCode !== undefined) {
+            errorDetails.push(`**Exit Code**: ${reviewError.exitCode}`);
+          }
+          if (reviewError.signal) {
+            errorDetails.push(`**Signal**: ${reviewError.signal}`);
+          }
+          if (reviewError.stderr) {
+            const stderrPreview = reviewError.stderr.slice(0, 500);
+            errorDetails.push(`**Stderr**:\n\`\`\`\n${stderrPreview}${reviewError.stderr.length > 500 ? '\n...(truncated)' : ''}\n\`\`\``);
+          }
+          const errorNote = `## Epic Review Error (${new Date().toISOString()})\n${errorDetails.join('\n\n')}\n`;
           await this.boardClient.appendMarkdown(task.id, errorNote);
 
           if (isClaudeLimitError(reviewError.message)) {
@@ -1236,6 +1277,7 @@ export class Orchestrator {
             return;
           }
 
+          // Log concise message to Live Feed
           this.logger.error(`Epic review failed for "${taskLabel(task)}": ${reviewError.message}`);
 
           const shouldHaltEpic = this.watchdog.recordFailure(task.id, task.name);

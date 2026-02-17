@@ -303,24 +303,6 @@ function buildCommand(config, task, overrideModel) {
   return cmd;
 }
 
-function summarizeCommandOutput(stderr, stdout) {
-  const raw = String(stderr || stdout || 'no output');
-  const line = raw
-    .split('\n')
-    .map((item) => item.trim())
-    .filter(Boolean)[0];
-
-  if (!line) {
-    return 'sem output';
-  }
-
-  if (line.length <= 320) {
-    return line;
-  }
-
-  return `${line.slice(0, 320)}...`;
-}
-
 export function runClaudeTask(task, prompt, config, { signal, onAcComplete, overrideModel } = {}) {
   return new Promise((resolve, reject) => {
     const commandEnv = { ...process.env };
@@ -447,12 +429,12 @@ export function runClaudeTask(task, prompt, config, { signal, onAcComplete, over
       }
 
       if (code !== 0) {
-        const summary = summarizeCommandOutput(stderr, stdout);
-        reject(
-          new Error(
-            `Claude command falhou (exit=${code}, signal=${exitSignal || 'none'}): ${summary}`
-          )
-        );
+        const error = new Error('Claude command falhou');
+        error.exitCode = code;
+        error.signal = exitSignal || 'none';
+        error.stderr = stderr;
+        error.stdout = stdout;
+        reject(error);
         return;
       }
 
