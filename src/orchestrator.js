@@ -274,7 +274,15 @@ export class Orchestrator {
     }
 
     this.paused = false;
-    this.logger.info('Orchestrator resumed. Task execution can now proceed.');
+    this.logger.info('Orchestrator activated. Checking for tasks to execute...');
+
+    // Trigger immediate reconciliation instead of waiting for next poll
+    setImmediate(() => {
+      this.reconcile('unpause').catch((err) => {
+        this.logger.error(`Failed to reconcile after unpause: ${err.message}`);
+      });
+    });
+
     return true;
   }
 

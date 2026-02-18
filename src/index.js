@@ -175,7 +175,7 @@ app.post('/unpause', (req, res) => {
     return;
   }
 
-  res.json({ ok: true, message: 'Orchestrator resumed. Task execution can now proceed.' });
+  res.json({ ok: true, message: 'Orchestrator activated. Checking for tasks to execute...' });
 });
 
 app.get('/settings/runtime', (req, res) => {

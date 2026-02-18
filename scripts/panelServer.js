@@ -1859,7 +1859,7 @@ app.post('/api/automation/unpause', async (_req, res) => {
       return;
     }
 
-    pushLog('success', LOG_SOURCE.panel, 'Orchestrator unpaused successfully');
+    pushLog('success', LOG_SOURCE.panel, 'Orchestrator activated. Checking for tasks to execute...');
     res.json({ ok: true, payload });
   } catch (error) {
     pushLog('error', LOG_SOURCE.panel, `Unpause error: ${error.message}`);
