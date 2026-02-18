@@ -226,6 +226,7 @@ const API_STATUS_NOISE_PATTERNS = [
 // Patterns that identify startup-phase log messages to be collapsed into a
 // single "Automation App started." bubble with expandable details.
 const STARTUP_LOG_PATTERNS = [
+  /^Automation App (was )?started/i,
   /^Board directory:/i,
   /^Claude working directory:/i,
   /^Board structure validated successfully$/i,
@@ -235,10 +236,17 @@ const STARTUP_LOG_PATTERNS = [
   /^Appended managed section/i,
   /^Periodic reconciliation (enabled|disabled)/i,
   /^Automatic reconciliation/i,
-  /^Startup reconciliation disabled/i,
+  /^Startup reconciliation (is )?disabled/i,
   /^\[VALIDATION_REPORT\]/i,
+  /^>\s+[\w-]+@[\d.]+\s+start$/i, // npm script line like "> product-manager-automation@1.60.0 start"
+  /^>\s+NODE_OPTIONS=/i, // npm script command line
 ];
 const STARTUP_BUFFER_WINDOW_MS = 3000;
+
+// Startup message grouping state
+let startupBuffer = [];
+let startupBufferTimer = null;
+let isCollectingStartup = false;
 const CLAUDE_RAW_NOISE_PATTERNS = [
   /you(?:'|’)ve hit your limit/i,
   /hit your limit/i
@@ -265,7 +273,83 @@ const authLimiter = rateLimit({
 
 app.use('/panel', express.static(panelDistPath));
 
+function isStartupMessage(message) {
+  if (!message) return false;
+  const clean = String(message).trim();
+  return STARTUP_LOG_PATTERNS.some((pattern) => pattern.test(clean));
+}
+
+function flushStartupBuffer() {
+  if (startupBufferTimer) {
+    clearTimeout(startupBufferTimer);
+    startupBufferTimer = null;
+  }
+
+  if (startupBuffer.length === 0) {
+    isCollectingStartup = false;
+    return;
+  }
+
+  // Create a consolidated startup log with expandable details
+  const detailLines = startupBuffer.map(item => ({
+    level: item.level,
+    message: item.message
+  }));
+
+  const summary = `Automation App started successfully with ${startupBuffer.length} configuration${startupBuffer.length === 1 ? '' : 's'}`;
+
+  const consolidatedEntry = {
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    ts: new Date().toISOString(),
+    level: 'success',
+    source: 'api',
+    message: summary,
+    isStartupGroup: true,
+    startupDetails: detailLines
+  };
+
+  logHistory.push(consolidatedEntry);
+  if (logHistory.length > MAX_LOG_LINES) {
+    logHistory.shift();
+  }
+
+  appendLogToDisk(consolidatedEntry);
+
+  const payload = `data: ${JSON.stringify(consolidatedEntry)}\n\n`;
+  for (const client of logClients) {
+    client.write(payload);
+  }
+
+  startupBuffer = [];
+  isCollectingStartup = false;
+}
+
 function pushLog(level, source, message, extra) {
+  // Check if this is a startup message
+  if (source === 'api' && isStartupMessage(message)) {
+    // Start collecting startup messages if not already
+    if (!isCollectingStartup) {
+      isCollectingStartup = true;
+      startupBuffer = [];
+    }
+
+    // Add to startup buffer
+    startupBuffer.push({ level, message, ...extra });
+
+    // Reset the timer
+    if (startupBufferTimer) {
+      clearTimeout(startupBufferTimer);
+    }
+    startupBufferTimer = setTimeout(flushStartupBuffer, STARTUP_BUFFER_WINDOW_MS);
+
+    return; // Don't emit this log immediately
+  }
+
+  // If we were collecting startup messages and this is not a startup message, flush the buffer
+  if (isCollectingStartup) {
+    flushStartupBuffer();
+  }
+
   const entry = {
     id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     ts: new Date().toISOString(),
@@ -474,6 +558,11 @@ function shouldSuppressProcessMessage(source, message) {
   const clean = String(message || '').trim();
   if (!clean) {
     return true;
+  }
+
+  // Don't suppress startup messages - they will be grouped
+  if (source === 'api' && isStartupMessage(clean)) {
+    return false;
   }
 
   if (NPM_SCRIPT_LINE_REGEX.test(clean)) {
