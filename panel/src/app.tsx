@@ -246,6 +246,10 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
   }, [callApi]);
 
   useEffect(() => {
+    // Skip bootstrap if auth is loading or if auth is required but user not authenticated
+    if (loading || !serverInfo) return;
+    if (serverInfo.authEnabled && !user) return;
+
     let canceled = false;
 
     async function bootstrap() {
@@ -310,7 +314,7 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
       clearInterval(usageInterval);
       events.close();
     };
-  }, [apiBaseUrl, appendLog, loadConfig, loadLogs, loadRuntimeSettings, loadWeeklyUsage, refreshStatus, showToast]);
+  }, [apiBaseUrl, appendLog, loadConfig, loadLogs, loadRuntimeSettings, loadWeeklyUsage, refreshStatus, showToast, loading, serverInfo, user]);
 
   const runAction = useCallback(
     async (key, endpoint, successMessage) => {
