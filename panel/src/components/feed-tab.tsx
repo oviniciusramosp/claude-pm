@@ -1,6 +1,6 @@
 // panel/src/components/feed-tab.tsx
 
-import React, { type RefObject, useLayoutEffect, useState, useMemo } from 'react';
+import React, { type RefObject, useLayoutEffect, useState, useMemo, useCallback } from 'react';
 import { ChevronDown, ChevronRight, Copy01, CpuChip01, Send01, TerminalBrowser, Check, ChevronSelectorVertical } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { Tooltip, TooltipTrigger } from './base/tooltip/tooltip';
@@ -28,7 +28,8 @@ import {
 } from '../utils/log-helpers';
 import { Icon } from './icon';
 import { SourceAvatar } from './source-avatar';
-import type { LogEntry, OrchestratorState, TaskContractData, ValidationReportData } from '../types';
+import { TaskDetailModal } from './task-detail-modal';
+import type { LogEntry, OrchestratorState, TaskContractData, ValidationReportData, BoardTask } from '../types';
 
 /**
  * Groups progressive logs by their groupId
@@ -583,7 +584,10 @@ export function FeedTab({
   busy,
   orchestratorState,
   fixingTaskId,
-  onTaskClick
+  apiBaseUrl,
+  showToast,
+  onShowErrorDetail,
+  refreshTrigger
 }: {
   logs: LogEntry[];
   logFeedRef: RefObject<HTMLDivElement | null>;
@@ -596,10 +600,44 @@ export function FeedTab({
   busy: Record<string, any>;
   orchestratorState: OrchestratorState | null;
   fixingTaskId?: string | null;
-  onTaskClick?: (taskId: string) => void;
+  apiBaseUrl: string;
+  showToast: (message: string, color?: 'success' | 'warning' | 'danger' | 'neutral') => void;
+  onShowErrorDetail: (title: string, message: string) => void;
+  refreshTrigger: number;
 }) {
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [loadingTask, setLoadingTask] = useState(false);
+
   const claudeWorking = orchestratorState?.active && orchestratorState.currentTaskId;
   const isChatDisabled = Boolean(busy.chat) || claudeWorking || Boolean(fixingTaskId);
+
+  // Fetch task by ID
+  const fetchTaskById = useCallback(async (taskId: string) => {
+    setLoadingTask(true);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/board`);
+      if (!response.ok) {
+        showToast('Failed to load tasks', 'danger');
+        return;
+      }
+      const data = await response.json();
+      const task = data.tasks?.find((t: BoardTask) => t.id === taskId);
+      if (task) {
+        setSelectedTask(task);
+      } else {
+        showToast(`Task "${taskId}" not found`, 'warning');
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Failed to load task', 'danger');
+    } finally {
+      setLoadingTask(false);
+    }
+  }, [apiBaseUrl, showToast]);
+
+  // Handle task click
+  const handleTaskClick = useCallback((taskId: string) => {
+    fetchTaskById(taskId);
+  }, [fetchTaskById]);
 
   // Group progressive logs
   const groupedLogs = useMemo(() => groupProgressiveLogs(logs), [logs]);
@@ -795,7 +833,7 @@ export function FeedTab({
                     <MessageWithTaskLink
                       message={displayMessage}
                       taskInfo={taskInfo}
-                      onTaskClick={onTaskClick}
+                      onTaskClick={handleTaskClick}
                     />
                   )}
 
@@ -854,7 +892,7 @@ export function FeedTab({
               Claude is working on: <TaskLink
                 taskId={orchestratorState?.currentTaskId || ''}
                 taskName={orchestratorState?.currentTaskName || orchestratorState?.currentTaskId || ''}
-                onClick={onTaskClick}
+                onClick={handleTaskClick}
               />
             </span>
           </div>
@@ -1001,6 +1039,21 @@ export function FeedTab({
           </div>
         </div>
       </div>
+
+      <TaskDetailModal
+        open={selectedTask !== null}
+        onClose={() => setSelectedTask(null)}
+        task={selectedTask}
+        apiBaseUrl={apiBaseUrl}
+        showToast={showToast}
+        onSaved={() => {
+          setSelectedTask(null);
+        }}
+        onDeleted={() => {
+          setSelectedTask(null);
+        }}
+        onShowErrorDetail={onShowErrorDetail}
+      />
     </section>
   );
 }
