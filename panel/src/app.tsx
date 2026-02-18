@@ -180,6 +180,7 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
           headers: {
             'Content-Type': 'application/json'
           },
+          credentials: 'include',
           ...options
         });
       } catch (error) {

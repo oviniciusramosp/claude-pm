@@ -1477,7 +1477,7 @@ app.post('/auth/logout', (req, res) => {
 // Current user info
 app.get('/api/auth/user', optionalAuth, (req, res) => {
   if (!req.user) {
-    return res.status(401).json({ authenticated: false });
+    return res.json({ authenticated: false });
   }
   res.json({ authenticated: true, user: req.user });
 });
