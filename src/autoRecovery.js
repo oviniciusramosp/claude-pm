@@ -113,7 +113,7 @@ export class AutoRecovery {
    * Execute Claude with recovery prompt
    */
   async analyzeAndFix(taskId, error, taskContext) {
-    const prompt = buildRecoveryPrompt(error, taskContext);
+    const prompt = await buildRecoveryPrompt(error, taskContext);
 
     // Determine recovery model
     let recoveryModel = config.autoRecovery.model;
