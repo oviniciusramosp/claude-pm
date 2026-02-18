@@ -110,6 +110,7 @@ export interface BoardTask {
   url: string;
   createdTime: string;
   lastEditedTime: string;
+  order?: number;
   acTotal: number;
   acDone: number;
 }

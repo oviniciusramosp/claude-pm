@@ -2608,6 +2608,63 @@ app.post('/api/board/update-status', async (req, res) => {
   }
 });
 
+// --- Reorder epics ---
+app.post('/api/board/reorder-epics', async (req, res) => {
+  const { epicIds, status } = req.body;
+
+  if (!Array.isArray(epicIds) || epicIds.length === 0) {
+    res.status(400).json({ ok: false, message: 'epicIds must be a non-empty array' });
+    return;
+  }
+
+  pushLog('info', LOG_SOURCE.panel, `Reordering ${epicIds.length} epics in status "${status}"`);
+
+  const env = await readEnvPairs();
+  const boardDir = resolveBoardDir(env);
+
+  const boardConfig = {
+    board: {
+      dir: boardDir,
+      statuses: {
+        notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+        inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+        done: env.BOARD_STATUS_DONE || 'Done'
+      },
+      typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
+    }
+  };
+
+  try {
+    const client = new LocalBoardClient(boardConfig);
+    await client.initialize();
+
+    // Update order field for each epic (1-based)
+    for (let i = 0; i < epicIds.length; i++) {
+      const epicId = epicIds[i];
+      const orderValue = i + 1;
+
+      try {
+        await client.updateEpicOrder(epicId, orderValue);
+      } catch (err) {
+        pushLog('error', LOG_SOURCE.panel, `Failed to update order for ${epicId}: ${err.message}`);
+        // Continue with other epics
+      }
+    }
+
+    pushLog('success', LOG_SOURCE.panel, `Reordered ${epicIds.length} epics successfully`);
+
+    res.json({
+      ok: true,
+      updatedCount: epicIds.length,
+      status
+    });
+  } catch (error) {
+    const msg = error.message || String(error);
+    pushLog('error', LOG_SOURCE.panel, `Failed to reorder epics: ${msg}`, { stack: error.stack });
+    res.status(500).json({ ok: false, message: msg });
+  }
+});
+
 // --- Save task markdown content ---
 app.post('/api/board/task-markdown', async (req, res) => {
   const { taskId, content } = req.body;

@@ -51,6 +51,18 @@ function isEpic(task: BoardTask, allTasks: BoardTask[]): boolean {
   return allTasks.some((t) => t.parentId === task.id);
 }
 
+function sortEpics(epics: BoardTask[]): BoardTask[] {
+  return [...epics].sort((a, b) => {
+    if (a.order != null && b.order != null) {
+      if (a.order !== b.order) return a.order - b.order;
+      return a.name.localeCompare(b.name); // Tiebreaker
+    }
+    if (a.order != null) return -1; // a has order, comes first
+    if (b.order != null) return 1;  // b has order, comes first
+    return a.name.localeCompare(b.name); // Both no order: alphabetical
+  });
+}
+
 function formatErrorForModal(err: BoardError): string {
   const lines: string[] = [];
 
@@ -376,6 +388,8 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const [addingStatus, setAddingStatus] = useState(false);
   const [draggedTask, setDraggedTask] = useState<BoardTask | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const [draggedEpicId, setDraggedEpicId] = useState(null as string | null);
+  const [epicDropBeforeId, setEpicDropBeforeId] = useState(null as string | null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createDefaultEpicId, setCreateDefaultEpicId] = useState<string | undefined>(undefined);
   const [generatingEpicId, setGeneratingEpicId] = useState(null as string | null);
@@ -697,6 +711,106 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
     }
   }, [draggedTask, apiBaseUrl, showToast, fetchBoard]);
 
+  const handleEpicDragStart = useCallback((e: any, epicId: string) => {
+    e.stopPropagation(); // Don't trigger status column drag
+    setDraggedEpicId(epicId);
+    e.dataTransfer.effectAllowed = 'move';
+  }, []);
+
+  const handleEpicDragOver = useCallback((e: any, targetEpicId: string, status: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!draggedEpicId || draggedEpicId === targetEpicId) return;
+
+    // Only allow reordering within same status column
+    const draggedTask = tasks.find((t: BoardTask) => t.id === draggedEpicId);
+    if (draggedTask?.status !== status) return;
+
+    // Determine if dropping above or below target
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const midpoint = rect.top + rect.height / 2;
+    const isAbove = e.clientY < midpoint;
+
+    setEpicDropBeforeId(isAbove ? targetEpicId : null);
+  }, [draggedEpicId, tasks]);
+
+  const handleEpicDragEnd = useCallback(() => {
+    setDraggedEpicId(null);
+    setEpicDropBeforeId(null);
+  }, []);
+
+  const handleEpicDrop = useCallback(async (e: any, targetEpicId: string, status: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const draggedId = draggedEpicId;
+    if (!draggedId || draggedId === targetEpicId) {
+      handleEpicDragEnd();
+      return;
+    }
+
+    // Get all epics in same status, sorted
+    const epicsInStatus = sortEpics(
+      tasks.filter((t: BoardTask) => isEpic(t, tasks) && t.status === status)
+    );
+
+    const draggedIndex = epicsInStatus.findIndex((e: BoardTask) => e.id === draggedId);
+    const targetIndex = epicsInStatus.findIndex((e: BoardTask) => e.id === targetEpicId);
+
+    if (draggedIndex === -1 || targetIndex === -1) {
+      handleEpicDragEnd();
+      return;
+    }
+
+    // Reorder: remove dragged, insert at target position
+    const reordered = [...epicsInStatus];
+    const [draggedEpic] = reordered.splice(draggedIndex, 1);
+
+    // Determine insert position based on drop zone
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const midpoint = rect.top + rect.height / 2;
+    const insertIndex = e.clientY < midpoint ? targetIndex : targetIndex + 1;
+
+    reordered.splice(insertIndex, 0, draggedEpic);
+
+    // Extract epic IDs in new order
+    const epicIds = reordered.map((e: BoardTask) => e.id);
+
+    // Optimistic update
+    const updatedTasks = tasks.map((t: BoardTask) => {
+      const newOrderIndex = epicIds.indexOf(t.id);
+      if (newOrderIndex !== -1) {
+        return { ...t, order: newOrderIndex + 1 }; // 1-based
+      }
+      return t;
+    });
+    setTasks(updatedTasks);
+
+    handleEpicDragEnd();
+
+    // API call
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/board/reorder-epics`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ epicIds, status })
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        showToast(payload?.message || 'Failed to reorder epics', 'danger');
+        await fetchBoard(true); // Revert
+        return;
+      }
+
+      showToast('Epics reordered successfully', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to reorder epics', 'danger');
+      await fetchBoard(true); // Revert
+    }
+  }, [draggedEpicId, tasks, apiBaseUrl, showToast, fetchBoard, handleEpicDragEnd]);
+
   const handleGenerateStories = useCallback(async (epicId: string) => {
     setGeneratingEpicId(epicId);
     try {
@@ -985,7 +1099,22 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                           );
                           if (showAddButton) {
                             return (
-                              <div key={task.id} className="flex flex-col gap-1">
+                              <div
+                                key={task.id}
+                                draggable={taskIsEpic}
+                                onDragStart={taskIsEpic ? (e) => handleEpicDragStart(e, task.id) : undefined}
+                                onDragOver={taskIsEpic ? (e) => handleEpicDragOver(e, task.id, task.status) : undefined}
+                                onDrop={taskIsEpic ? (e) => handleEpicDrop(e, task.id, task.status) : undefined}
+                                onDragEnd={taskIsEpic ? handleEpicDragEnd : undefined}
+                                className={cx(
+                                  'relative flex flex-col gap-1',
+                                  taskIsEpic && draggedEpicId === task.id && 'opacity-50 cursor-grabbing'
+                                )}
+                              >
+                                {/* Drop indicator line */}
+                                {taskIsEpic && epicDropBeforeId === task.id && (
+                                  <div className="absolute -top-1 left-0 right-0 h-0.5 bg-utility-brand-500 z-10 rounded-full" />
+                                )}
                                 {card}
                                 <div className="flex items-center gap-1">
                                   <Tooltip title="Add task" description={`Create a new task in ${task.name}`}>
@@ -1045,6 +1174,31 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                               </div>
                             );
                           }
+
+                          // Wrap Epic cards in draggable container
+                          if (taskIsEpic) {
+                            return (
+                              <div
+                                key={task.id}
+                                draggable
+                                onDragStart={(e) => handleEpicDragStart(e, task.id)}
+                                onDragOver={(e) => handleEpicDragOver(e, task.id, task.status)}
+                                onDrop={(e) => handleEpicDrop(e, task.id, task.status)}
+                                onDragEnd={handleEpicDragEnd}
+                                className={cx(
+                                  'relative',
+                                  draggedEpicId === task.id && 'opacity-50 cursor-grabbing'
+                                )}
+                              >
+                                {/* Drop indicator line */}
+                                {epicDropBeforeId === task.id && (
+                                  <div className="absolute -top-1 left-0 right-0 h-0.5 bg-utility-brand-500 z-10 rounded-full" />
+                                )}
+                                {card}
+                              </div>
+                            );
+                          }
+
                           return card;
                         });
                       }
@@ -1053,8 +1207,22 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                       const sorted = [...col.tasks].sort((a, b) => {
                         const groupA = a.parentId || a.id.split('/')[0];
                         const groupB = b.parentId || b.id.split('/')[0];
-                        if (groupA !== groupB) return groupA.localeCompare(groupB);
-                        // Epic parent comes before its children
+
+                        if (groupA !== groupB) {
+                          // Different groups - check if they're epics and have order field
+                          const taskA = tasks.find((t: BoardTask) => t.id === groupA);
+                          const taskB = tasks.find((t: BoardTask) => t.id === groupB);
+
+                          if (taskA?.order != null && taskB?.order != null) {
+                            if (taskA.order !== taskB.order) return taskA.order - taskB.order;
+                          }
+                          if (taskA?.order != null) return -1;
+                          if (taskB?.order != null) return 1;
+
+                          return groupA.localeCompare(groupB);
+                        }
+
+                        // Same group - epic parent comes before its children
                         if (!a.parentId && b.parentId) return -1;
                         if (a.parentId && !b.parentId) return 1;
                         return a.id.localeCompare(b.id);
@@ -1079,7 +1247,22 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                           if (children && children.length > 0) {
                             const expanded = expandedEpics.has(task.id);
                             return (
-                              <div key={task.id} className="flex flex-col gap-2">
+                              <div
+                                key={task.id}
+                                draggable
+                                onDragStart={(e) => handleEpicDragStart(e, task.id)}
+                                onDragOver={(e) => handleEpicDragOver(e, task.id, task.status)}
+                                onDrop={(e) => handleEpicDrop(e, task.id, task.status)}
+                                onDragEnd={handleEpicDragEnd}
+                                className={cx(
+                                  'relative flex flex-col gap-2',
+                                  draggedEpicId === task.id && 'opacity-50 cursor-grabbing'
+                                )}
+                              >
+                                {/* Drop indicator line */}
+                                {epicDropBeforeId === task.id && (
+                                  <div className="absolute -top-1 left-0 right-0 h-0.5 bg-utility-brand-500 z-10 rounded-full" />
+                                )}
                                 <BoardCard
                                   task={task}
                                   epic
