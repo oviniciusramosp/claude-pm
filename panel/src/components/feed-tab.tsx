@@ -608,8 +608,7 @@ export function FeedTab({
                     className={cx(
                       'group/msg min-w-0 max-w-[min(86%,760px)] rounded-xl px-3 py-2.5 shadow-xs sm:px-4 sm:py-3',
                       isOutgoing ? 'rounded-br-sm' : 'rounded-bl-sm',
-                      logToneClasses(level, sourceMeta.side, sourceMeta.directClaude, 'progressive-log', true),
-                      'ring-1 ring-brand/45'
+                      logToneClasses(level, sourceMeta.side, sourceMeta.directClaude, 'progressive-log', true)
                     )}
                   >
                     <ProgressiveLogBubble logs={group} onCopy={copyLiveFeedMessage} />
@@ -691,7 +690,7 @@ export function FeedTab({
                         ? 'ring-1 ring-blue-400/50'
                         : specialBubble === 'epic-done'
                           ? 'ring-1 ring-purple-400/50'
-                          : sourceMeta.directClaude ? 'ring-1 ring-brand/45' : ''
+                          : ''
                   )}
                 >
                   {line.isPrompt ? (
