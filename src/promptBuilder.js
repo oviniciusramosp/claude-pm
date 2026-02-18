@@ -73,13 +73,24 @@ export function buildTaskPrompt(task, markdown, options = {}) {
 
   // ALWAYS include execution rules for AC tracking (critical for task success)
   basePrompt.push(
-    'Execution Rules:',
-    '- Complete all Acceptance Criteria in the task.',
+    '='.repeat(80),
+    'EXECUTION RULES (MANDATORY)',
+    '='.repeat(80),
+    '',
+    '- Complete ALL Acceptance Criteria in the task. Every single one. No exceptions.',
     '- Track EACH completed AC using {"ac_complete": <number>} JSON markers (see above).',
-    '- BEFORE emitting final JSON: verify ALL ACs are complete. Re-read the AC list and confirm you emitted every AC number.',
-    '- If any AC is incomplete, DO NOT return "done" status. Complete the missing AC first.',
+    '',
+    'CRITICAL — AC VERIFICATION BEFORE FINISHING:',
+    '- BEFORE emitting the final JSON, STOP and re-read every AC in the reference table above.',
+    '- For EACH AC, verify you genuinely completed it (not just planned to).',
+    '- If ANY AC is incomplete, complete it NOW. Do NOT emit the final JSON until ALL ACs are done.',
+    '- The orchestrator WILL REJECT your work if any AC checkbox remains unchecked.',
+    '- A separate verification pass will run after you finish. Incomplete ACs mean task failure.',
+    '',
     '- On successful completion, create a commit with a clear, objective message.',
     '- Never include secrets in code, commits, or logs.',
+    '',
+    '='.repeat(80),
     ''
   );
 
