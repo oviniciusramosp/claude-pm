@@ -2895,30 +2895,62 @@ Now examine the codebase and update ALL task files (epic + children) with accura
 }
 
 function buildFixTaskPrompt(taskId, taskName, taskContent, taskFilePath) {
-  return `You are verifying acceptance criteria for task "${taskName}" (${taskId}).
+  return `🔍 ACCEPTANCE CRITERIA VERIFICATION FOR: "${taskName}" (${taskId})
 
-The task file is located at: ${taskFilePath}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️  CONTEXT: The previous execution completed but did NOT mark Acceptance Criteria.
+⚠️  This means the model (likely Sonnet) ignored AC tracking instructions.
+⚠️  Your job is to verify the actual codebase and mark ACs that ARE genuinely complete.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Your goal is to:
-1. Read the task acceptance criteria (markdown checkboxes: \`- [ ]\` or \`- [x]\`)
-2. Examine the codebase to determine which ACs have been implemented
-3. Update the task file to check off (\`- [x]\`) any completed ACs
-4. Leave unchecked (\`- [ ]\`) any ACs that are not yet implemented
+📂 Task file location: ${taskFilePath}
 
-**IMPORTANT**:
-- Only mark an AC as complete if the code/implementation clearly satisfies it
-- If unsure or if the implementation is incomplete, leave the AC unchecked
-- Use the Edit tool to update the task file
-- After updating, provide a brief summary (e.g., "3/5 ACs completed")
+🎯 YOUR MISSION:
+1. Read the task file to extract all Acceptance Criteria (markdown checkboxes)
+2. For EACH AC, examine the codebase to determine if it's actually implemented
+3. Use the Edit tool to update the task file and check off (\`- [x]\`) any completed ACs
+4. Leave unchecked (\`- [ ]\`) any ACs that are NOT yet implemented
 
-**AC Completion Rules**:
-- AC is COMPLETE if: code exists, tests pass (if applicable), functionality works as described
-- AC is INCOMPLETE if: code is missing, implementation is partial, tests fail, or you're uncertain
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 AC COMPLETION CRITERIA (Use these to judge if an AC is done)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Current task file content:
+✅ Mark AC as COMPLETE (\`- [x]\`) ONLY if:
+   - The code/files described in the AC exist in the codebase
+   - The functionality described in the AC is implemented and working
+   - Tests (if mentioned in the AC) exist and would pass
+   - The AC's requirements are genuinely satisfied
+
+❌ Leave AC as INCOMPLETE (\`- [ ]\`) if:
+   - The code/files are missing or don't exist
+   - The implementation is partial or incomplete
+   - Tests are missing or would fail
+   - You're uncertain or the AC is ambiguous
+   - The AC describes future work or planning (not actual implementation)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔎 VERIFICATION WORKFLOW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+For EACH AC in the task file:
+1. Read the AC text carefully
+2. Use Grep/Glob/Read to search for evidence of implementation
+3. Determine if the AC's requirements are met
+4. Record your decision (complete = check, incomplete = leave unchecked)
+
+After reviewing ALL ACs:
+- Use the Edit tool to update the task file with your findings
+- Provide a summary (e.g., "Verified 3/5 ACs complete, 2 remain unchecked")
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📄 CURRENT TASK FILE CONTENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 \`\`\`markdown
 ${taskContent}
 \`\`\`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Now examine the codebase and update the task file with accurate AC completion status.`;
 }
