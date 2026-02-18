@@ -22,6 +22,7 @@ import {
   parseCollapsibleLines,
   isProgressiveLog,
   extractProgressiveMeta,
+  extractTaskIdFromMessage,
   type ProgressiveLogMeta,
   type CollapsibleLine
 } from '../utils/log-helpers';
@@ -78,6 +79,78 @@ function groupProgressiveLogs(logs: LogEntry[]): Array<LogEntry | LogEntry[]> {
   }
 
   return finalResult;
+}
+
+/**
+ * Renders a clickable task name that opens the task detail modal
+ */
+function TaskLink({
+  taskId,
+  taskName,
+  onClick
+}: {
+  taskId: string;
+  taskName: string;
+  onClick?: (taskId: string) => void;
+}) {
+  if (!onClick) {
+    return <span>&quot;{taskName}&quot;</span>;
+  }
+
+  return (
+    <button
+      type="button"
+      className="m-0 cursor-pointer border-none bg-transparent p-0 font-medium text-current underline decoration-current/30 underline-offset-2 transition-colors hover:decoration-current"
+      onClick={(e) => {
+        e.preventDefault();
+        onClick(taskId);
+      }}
+    >
+      &quot;{taskName}&quot;
+    </button>
+  );
+}
+
+/**
+ * Renders a message with clickable task links when task info is detected
+ */
+function MessageWithTaskLink({
+  message,
+  taskInfo,
+  onTaskClick
+}: {
+  message: string;
+  taskInfo: { taskId: string; taskName: string } | null;
+  onTaskClick?: (taskId: string) => void;
+}) {
+  if (!taskInfo || !onTaskClick) {
+    return <p className="m-0 whitespace-pre-wrap break-words text-xs leading-4 text-current sm:text-sm sm:leading-5">{message}</p>;
+  }
+
+  // Split message by the task name pattern to insert the clickable link
+  const parts = message.split(`"${taskInfo.taskName}"`);
+
+  if (parts.length === 1) {
+    // Task name not found in formatted message, render as plain text
+    return <p className="m-0 whitespace-pre-wrap break-words text-xs leading-4 text-current sm:text-sm sm:leading-5">{message}</p>;
+  }
+
+  return (
+    <p className="m-0 whitespace-pre-wrap break-words text-xs leading-4 text-current sm:text-sm sm:leading-5">
+      {parts.map((part, index) => (
+        <span key={index}>
+          {part}
+          {index < parts.length - 1 && (
+            <TaskLink
+              taskId={taskInfo.taskId}
+              taskName={taskInfo.taskName}
+              onClick={onTaskClick}
+            />
+          )}
+        </span>
+      ))}
+    </p>
+  );
 }
 
 /**
@@ -509,7 +582,8 @@ export function FeedTab({
   copyLiveFeedMessage,
   busy,
   orchestratorState,
-  fixingTaskId
+  fixingTaskId,
+  onTaskClick
 }: {
   logs: LogEntry[];
   logFeedRef: RefObject<HTMLDivElement | null>;
@@ -522,6 +596,7 @@ export function FeedTab({
   busy: Record<string, any>;
   orchestratorState: OrchestratorState | null;
   fixingTaskId?: string | null;
+  onTaskClick?: (taskId: string) => void;
 }) {
   const claudeWorking = orchestratorState?.active && orchestratorState.currentTaskId;
   const isChatDisabled = Boolean(busy.chat) || claudeWorking || Boolean(fixingTaskId);
@@ -645,6 +720,7 @@ export function FeedTab({
           const displayMessage = formatLiveFeedMessage(line);
           const modelRaw = extractModelFromMessage(line.message);
           const modelLabel = modelRaw ? formatModelLabel(modelRaw) : null;
+          const taskInfo = extractTaskIdFromMessage(line.message);
           const isOutgoing = sourceMeta.side === 'outgoing';
           const alignment = isOutgoing ? 'justify-end' : 'justify-start';
 
@@ -716,7 +792,11 @@ export function FeedTab({
                       onCopy={copyLiveFeedMessage}
                     />
                   ) : (
-                    <p className="m-0 whitespace-pre-wrap break-words text-xs leading-4 text-current sm:text-sm sm:leading-5">{displayMessage}</p>
+                    <MessageWithTaskLink
+                      message={displayMessage}
+                      taskInfo={taskInfo}
+                      onTaskClick={onTaskClick}
+                    />
                   )}
 
                   {modelLabel ? (
@@ -771,7 +851,11 @@ export function FeedTab({
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
             <span className="text-xs font-medium text-brand-primary sm:text-sm">
-              Claude is working on: &quot;{orchestratorState?.currentTaskName || orchestratorState?.currentTaskId}&quot;
+              Claude is working on: <TaskLink
+                taskId={orchestratorState?.currentTaskId || ''}
+                taskName={orchestratorState?.currentTaskName || orchestratorState?.currentTaskId || ''}
+                onClick={onTaskClick}
+              />
             </span>
           </div>
         ) : null}
@@ -811,37 +895,79 @@ export function FeedTab({
             </div>
           </div>
           <div className="flex w-full items-end gap-2">
-            <textarea
-              aria-label="Chat prompt"
-              placeholder={
-                claudeWorking
-                  ? 'Claude is working on a task...'
-                  : fixingTaskId
-                    ? 'Claude is fixing acceptance criteria...'
-                    : 'Ask Claude about this project...'
-              }
-              value={chatDraft}
-              disabled={isChatDisabled}
-              rows={1}
-              onChange={(e) => {
-                setChatDraft(e.target.value);
-                const el = e.target;
-                el.style.height = 'auto';
-                el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  if (!isChatDisabled) {
-                    sendClaudeChatMessage();
-                  }
+            {isChatDisabled ? (
+              <Tooltip
+                title="Chat unavailable"
+                description={
+                  claudeWorking
+                    ? `Claude is currently executing: ${orchestratorState?.currentTaskName || orchestratorState?.currentTaskId}`
+                    : fixingTaskId
+                      ? `Claude is fixing acceptance criteria for: ${fixingTaskId}`
+                      : 'Please wait for the current operation to complete'
                 }
-              }}
-              className={cx(
-                'min-w-0 flex-1 resize-none bg-transparent py-1 pl-2 text-sm text-primary outline-hidden placeholder:text-placeholder sm:text-md',
-                isChatDisabled && 'cursor-not-allowed text-disabled'
-              )}
-            />
+                delay={200}
+              >
+                <TooltipTrigger className="min-w-0 flex-1">
+                  <textarea
+                    aria-label="Chat prompt"
+                    placeholder={
+                      claudeWorking
+                        ? 'Claude is working on a task...'
+                        : fixingTaskId
+                          ? 'Claude is fixing acceptance criteria...'
+                          : 'Ask Claude about this project...'
+                    }
+                    value={chatDraft}
+                    disabled={isChatDisabled}
+                    rows={1}
+                    onChange={(e) => {
+                      setChatDraft(e.target.value);
+                      const el = e.target;
+                      el.style.height = 'auto';
+                      el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                        e.preventDefault();
+                        if (!isChatDisabled) {
+                          sendClaudeChatMessage();
+                        }
+                      }
+                    }}
+                    className={cx(
+                      'min-w-0 w-full flex-1 resize-none bg-transparent py-1 pl-2 text-sm text-primary outline-hidden placeholder:text-placeholder sm:text-md',
+                      isChatDisabled && 'cursor-not-allowed text-disabled'
+                    )}
+                  />
+                </TooltipTrigger>
+              </Tooltip>
+            ) : (
+              <textarea
+                aria-label="Chat prompt"
+                placeholder="Ask Claude about this project..."
+                value={chatDraft}
+                disabled={isChatDisabled}
+                rows={1}
+                onChange={(e) => {
+                  setChatDraft(e.target.value);
+                  const el = e.target;
+                  el.style.height = 'auto';
+                  el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    if (!isChatDisabled) {
+                      sendClaudeChatMessage();
+                    }
+                  }
+                }}
+                className={cx(
+                  'min-w-0 flex-1 resize-none bg-transparent py-1 pl-2 text-sm text-primary outline-hidden placeholder:text-placeholder sm:text-md',
+                  isChatDisabled && 'cursor-not-allowed text-disabled'
+                )}
+              />
+            )}
             {isChatDisabled ? (
               <Tooltip
                 title="Claude is busy"
