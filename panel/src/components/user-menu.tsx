@@ -24,8 +24,8 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
           <p className="truncate text-xs text-tertiary">{user.email}</p>
         </div>
         <Button
-          color="ghost"
-          size="small"
+          color="tertiary"
+          size="sm"
           onClick={logout}
           aria-label="Sign out"
         >
@@ -52,7 +52,7 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
       </div>
       <Button
         color="secondary"
-        size="small"
+        size="sm"
         className="w-full justify-center"
         onClick={logout}
       >

@@ -104,9 +104,8 @@ export function LoginPage({ isDark }: { isDark: boolean }) {
                   type="password"
                   placeholder="Enter your passkey"
                   value={passkey}
-                  onChange={(e) => setPasskey(e.target.value)}
-                  disabled={submitting}
-                  className="w-full"
+                  onChange={(value) => setPasskey(value || '')}
+                  isDisabled={submitting}
                 />
                 {passkeyError && (
                   <p className="mt-1 text-xs text-danger">{passkeyError}</p>
@@ -114,12 +113,12 @@ export function LoginPage({ isDark }: { isDark: boolean }) {
               </div>
               <Button
                 type="submit"
-                color="brand"
-                size="large"
+                color="primary"
+                size="lg"
                 className="w-full justify-center"
-                disabled={!passkey || submitting}
+                iconLeading={Key01}
+                isDisabled={!passkey || submitting}
               >
-                <Icon icon={Key01} className="size-5" />
                 {submitting ? 'Signing in...' : 'Sign in with Passkey'}
               </Button>
             </form>
@@ -143,7 +142,7 @@ export function LoginPage({ isDark }: { isDark: boolean }) {
               {providers.includes('github') && (
                 <Button
                   color="secondary"
-                  size="large"
+                  size="lg"
                   className="w-full justify-center"
                   onClick={() => handleOAuthLogin('github')}
                 >
@@ -157,7 +156,7 @@ export function LoginPage({ isDark }: { isDark: boolean }) {
               {providers.includes('google') && (
                 <Button
                   color="secondary"
-                  size="large"
+                  size="lg"
                   className="w-full justify-center"
                   onClick={() => handleOAuthLogin('google')}
                 >
