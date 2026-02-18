@@ -129,7 +129,7 @@ export function SidebarNav({
               <Icon icon={item.icon} className="size-5" />
               <span>{item.label}</span>
               {showBadge ? (
-                <span className="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-primary-solid text-[11px] font-bold text-primary">
+                <span className="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-brand-solid text-[11px] font-bold text-white">
                   {unreadFeedCount > 99 ? '99+' : unreadFeedCount}
                 </span>
               ) : null}
@@ -292,7 +292,7 @@ export function SidebarNav({
           <Icon icon={AlertOctagon} className="size-5" />
           <span>Debug Errors</span>
           {errorCount > 0 ? (
-            <span className="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-primary-solid text-[11px] font-bold text-primary">
+            <span className="ml-auto inline-flex size-5 items-center justify-center rounded-full bg-brand-solid text-[11px] font-bold text-white">
               {errorCount > 99 ? '99+' : errorCount}
             </span>
           ) : null}
