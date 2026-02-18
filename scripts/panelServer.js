@@ -337,12 +337,12 @@ function pushLog(level, source, message, extra) {
       level,
       source,
       message,
+      ...extra,
       meta: {
+        ...(extra?.meta || {}),
         groupId: startupGroupId,
-        state,
-        ...(extra?.meta || {})
-      },
-      ...extra
+        state
+      }
     };
 
     logHistory.push(entry);
