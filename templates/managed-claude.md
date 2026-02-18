@@ -51,21 +51,20 @@ The following environment variables are set for every task execution:
 
 ## Acceptance Criteria Tracking (MANDATORY)
 
-Each task prompt includes a **numbered AC reference table** (AC-1, AC-2, etc.).
-You MUST track completion using these AC numbers during execution:
+Each task prompt includes a **numbered AC reference table** (AC-1, AC-2, etc.) and the **task file path**.
 
-As you complete EACH Acceptance Criteria, emit a JSON marker IMMEDIATELY on its own line:
+As you complete each AC, you MUST do two things:
 
-```
-{"ac_complete": <number>}
-```
+1. **Edit the task file** to check off the AC: change `- [ ]` to `- [x]` using the Edit tool.
+2. **Emit a JSON marker** on its own line for real-time tracking: `{"ac_complete": <number>}`
 
-**Example:** After completing AC-1, emit: `{"ac_complete": 1}`
+**Example:** After completing AC-1:
+- Edit the task file to change `- [ ] First criterion` to `- [x] First criterion`
+- Emit: `{"ac_complete": 1}`
 
 **Rules:**
-- Use the AC number from the reference table in the task prompt.
-- Each marker MUST be a standalone JSON object on its own line.
-- Emit this marker IMMEDIATELY after completing each AC, before moving to the next.
+- Update checkboxes as you go — do not wait until the end.
+- The orchestrator reads the task file after execution. Unchecked ACs = task rejection.
 - Do NOT include `ac_complete` markers inside the final response JSON.
 
 ## Response Format (MANDATORY)
@@ -112,9 +111,10 @@ If you are blocked at any point, emit the final JSON immediately with `"status":
 ## General Rules
 
 - Complete all Acceptance Criteria in the task.
-- Track EACH completed AC using `{"ac_complete": <number>}` JSON markers (see above).
-- **BEFORE emitting final JSON:** Verify ALL ACs are complete. Re-read the AC list and confirm you emitted every AC number.
-- If any AC is incomplete, DO NOT return `"done"` status. Complete the missing AC first.
+- After completing each AC, edit the task file to check it off (`- [ ]` → `- [x]`).
+- Also emit `{"ac_complete": <number>}` JSON markers for real-time tracking.
+- **BEFORE emitting final JSON:** verify all AC checkboxes in the task file are checked.
+- If any AC is incomplete, DO NOT return `"done"` status. Complete it first.
 - The orchestrator will verify all AC checkboxes are checked. Incomplete ACs will cause task rejection.
 - On successful completion, create a commit with a clear, objective message.
 - Never include secrets in code, commits, or logs.

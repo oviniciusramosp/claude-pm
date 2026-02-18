@@ -15,7 +15,8 @@ export function buildTaskPrompt(task, markdown, options = {}) {
     forceTestCreation = false,
     forceTestRun = false,
     forceCommit = false,
-    enableMultiAgents = false
+    enableMultiAgents = false,
+    taskFilePath = ''
   } = typeof options === 'string' ? { extraPrompt: options } : options;
 
   const agents = task.agents.length > 0 ? task.agents.join(', ') : '(no agents specified)';
@@ -40,97 +41,70 @@ export function buildTaskPrompt(task, markdown, options = {}) {
     basePrompt.push(acTable);
   }
 
-  // ALWAYS include AC tracking instructions in the task prompt for maximum visibility
-  // (even when claudeMdInjected=true, as the CLAUDE.md reference can be missed in large contexts)
-  basePrompt.push(
-    '='.repeat(80),
-    '🚨 ACCEPTANCE CRITERIA TRACKING (MANDATORY - DO NOT SKIP) 🚨',
-    '='.repeat(80),
-    '',
-    '⚠️ CRITICAL: This is NOT optional. The orchestrator REQUIRES these markers to track progress.',
-    '',
-    'As you complete EACH Acceptance Criteria, emit a JSON marker IMMEDIATELY:',
-    '',
-    '  {"ac_complete": <number>}',
-    '',
-    '📋 STEP-BY-STEP WORKFLOW:',
-    '',
-    '  1. Read AC-1 from the reference table above',
-    '  2. Complete the work for AC-1',
-    '  3. IMMEDIATELY emit: {"ac_complete": 1}',
-    '  4. Move to AC-2',
-    '  5. Complete the work for AC-2',
-    '  6. IMMEDIATELY emit: {"ac_complete": 2}',
-    '  7. Repeat for ALL remaining ACs',
-    '',
-    '✅ CORRECT EXAMPLE:',
-    '',
-    '  [After completing AC-3]',
-    '  {"ac_complete": 3}',
-    '',
-    '  [Continue with next AC]',
-    '  [After completing AC-4]',
-    '  {"ac_complete": 4}',
-    '',
-    '❌ WRONG: Do NOT emit all at the end. Emit DURING execution as you complete each AC.',
-    '❌ WRONG: Do NOT include ac_complete inside the final status JSON.',
-    '❌ WRONG: Do NOT skip emitting markers thinking "I\'ll just complete everything".',
-    '',
-    '🎯 WHY THIS MATTERS:',
-    '- These markers let the orchestrator track progress in real-time',
-    '- They update the visual board so users can see progress',
-    '- They prevent work loss if execution is interrupted',
-    '- They are REQUIRED for the task to be marked as done',
-    '',
-    '⚠️ CONSEQUENCE OF NOT EMITTING MARKERS:',
-    '- Task will be rejected even if work is complete',
-    '- Automatic AC fix will be triggered (wastes time and resources)',
-    '- You may be forced to redo the entire task',
-    '',
-    '='.repeat(80),
-    ''
-  );
+  // AC tracking instructions: primary = edit the task file, secondary = JSON markers
+  if (taskFilePath && acList.length > 0) {
+    basePrompt.push(
+      '='.repeat(80),
+      'ACCEPTANCE CRITERIA TRACKING (MANDATORY)',
+      '='.repeat(80),
+      '',
+      `Your task file is at: ${taskFilePath}`,
+      '',
+      'As you complete each Acceptance Criteria, you MUST update the task file to check it off.',
+      'Use the Edit tool to change `- [ ]` to `- [x]` for each completed AC.',
+      '',
+      'Example: after completing AC-1, edit the task file to change:',
+      '  - [ ] First acceptance criterion',
+      'to:',
+      '  - [x] First acceptance criterion',
+      '',
+      'Do this for EACH AC as you complete it — do not wait until the end.',
+      'The orchestrator reads this file after execution. Any unchecked AC means task rejection.',
+      '',
+      'Additionally, emit a JSON marker on its own line for real-time progress tracking:',
+      '  {"ac_complete": <number>}',
+      '',
+      '='.repeat(80),
+      ''
+    );
+  } else if (acList.length > 0) {
+    // Fallback: no file path available, use JSON markers only
+    basePrompt.push(
+      '='.repeat(80),
+      'ACCEPTANCE CRITERIA TRACKING (MANDATORY)',
+      '='.repeat(80),
+      '',
+      'As you complete each AC, emit a JSON marker on its own line:',
+      '  {"ac_complete": <number>}',
+      '',
+      'Example: after completing AC-3, emit: {"ac_complete": 3}',
+      '',
+      'Emit markers as you go — do not wait until the end.',
+      'Do NOT include ac_complete inside the final response JSON.',
+      '',
+      '='.repeat(80),
+      ''
+    );
+  }
 
   basePrompt.push(
     normalizeText(markdown || '(no description)'),
     ''
   );
 
-  // ALWAYS include execution rules for AC tracking (critical for task success)
+  // Execution rules
   basePrompt.push(
     '='.repeat(80),
-    '📜 EXECUTION RULES (MANDATORY - FOLLOW EXACTLY)',
+    'EXECUTION RULES',
     '='.repeat(80),
     '',
-    '1️⃣ WORK THROUGH ACs SEQUENTIALLY:',
-    '   - Go through ACs in order (AC-1, AC-2, AC-3, ...)',
-    '   - Complete the work for each AC',
-    '   - IMMEDIATELY emit {"ac_complete": <N>} after completing each one',
-    '   - Do NOT batch emit markers at the end',
-    '',
-    '2️⃣ EMIT MARKERS DURING EXECUTION (NOT AFTER):',
-    '   ✅ Correct: Complete AC-1 → emit {"ac_complete": 1} → Complete AC-2 → emit {"ac_complete": 2}',
-    '   ❌ Wrong: Complete all ACs → emit all markers at the end',
-    '   ❌ Wrong: Skip emitting markers entirely',
-    '',
-    '3️⃣ BEFORE EMITTING FINAL JSON WITH "status":"done":',
-    '   - STOP and re-read EVERY AC in the reference table above',
-    '   - For EACH AC, verify you:',
-    '     a) Actually completed the work (not just planned it)',
-    '     b) Emitted the {"ac_complete": <N>} marker for that AC',
-    '   - Ask yourself: "Did I emit {"ac_complete": 1}? {"ac_complete": 2}? ... {"ac_complete": N}?"',
-    '   - If ANY marker was not emitted, EMIT IT NOW before the final JSON',
-    '   - If ANY AC is incomplete, COMPLETE IT NOW',
-    '',
-    '4️⃣ VERIFICATION GATE:',
-    '   - The orchestrator will count unchecked ACs after you finish',
-    '   - If ANY AC is unchecked, your task will be REJECTED',
-    '   - You will be forced to redo the work via AC fix',
-    '   - This wastes time and resources — emit markers correctly the first time',
-    '',
-    '5️⃣ COMMIT:',
-    '   - On successful completion, create a commit with a clear, objective message',
-    '   - Never include secrets in code, commits, or logs',
+    '- Complete ALL Acceptance Criteria. Every single one.',
+    '- After completing each AC, update the task file checkbox (`- [ ]` → `- [x]`).',
+    '- Before finishing, re-read the AC reference table and verify every AC is done.',
+    '- If any AC is incomplete, complete it before emitting the final JSON.',
+    '- The orchestrator will reject the task if any checkbox remains unchecked.',
+    '- On successful completion, create a commit with a clear, objective message.',
+    '- Never include secrets in code, commits, or logs.',
     '',
     '='.repeat(80),
     ''
@@ -192,62 +166,24 @@ export function buildTaskPrompt(task, markdown, options = {}) {
     basePrompt.push('');
   }
 
-  // ALWAYS include response requirements (critical for parsing execution results)
+  // Response requirements
   basePrompt.push(
     '='.repeat(80),
-    '🎯 RESPONSE REQUIREMENTS (MANDATORY)',
+    'RESPONSE REQUIREMENTS',
     '='.repeat(80),
     '',
-    '📝 COMPLETE EXECUTION FLOW EXAMPLE:',
+    'After completing all work, respond with a final JSON object on a single line:',
     '',
-    '  [You start working on AC-1]',
-    '  [You complete AC-1]',
-    '  {"ac_complete": 1}',
+    '{"status":"done","summary":"...","notes":"...","files":["..."],"tests":"..."}',
     '',
-    '  [You start working on AC-2]',
-    '  [You complete AC-2]',
-    '  {"ac_complete": 2}',
+    '- status: "done" only when ALL ACs are checked off. "blocked" if stuck.',
+    '- summary: What was accomplished.',
+    '- notes: Important details or decisions.',
+    '- files: Array of created/modified file paths.',
+    '- tests: Test results summary or "N/A".',
     '',
-    '  [You complete all remaining ACs, emitting {"ac_complete": N} for each]',
-    '',
-    '  [You verify all ACs are complete]',
-    '  [You create a commit]',
-    '',
-    '  [ONLY THEN you emit the final JSON:]',
-    '  {"status":"done","summary":"Completed all acceptance criteria","notes":"...","files":["..."],"tests":"..."}',
-    '',
-    '⚠️ CRITICAL: Notice how {"ac_complete": N} markers come BEFORE the final JSON.',
-    '',
-    '━'.repeat(80),
-    '',
-    'Required final JSON structure:',
-    '{',
-    '  "status": "done|blocked",',
-    '  "summary": "Brief summary of what was done",',
-    '  "notes": "Additional details or context",',
-    '  "files": ["path/to/file1.js", "path/to/file2.ts"],',
-    '  "tests": "Test results summary"',
-    '}',
-    '',
-    'Field requirements:',
-    '- status: Use "done" ONLY when ALL ACs are complete AND all markers emitted. Use "blocked" if stuck.',
-    '- summary: Concise description of what was accomplished.',
-    '- notes: Any important details, decisions, or context.',
-    '- files: Array of file paths that were created or modified.',
-    '- tests: Summary of test results or "N/A" if not applicable.',
-    '',
-    '🚨 PRE-FLIGHT CHECKLIST (BEFORE EMITTING FINAL JSON):',
-    '  □ Did I complete ALL ACs?',
-    '  □ Did I emit {"ac_complete": 1}?',
-    '  □ Did I emit {"ac_complete": 2}?',
-    '  □ ... (repeat for all ACs)',
-    '  □ Did I create a commit?',
-    '  □ Is the task genuinely done?',
-    '',
-    '⚠️ If you answer NO to ANY checkbox above, DO NOT emit "status":"done".',
-    '',
-    'IMPORTANT: The final JSON must contain a "status" field. Do NOT include "ac_complete" in this JSON.',
-    'If you are blocked at any point, emit the final JSON immediately with status "blocked".',
+    'Before emitting "status":"done", verify all AC checkboxes in the task file are checked.',
+    'Do NOT include "ac_complete" in this final JSON.',
     '',
     '='.repeat(80),
     ''
@@ -258,26 +194,6 @@ export function buildTaskPrompt(task, markdown, options = {}) {
     basePrompt.push(extraPrompt.trim());
     basePrompt.push('');
   }
-
-  // Final ultra-visible reminder before execution starts
-  basePrompt.push(
-    '',
-    '━'.repeat(80),
-    '🚨 FINAL REMINDER BEFORE YOU START 🚨',
-    '━'.repeat(80),
-    '',
-    'As you work through this task, remember:',
-    '',
-    '  1. Complete an AC → IMMEDIATELY emit {"ac_complete": N}',
-    '  2. Do this for EVERY SINGLE AC',
-    '  3. Do NOT wait until the end to emit markers',
-    '  4. Before emitting final JSON, verify ALL markers were emitted',
-    '',
-    'This is NOT optional. This is REQUIRED for task success.',
-    '',
-    '━'.repeat(80),
-    ''
-  );
 
   return basePrompt.join('\n');
 }

@@ -15,6 +15,21 @@ function normalize(value) {
   return String(value).trim().toLowerCase();
 }
 
+/**
+ * Compute relative path from Claude's workdir to the task file.
+ * Returns empty string if path cannot be resolved.
+ */
+function resolveTaskFilePath(task, workdir) {
+  if (!task._filePath || !workdir) {
+    return '';
+  }
+  try {
+    return path.relative(workdir, task._filePath);
+  } catch {
+    return '';
+  }
+}
+
 const OPUS_REVIEW_MODEL = 'claude-opus-4-6';
 
 function extractTaskCode(task) {
@@ -393,12 +408,14 @@ export class Orchestrator {
       await this.runStore.markStarted(task);
 
       const markdown = await this.boardClient.getTaskMarkdown(task.id);
+      const taskFilePath = resolveTaskFilePath(task, this.config.claude.workdir);
       const prompt = buildTaskPrompt(task, markdown, {
         extraPrompt: this.config.claude.extraPrompt,
         forceTestCreation: this.config.claude.forceTestCreation,
         forceTestRun: this.config.claude.forceTestRun,
         forceCommit: this.config.claude.forceCommit,
-        enableMultiAgents: this.config.claude.enableMultiAgents
+        enableMultiAgents: this.config.claude.enableMultiAgents,
+        taskFilePath
       });
       if (this.config.claude.logPrompt) {
         this.logger.block(`Prompt sent to Claude Code for "${taskLabel(task)}"`, prompt);
@@ -800,12 +817,14 @@ export class Orchestrator {
       await this.runStore.markStarted(task);
 
       const markdown = await this.boardClient.getTaskMarkdown(task.id);
+      const taskFilePath = resolveTaskFilePath(task, this.config.claude.workdir);
       const prompt = buildTaskPrompt(task, markdown, {
         extraPrompt: this.config.claude.extraPrompt,
         forceTestCreation: this.config.claude.forceTestCreation,
         forceTestRun: this.config.claude.forceTestRun,
         forceCommit: this.config.claude.forceCommit,
-        enableMultiAgents: this.config.claude.enableMultiAgents
+        enableMultiAgents: this.config.claude.enableMultiAgents,
+        taskFilePath
       });
       if (this.config.claude.logPrompt) {
         this.logger.block(`Prompt sent to Claude Code for "${taskLabel(task)}"`, prompt);
