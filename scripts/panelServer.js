@@ -660,13 +660,70 @@ function startManagedProcess(target, command, source, envOverrides = {}) {
   target.startedAt = new Date().toISOString();
   target.pid = child.pid || null;
 
-  pushLog('success', source, `${processDisplayName(source)} started.`);
-
   function buildLogExtra(parsed) {
     if (parsed.isPrompt) return { isPrompt: true, promptTitle: parsed.promptTitle };
     if (parsed.isAcComplete) return { isAcComplete: true };
     if (parsed.isToolUse) return { isToolUse: true };
     return undefined;
+  }
+
+  // Startup log collector: buffers startup-phase messages and emits them as a
+  // single "Automation App started." bubble with collapsible detail lines.
+  const startupCollector = {
+    buffer: [],
+    timer: null,
+    flushed: false,
+
+    isStartupMessage(message) {
+      const clean = String(message || '').trim();
+      return STARTUP_LOG_PATTERNS.some((pattern) => pattern.test(clean));
+    },
+
+    flush() {
+      if (this.flushed) return;
+      this.flushed = true;
+      if (this.timer) {
+        clearTimeout(this.timer);
+        this.timer = null;
+      }
+      const extra = this.buffer.length > 0
+        ? { meta: { collapsibleLines: this.buffer } }
+        : undefined;
+      pushLog('success', source, `${processDisplayName(source)} started.`, extra);
+    },
+
+    resetTimer() {
+      if (this.timer) {
+        clearTimeout(this.timer);
+      }
+      this.timer = setTimeout(() => this.flush(), STARTUP_BUFFER_WINDOW_MS);
+    },
+
+    /** Returns true if the message was consumed (buffered or triggered flush). */
+    handle(parsed) {
+      if (this.flushed) return false;
+
+      if (this.isStartupMessage(parsed.message)) {
+        this.buffer.push({ level: parsed.level, text: parsed.message });
+        this.resetTimer();
+        return true;
+      }
+
+      // Non-startup message arrived — flush the startup bubble first, then let
+      // the caller emit the non-startup message normally.
+      this.flush();
+      return false;
+    }
+  };
+
+  function forwardLog(parsed) {
+    if (shouldSuppressProcessMessage(source, parsed.message)) {
+      return;
+    }
+    if (startupCollector.handle(parsed)) {
+      return;
+    }
+    pushLog(parsed.level, resolveProcessLogSource(source, parsed), parsed.message, buildLogExtra(parsed));
   }
 
   // Capture output buffers for debugging (last 5000 chars of each stream)
@@ -675,24 +732,12 @@ function startManagedProcess(target, command, source, envOverrides = {}) {
 
   const stdoutForwarder = createProcessLogForwarder({
     fallbackLevel: 'info',
-    onLog: (parsed) => {
-      if (shouldSuppressProcessMessage(source, parsed.message)) {
-        return;
-      }
-
-      pushLog(parsed.level, resolveProcessLogSource(source, parsed), parsed.message, buildLogExtra(parsed));
-    }
+    onLog: forwardLog
   });
 
   const stderrForwarder = createProcessLogForwarder({
     fallbackLevel: 'warn',
-    onLog: (parsed) => {
-      if (shouldSuppressProcessMessage(source, parsed.message)) {
-        return;
-      }
-
-      pushLog(parsed.level, resolveProcessLogSource(source, parsed), parsed.message, buildLogExtra(parsed));
-    }
+    onLog: forwardLog
   });
 
   const stdoutReader = readLines(child.stdout, (line) => {
@@ -718,6 +763,7 @@ function startManagedProcess(target, command, source, envOverrides = {}) {
   child.on('close', (code, signal) => {
     stdoutForwarder.flush();
     stderrForwarder.flush();
+    startupCollector.flush();
     stdoutReader.close();
     stderrReader.close();
 

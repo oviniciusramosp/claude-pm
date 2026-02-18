@@ -453,6 +453,18 @@ export function formatModelLabel(model: string): string {
   return model;
 }
 
+export interface CollapsibleLine {
+  level: string;
+  text: string;
+}
+
+export function parseCollapsibleLines(entry: LogEntry): CollapsibleLine[] | null {
+  if (entry.meta && Array.isArray(entry.meta.collapsibleLines) && entry.meta.collapsibleLines.length > 0) {
+    return entry.meta.collapsibleLines;
+  }
+  return null;
+}
+
 export function formatFeedTimestamp(value: unknown): string {
   const parsedDate = new Date(value as string || Date.now());
   if (Number.isNaN(parsedDate.getTime())) {
