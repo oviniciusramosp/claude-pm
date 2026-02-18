@@ -241,7 +241,6 @@ const STARTUP_LOG_PATTERNS = [
   /^>\s+[\w-]+@[\d.]+\s+start$/i, // npm script line like "> product-manager-automation@1.60.0 start"
   /^>\s+NODE_OPTIONS=/i, // npm script command line
 ];
-const STARTUP_BUFFER_WINDOW_MS = 3000;
 
 // Startup message progressive grouping state
 let startupGroupId = null;
@@ -778,60 +777,8 @@ function startManagedProcess(target, command, source, envOverrides = {}) {
     return undefined;
   }
 
-  // Startup log collector: buffers startup-phase messages and emits them as a
-  // single "Automation App started." bubble with collapsible detail lines.
-  const startupCollector = {
-    buffer: [],
-    timer: null,
-    flushed: false,
-
-    isStartupMessage(message) {
-      const clean = String(message || '').trim();
-      return STARTUP_LOG_PATTERNS.some((pattern) => pattern.test(clean));
-    },
-
-    flush() {
-      if (this.flushed) return;
-      this.flushed = true;
-      if (this.timer) {
-        clearTimeout(this.timer);
-        this.timer = null;
-      }
-      const extra = this.buffer.length > 0
-        ? { meta: { collapsibleLines: this.buffer } }
-        : undefined;
-      pushLog('success', source, `${processDisplayName(source)} started.`, extra);
-    },
-
-    resetTimer() {
-      if (this.timer) {
-        clearTimeout(this.timer);
-      }
-      this.timer = setTimeout(() => this.flush(), STARTUP_BUFFER_WINDOW_MS);
-    },
-
-    /** Returns true if the message was consumed (buffered or triggered flush). */
-    handle(parsed) {
-      if (this.flushed) return false;
-
-      if (this.isStartupMessage(parsed.message)) {
-        this.buffer.push({ level: parsed.level, text: parsed.message });
-        this.resetTimer();
-        return true;
-      }
-
-      // Non-startup message arrived — flush the startup bubble first, then let
-      // the caller emit the non-startup message normally.
-      this.flush();
-      return false;
-    }
-  };
-
   function forwardLog(parsed) {
     if (shouldSuppressProcessMessage(source, parsed.message)) {
-      return;
-    }
-    if (startupCollector.handle(parsed)) {
       return;
     }
     pushLog(parsed.level, resolveProcessLogSource(source, parsed), parsed.message, buildLogExtra(parsed));
@@ -874,7 +821,6 @@ function startManagedProcess(target, command, source, envOverrides = {}) {
   child.on('close', (code, signal) => {
     stdoutForwarder.flush();
     stderrForwarder.flush();
-    startupCollector.flush();
     stdoutReader.close();
     stderrReader.close();
 
