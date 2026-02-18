@@ -243,10 +243,11 @@ const STARTUP_LOG_PATTERNS = [
 ];
 const STARTUP_BUFFER_WINDOW_MS = 3000;
 
-// Startup message grouping state
-let startupBuffer = [];
-let startupBufferTimer = null;
-let isCollectingStartup = false;
+// Startup message progressive grouping state
+let startupGroupId = null;
+let startupMessageCount = 0;
+let startupGroupTimer = null;
+const STARTUP_GROUP_TIMEOUT_MS = 5000; // Close startup group after 5s of no new messages
 const CLAUDE_RAW_NOISE_PATTERNS = [
   /you(?:'|’)ve hit your limit/i,
   /hit your limit/i
@@ -279,75 +280,96 @@ function isStartupMessage(message) {
   return STARTUP_LOG_PATTERNS.some((pattern) => pattern.test(clean));
 }
 
-function flushStartupBuffer() {
-  if (startupBufferTimer) {
-    clearTimeout(startupBufferTimer);
-    startupBufferTimer = null;
-  }
-
-  if (startupBuffer.length === 0) {
-    isCollectingStartup = false;
+function closeStartupGroup() {
+  if (!startupGroupId) {
     return;
   }
 
-  // Create a consolidated startup log with expandable details
-  const detailLines = startupBuffer.map(item => ({
-    level: item.level,
-    message: item.message
-  }));
-
-  const summary = `Automation App started successfully with ${startupBuffer.length} configuration${startupBuffer.length === 1 ? '' : 's'}`;
-
-  const consolidatedEntry = {
+  const completeEntry = {
     id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     ts: new Date().toISOString(),
     level: 'success',
     source: 'api',
-    message: summary,
-    isStartupGroup: true,
-    startupDetails: detailLines
+    message: `Automation App started successfully (${startupMessageCount} configuration${startupMessageCount === 1 ? '' : 's'})`,
+    meta: {
+      groupId: startupGroupId,
+      state: 'complete',
+      duration: '' // Could calculate if we stored start time
+    }
   };
 
-  logHistory.push(consolidatedEntry);
+  logHistory.push(completeEntry);
   if (logHistory.length > MAX_LOG_LINES) {
     logHistory.shift();
   }
 
-  appendLogToDisk(consolidatedEntry);
+  appendLogToDisk(completeEntry);
 
-  const payload = `data: ${JSON.stringify(consolidatedEntry)}\n\n`;
+  const payload = `data: ${JSON.stringify(completeEntry)}\n\n`;
   for (const client of logClients) {
     client.write(payload);
   }
 
-  startupBuffer = [];
-  isCollectingStartup = false;
+  startupGroupId = null;
+  startupMessageCount = 0;
+  if (startupGroupTimer) {
+    clearTimeout(startupGroupTimer);
+    startupGroupTimer = null;
+  }
 }
 
 function pushLog(level, source, message, extra) {
   // Check if this is a startup message
   if (source === 'api' && isStartupMessage(message)) {
-    // Start collecting startup messages if not already
-    if (!isCollectingStartup) {
-      isCollectingStartup = true;
-      startupBuffer = [];
+    // Start new startup group if not already active
+    if (!startupGroupId) {
+      startupGroupId = `startup-${Date.now()}`;
+      startupMessageCount = 0;
     }
 
-    // Add to startup buffer
-    startupBuffer.push({ level, message, ...extra });
+    startupMessageCount++;
 
-    // Reset the timer
-    if (startupBufferTimer) {
-      clearTimeout(startupBufferTimer);
+    // Determine state: first message is 'start', subsequent are 'progress'
+    const state = startupMessageCount === 1 ? 'start' : 'progress';
+
+    const entry = {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      ts: new Date().toISOString(),
+      level,
+      source,
+      message,
+      meta: {
+        groupId: startupGroupId,
+        state,
+        ...(extra?.meta || {})
+      },
+      ...extra
+    };
+
+    logHistory.push(entry);
+    if (logHistory.length > MAX_LOG_LINES) {
+      logHistory.shift();
     }
-    startupBufferTimer = setTimeout(flushStartupBuffer, STARTUP_BUFFER_WINDOW_MS);
 
-    return; // Don't emit this log immediately
+    appendLogToDisk(entry);
+
+    const payload = `data: ${JSON.stringify(entry)}\n\n`;
+    for (const client of logClients) {
+      client.write(payload);
+    }
+
+    // Reset the timer - close the group after N seconds of no new startup messages
+    if (startupGroupTimer) {
+      clearTimeout(startupGroupTimer);
+    }
+    startupGroupTimer = setTimeout(closeStartupGroup, STARTUP_GROUP_TIMEOUT_MS);
+
+    return;
   }
 
-  // If we were collecting startup messages and this is not a startup message, flush the buffer
-  if (isCollectingStartup) {
-    flushStartupBuffer();
+  // If we were collecting startup messages and this is not a startup message, close the group
+  if (startupGroupId) {
+    closeStartupGroup();
   }
 
   const entry = {

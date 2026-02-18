@@ -583,64 +583,6 @@ function CollapsibleLogBubble({
   );
 }
 
-/**
- * Renders a startup group bubble with expandable configuration details
- */
-function StartupGroupBubble({
-  mainMessage,
-  details,
-  onCopy
-}: {
-  mainMessage: string;
-  details: Array<{ level: string; message: string }>;
-  onCopy: (text: string) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-
-  const copyText = `${mainMessage}\n\n${details.map((d) => `[${d.level.toUpperCase()}] ${d.message}`).join('\n')}`;
-
-  return (
-    <div className="space-y-2">
-      <p className="m-0 whitespace-pre-wrap break-words text-xs font-medium leading-4 text-current sm:text-sm sm:leading-5">{mainMessage}</p>
-
-      <button
-        type="button"
-        className="m-0 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left text-xs font-medium leading-4 text-current/70 hover:text-current/90 hover:opacity-80 sm:text-sm sm:leading-5"
-        onClick={() => setExpanded((prev) => !prev)}
-        aria-expanded={expanded}
-      >
-        <Icon icon={expanded ? ChevronDown : ChevronRight} className="size-3.5 shrink-0" />
-        <span>Show {details.length} configuration detail{details.length === 1 ? '' : 's'}</span>
-      </button>
-
-      {expanded ? (
-        <div className="relative">
-          <div className="max-h-[300px] space-y-1 overflow-auto rounded-sm bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3">
-            {details.map((detail, i) => {
-              const level = normalizeLogLevel(detail.level);
-              const meta = logLevelMeta(level);
-              return (
-                <div key={i} className="flex items-start gap-1.5">
-                  <Icon icon={meta.icon} className="mt-0.5 size-3 shrink-0 opacity-60" />
-                  <span className="opacity-85">{detail.message}</span>
-                </div>
-              );
-            })}
-          </div>
-          <Button
-            size="sm"
-            color="tertiary"
-            className="absolute right-2 top-2 h-6 w-6 shrink-0 [&_svg]:!size-3"
-            aria-label="Copy details"
-            iconLeading={Copy01}
-            onPress={() => onCopy(copyText)}
-          />
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 export function FeedTab({
   logs,
   logFeedRef,
@@ -880,12 +822,6 @@ export function FeedTab({
                     <ExpandablePrompt
                       title={line.promptTitle || 'Prompt sent to Claude Code'}
                       content={displayMessage}
-                      onCopy={copyLiveFeedMessage}
-                    />
-                  ) : line.isStartupGroup && line.startupDetails ? (
-                    <StartupGroupBubble
-                      mainMessage={displayMessage}
-                      details={line.startupDetails}
                       onCopy={copyLiveFeedMessage}
                     />
                   ) : collapsibleLines ? (
