@@ -1,7 +1,7 @@
 // panel/src/components/sidebar-nav.tsx
 
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertOctagon, Asterisk02, ChevronDown, LayersThree01, Moon01, PauseCircle, PlayCircle, Settings01, StopCircle, Sun } from '@untitledui/icons';
+import { AlertOctagon, Asterisk02, ChevronDown, LayersThree01, Moon01, PauseCircle, PlayCircle, Server01, Settings01, StopCircle, Sun } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { Tooltip, TooltipTrigger } from './base/tooltip/tooltip';
 import { cx } from '@/utils/cx';
@@ -17,6 +17,7 @@ export function SidebarNav({
   isDark,
   onThemeToggle,
   apiRunning,
+  apiManagedByPanel,
   isPaused,
   isEpicRunning,
   apiHealthStatus,
@@ -40,6 +41,7 @@ export function SidebarNav({
   isDark: boolean;
   onThemeToggle: () => void;
   apiRunning: boolean;
+  apiManagedByPanel: boolean;
   isPaused: boolean;
   isEpicRunning: boolean;
   apiHealthStatus: { label: string; color: string; connectionState: string };
@@ -178,16 +180,32 @@ export function SidebarNav({
         </div>
 
         {apiRunning ? (
-          <Button
-            size="sm"
-            color="secondary-destructive"
-            className="w-full justify-center"
-            iconLeading={StopCircle}
-            isLoading={Boolean(busy.stopApi)}
-            onPress={() => runAction('stopApi', '/api/process/api/stop', isEpicRunning ? 'Epic stop requested' : 'API stopped')}
-          >
-            Stop API
-          </Button>
+          apiManagedByPanel ? (
+            <Button
+              size="sm"
+              color="secondary-destructive"
+              className="w-full justify-center"
+              iconLeading={StopCircle}
+              isLoading={Boolean(busy.stopApi)}
+              onPress={() => runAction('stopApi', '/api/process/api/stop', isEpicRunning ? 'Epic stop requested' : 'API stopped')}
+            >
+              Stop API
+            </Button>
+          ) : (
+            <Tooltip title="External API" description="The API is running outside the panel. Stop it from the terminal where it was started.">
+              <TooltipTrigger className="w-full">
+                <Button
+                  size="sm"
+                  color="secondary"
+                  className="w-full justify-center pointer-events-none"
+                  iconLeading={Server01}
+                  isDisabled
+                >
+                  API Running Externally
+                </Button>
+              </TooltipTrigger>
+            </Tooltip>
+          )
         ) : (
           <Button
             size="sm"

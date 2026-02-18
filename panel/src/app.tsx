@@ -93,7 +93,8 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
   const allFieldsValidated = useMemo(() => TEXT_FIELD_KEYS.every((key) => validationMap[key]?.level === 'success'), [validationMap]);
   const saveDisabled = hasBlockingErrors || !allFieldsValidated || changedKeys.length === 0 || Boolean(busy.save);
 
-  const apiRunning = status?.api?.status === 'running';
+  const apiManagedByPanel = status?.api?.status === 'running';
+  const apiRunning = apiManagedByPanel || status?.automationApi?.reachable === true;
   const orchestratorState = status?.automationApi?.health?.payload?.orchestrator || null;
   const isEpicRunning = useMemo(() => {
     return orchestratorState?.active && orchestratorState?.mode === 'epic';
@@ -612,6 +613,7 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
         isDark={isDark}
         onThemeToggle={onThemeToggle}
         apiRunning={apiRunning}
+        apiManagedByPanel={apiManagedByPanel}
         isPaused={isPaused}
         isEpicRunning={isEpicRunning}
         apiHealthStatus={apiHealthStatus}
