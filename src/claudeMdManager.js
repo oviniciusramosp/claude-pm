@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { loadTemplate } from './templateLoader.js';
+import { config } from './config.js';
 
 const START_MARKER = '<!-- PRODUCT-MANAGER:START -->';
 const END_MARKER = '<!-- PRODUCT-MANAGER:END -->';
@@ -10,7 +11,15 @@ function escapeRegex(str) {
 }
 
 export async function generateManagedContent() {
-  return loadTemplate('managed-claude.md');
+  const baseContent = await loadTemplate('managed-claude.md');
+
+  // Conditionally inject versioning rules when AUTO_VERSION_ENABLED is true
+  if (config.claude.autoVersionEnabled) {
+    const versioningRules = await loadTemplate('versioning-rules.md');
+    return `${baseContent}\n\n${versioningRules}`;
+  }
+
+  return baseContent;
 }
 
 export async function syncClaudeMd(config, logger) {

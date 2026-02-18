@@ -140,6 +140,12 @@ export const TOGGLE_CONFIG: ToggleConfig[] = [
     description: 'Claude must create a commit before moving the task to Done.'
   },
   {
+    key: 'AUTO_VERSION_ENABLED',
+    label: 'Automatic Versioning',
+    icon: GitCommit,
+    description: 'Claude follows SemVer and Conventional Commits, bumping package.json version before each commit.'
+  },
+  {
     key: 'ENABLE_MULTI_AGENTS',
     label: 'Enable Multi-Agent Execution',
     icon: Users01,
@@ -170,9 +176,9 @@ export const SETUP_SECTIONS: SetupSection[] = [
   {
     key: 'quality',
     title: 'Quality Gates',
-    description: 'Enforce test creation, test runs, and commits before tasks are marked as done.',
+    description: 'Enforce test creation, test runs, commits, and versioning before tasks are marked as done.',
     textKeys: [],
-    toggleKeys: ['FORCE_TEST_CREATION', 'FORCE_TEST_RUN', 'FORCE_COMMIT']
+    toggleKeys: ['FORCE_TEST_CREATION', 'FORCE_TEST_RUN', 'FORCE_COMMIT', 'AUTO_VERSION_ENABLED']
   }
 ];
 
