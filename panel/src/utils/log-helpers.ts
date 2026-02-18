@@ -125,6 +125,9 @@ export interface ProgressiveLogMeta {
   expandableContent?: string | null;
   model?: string;
   duration?: string;
+  taskId?: string;
+  taskName?: string;
+  error?: string;
   [key: string]: any;
 }
 

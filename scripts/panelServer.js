@@ -2233,8 +2233,6 @@ app.post('/api/board/fix-task', async (req, res) => {
     startedAt: new Date().toISOString()
   });
 
-  pushLog('info', LOG_SOURCE.panel, `Task fix requested for: ${taskId}`);
-
   const env = await readEnvPairs();
   const boardDir = resolveBoardDir(env);
   const claudeWorkdir = env.CLAUDE_WORKDIR || '.';
@@ -2280,10 +2278,23 @@ app.post('/api/board/fix-task', async (req, res) => {
       ? buildEpicFixPrompt(taskId, task.name, taskContent, task._filePath, childTasks)
       : buildFixTaskPrompt(taskId, task.name, taskContent, task._filePath);
 
-    // Execute Claude in one-shot mode
-    pushLog('info', LOG_SOURCE.panel, `Running Claude to verify and fix ACs for: "${task.name}" (${taskId})`);
-
+    // Generate unique group ID for progressive log tracking
+    const groupId = `ac-fix-${taskId}-${Date.now()}`;
     const claudeModel = task.model || env.CLAUDE_DEFAULT_MODEL || 'claude-sonnet-4-5-20250929';
+    const startTime = Date.now();
+
+    // Emit progressive log: start
+    pushLog('info', LOG_SOURCE.panel, `Task fix requested for: "${task.name}"`, {
+      meta: {
+        progressive: true,
+        groupId,
+        state: 'start',
+        taskId,
+        taskName: task.name,
+        model: claudeModel,
+        expandableContent: null
+      }
+    });
 
     // Build command string (claude CLI uses shell command parsing)
     let command = env.CLAUDE_COMMAND || DEFAULT_CLAUDE_COMMAND;
@@ -2350,7 +2361,21 @@ app.post('/api/board/fix-task', async (req, res) => {
 
     if (timedOut) {
       const errorMsg = `Task fix timed out after ${AC_FIX_TIMEOUT_MS / 1000}s`;
-      pushLog('error', LOG_SOURCE.panel, `${errorMsg}: ${taskId}`);
+      const duration = `${Math.round((Date.now() - startTime) / 1000)}s`;
+
+      // Emit progressive log: error (timeout)
+      pushLog('error', LOG_SOURCE.panel, `Task fix timed out: "${task.name}"`, {
+        meta: {
+          progressive: true,
+          groupId,
+          state: 'error',
+          taskId,
+          taskName: task.name,
+          model: claudeModel,
+          duration,
+          error: errorMsg
+        }
+      });
 
       // Mark task as failed
       state.fixTasks.set(taskId, {
@@ -2430,7 +2455,20 @@ app.post('/api/board/fix-task', async (req, res) => {
           }
         }
 
-        pushLog('success', LOG_SOURCE.panel, `Epic fix completed: ${taskId} (${childTasks.length} children processed)`);
+        const duration = `${Math.round((Date.now() - startTime) / 1000)}s`;
+
+        // Emit progressive log: complete
+        pushLog('success', LOG_SOURCE.panel, `Epic fix completed: "${task.name}"`, {
+          meta: {
+            progressive: true,
+            groupId,
+            state: 'complete',
+            taskId,
+            taskName: task.name,
+            model: claudeModel,
+            duration
+          }
+        });
 
         // Mark task as successfully fixed
         state.fixTasks.set(taskId, {
@@ -2487,7 +2525,20 @@ app.post('/api/board/fix-task', async (req, res) => {
           }
         }
 
-        pushLog('success', LOG_SOURCE.panel, `Task fix completed successfully: ${taskId}`);
+        const duration = `${Math.round((Date.now() - startTime) / 1000)}s`;
+
+        // Emit progressive log: complete
+        pushLog('success', LOG_SOURCE.panel, `Task fix completed: "${task.name}"`, {
+          meta: {
+            progressive: true,
+            groupId,
+            state: 'complete',
+            taskId,
+            taskName: task.name,
+            model: claudeModel,
+            duration
+          }
+        });
 
         // Mark task as successfully fixed
         state.fixTasks.set(taskId, {
@@ -2507,7 +2558,21 @@ app.post('/api/board/fix-task', async (req, res) => {
       }
     } else {
       const errorMsg = `Claude execution failed (exit code ${exitCode})`;
-      pushLog('error', LOG_SOURCE.panel, `Task fix failed for ${taskId} (exit code ${exitCode}): ${stderr.slice(0, 200)}`);
+      const duration = `${Math.round((Date.now() - startTime) / 1000)}s`;
+
+      // Emit progressive log: error (execution failure)
+      pushLog('error', LOG_SOURCE.panel, `Task fix failed: "${task.name}"`, {
+        meta: {
+          progressive: true,
+          groupId,
+          state: 'error',
+          taskId,
+          taskName: task.name,
+          model: claudeModel,
+          duration,
+          error: errorMsg
+        }
+      });
 
       // Mark task as failed
       state.fixTasks.set(taskId, {
@@ -2978,8 +3043,8 @@ app.post('/api/claude/chat', async (req, res) => {
   pushLog('info', LOG_SOURCE.chatUser, truncateText(message));
 
   try {
-    // Use Anthropic API directly to avoid "Claude Code cannot be launched inside another Claude Code session" error
-    const { reply, workdir } = await runClaudePromptViaApi(message, model);
+    // Use Claude CLI via subprocess (OAuth token works correctly here)
+    const { reply, workdir } = await runClaudePrompt(message, model);
     const normalizedReply = reply || '(Claude returned empty output)';
     pushLog('success', LOG_SOURCE.chatClaude, truncateText(normalizedReply));
     res.json({

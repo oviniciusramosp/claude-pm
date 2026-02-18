@@ -159,10 +159,12 @@ function MessageWithTaskLink({
  */
 function ProgressiveLogBubble({
   logs,
-  onCopy
+  onCopy,
+  onTaskClick
 }: {
   logs: LogEntry[];
   onCopy: (text: string) => void;
+  onTaskClick?: (taskId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -182,6 +184,11 @@ function ProgressiveLogBubble({
   const hasExpandable = expandableContent && expandableContent.length > 0;
   const lineCount = hasExpandable ? expandableContent.split('\n').length : 0;
 
+  // Extract task info from meta if available
+  const taskInfo = (latestMeta as any).taskId && (latestMeta as any).taskName
+    ? { taskId: (latestMeta as any).taskId, taskName: (latestMeta as any).taskName }
+    : null;
+
   return (
     <div className="space-y-2">
       {/* Main message with loading/complete indicator */}
@@ -199,7 +206,11 @@ function ProgressiveLogBubble({
           ) : null}
         </div>
         <div className="flex-1">
-          <p className="m-0 text-xs font-medium leading-4 text-current sm:text-sm sm:leading-5">{message}</p>
+          <MessageWithTaskLink
+            message={message}
+            taskInfo={taskInfo}
+            onTaskClick={onTaskClick}
+          />
         </div>
       </div>
 
@@ -724,7 +735,7 @@ export function FeedTab({
                       logToneClasses(level, sourceMeta.side, sourceMeta.directClaude, 'progressive-log', true)
                     )}
                   >
-                    <ProgressiveLogBubble logs={group} onCopy={copyLiveFeedMessage} />
+                    <ProgressiveLogBubble logs={group} onCopy={copyLiveFeedMessage} onTaskClick={handleTaskClick} />
 
                     <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-current/50">
                       <div className="inline-flex items-center gap-1">
