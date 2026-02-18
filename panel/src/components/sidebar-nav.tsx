@@ -149,13 +149,13 @@ export function SidebarNav({
           <p className="m-0 text-[11px] font-semibold uppercase tracking-wider text-quaternary">Controls</p>
           <div className="flex items-center gap-2">
             <Tooltip
-              title={appError ? "App Error" : apiRunning ? (isPaused ? "App Idle" : "App Running") : "App Stopped"}
-              description={appError ? "Click to view error details" : apiRunning ? (isPaused ? "API is running but paused. Click 'Start Working' to begin." : "Automation is connected and operational") : "Automation is not running"}
+              title={appError ? "App Error" : (apiRunning && !isPaused) ? "App Running" : "App Stopped"}
+              description={appError ? "Click to view error details" : (apiRunning && !isPaused) ? "Orchestrator is active and processing tasks" : "Orchestrator is not running"}
             >
               <TooltipTrigger className={appError ? "cursor-pointer" : "cursor-default"}>
                 <StatusBadge
-                  color={appError ? 'error' : apiRunning ? (isPaused ? 'warning' : 'success') : 'gray'}
-                  connectionState={apiRunning ? (isPaused ? 'inactive' : 'active') : 'inactive'}
+                  color={appError ? 'error' : (apiRunning && !isPaused) ? 'success' : 'gray'}
+                  connectionState={(apiRunning && !isPaused) ? 'active' : 'inactive'}
                   onClick={appError ? onAppBadgeClick : undefined}
                 >
                   App
