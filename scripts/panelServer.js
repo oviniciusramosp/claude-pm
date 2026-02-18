@@ -3046,7 +3046,7 @@ app.post('/api/claude/chat', async (req, res) => {
     // Use Claude CLI via subprocess (OAuth token works correctly here)
     const { reply, workdir } = await runClaudePrompt(message, model);
     const normalizedReply = reply || '(Claude returned empty output)';
-    pushLog('success', LOG_SOURCE.chatClaude, truncateText(normalizedReply));
+    pushLog('info', LOG_SOURCE.chatClaude, truncateText(normalizedReply));
     res.json({
       ok: true,
       workdir,
