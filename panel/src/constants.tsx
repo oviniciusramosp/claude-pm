@@ -162,10 +162,17 @@ export const SETUP_SECTIONS: SetupSection[] = [
   },
   {
     key: 'execution',
-    title: 'Execution & Logs',
-    description: 'Controls terminal streaming and prompt logging for task runs.',
+    title: 'Execution',
+    description: 'Controls how Claude executes tasks, including multi-agent and review options.',
     textKeys: [],
-    toggleKeys: ['CLAUDE_STREAM_OUTPUT', 'CLAUDE_LOG_PROMPT', 'ENABLE_MULTI_AGENTS', 'OPUS_REVIEW_ENABLED', 'EPIC_REVIEW_ENABLED', 'FORCE_TEST_CREATION', 'FORCE_TEST_RUN', 'FORCE_COMMIT']
+    toggleKeys: ['ENABLE_MULTI_AGENTS', 'OPUS_REVIEW_ENABLED', 'EPIC_REVIEW_ENABLED']
+  },
+  {
+    key: 'quality',
+    title: 'Quality Gates',
+    description: 'Enforce test creation, test runs, and commits before tasks are marked as done.',
+    textKeys: [],
+    toggleKeys: ['FORCE_TEST_CREATION', 'FORCE_TEST_RUN', 'FORCE_COMMIT']
   }
 ];
 

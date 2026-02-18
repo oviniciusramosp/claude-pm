@@ -746,7 +746,7 @@ export function FeedTab({
               {/* spacer to push select left on mobile row */}
             </div>
           </div>
-          <div className="flex items-end gap-2">
+          <div className="flex w-full items-end gap-2">
             <textarea
               aria-label="Chat prompt"
               placeholder={

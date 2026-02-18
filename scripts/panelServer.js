@@ -220,9 +220,25 @@ const NPM_SCRIPT_LINE_REGEX = /^>\s.+$/;
 const PROGRESS_MARKER_REGEX = /^\[PM_PROGRESS]\s+(.+)$/;
 const AC_COMPLETE_MARKER_REGEX = /^\[PM_AC_COMPLETE]\s+(.+)$/;
 const API_STATUS_NOISE_PATTERNS = [
-  /^Server started on port \d+$/i,
-  /^Startup reconciliation disabled \(QUEUE_RUN_ON_STARTUP=false\)$/i
+  /^Server started on port \d+$/i
 ];
+
+// Patterns that identify startup-phase log messages to be collapsed into a
+// single "Automation App started." bubble with expandable details.
+const STARTUP_LOG_PATTERNS = [
+  /^Board directory:/i,
+  /^Claude working directory:/i,
+  /^Board structure validated successfully$/i,
+  /^CLAUDE\.md managed section/i,
+  /^Created CLAUDE\.md/i,
+  /^Updated CLAUDE\.md/i,
+  /^Appended managed section/i,
+  /^Periodic reconciliation (enabled|disabled)/i,
+  /^Automatic reconciliation/i,
+  /^Startup reconciliation disabled/i,
+  /^\[VALIDATION_REPORT\]/i,
+];
+const STARTUP_BUFFER_WINDOW_MS = 3000;
 const CLAUDE_RAW_NOISE_PATTERNS = [
   /you(?:'|’)ve hit your limit/i,
   /hit your limit/i
@@ -1605,7 +1621,21 @@ app.post('/api/system/select-directory', async (_req, res) => {
   }
 });
 
-app.post('/api/process/api/start', (req, res) => {
+app.post('/api/process/api/start', async (req, res) => {
+  if (state.api.child) {
+    res.status(409).json({ ok: false, message: 'API process already running' });
+    return;
+  }
+
+  const apiBaseUrl = getApiBaseUrl();
+  const health = await probeApiHealth(apiBaseUrl);
+
+  if (health.ok) {
+    pushLog('warn', LOG_SOURCE.panel, `Port already in use — an API is already running at ${apiBaseUrl}. Stop it first or use that instance.`);
+    res.status(409).json({ ok: false, message: `Port already in use. An API is already running at ${apiBaseUrl}.` });
+    return;
+  }
+
   const command = process.env.PANEL_API_START_COMMAND || 'npm start';
   const started = startManagedProcess(state.api, command, 'api', getApiProcessEnvOverrides());
 
