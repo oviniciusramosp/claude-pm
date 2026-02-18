@@ -2281,7 +2281,7 @@ app.post('/api/board/fix-task', async (req, res) => {
       : buildFixTaskPrompt(taskId, task.name, taskContent, task._filePath);
 
     // Execute Claude in one-shot mode
-    pushLog('info', LOG_SOURCE.panel, `Running Claude to verify and fix ACs for: ${taskId}`);
+    pushLog('info', LOG_SOURCE.panel, `Running Claude to verify and fix ACs for: "${task.name}" (${taskId})`);
 
     const claudeModel = task.model || env.CLAUDE_DEFAULT_MODEL || 'claude-sonnet-4-5-20250929';
 

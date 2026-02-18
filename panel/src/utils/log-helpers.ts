@@ -449,6 +449,15 @@ export function extractTaskIdFromMessage(message: unknown): { taskId: string; ta
   const text = normalizeText(message).trim();
   if (!text) return null;
 
+  // Match patterns like: "Running Claude to verify and fix ACs for: "Task Name" (task-id)"
+  const acFixMatch = text.match(/^Running Claude to verify and fix ACs for: "(.+?)" \((.+?)\)$/i);
+  if (acFixMatch) {
+    return {
+      taskId: acFixMatch[2],
+      taskName: acFixMatch[1]
+    };
+  }
+
   // Match patterns like: "Claude is working on: "S19.2 - Install and configure expo-glass-effect module""
   // or "Opus is reviewing: "Epic-Auth""
   const workingMatch = text.match(/^(Claude is working on|Opus is reviewing|Opus is reviewing epic): "(.+)"$/i);
