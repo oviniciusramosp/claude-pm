@@ -359,11 +359,10 @@ export class Orchestrator {
       const source = candidate.source;
 
       if (this.claudeCompletedTaskIds.has(task.id)) {
-        this.logger.warn(`Task "${taskLabel(task)}" was already completed by Claude but is still on the board. Retrying status update.`);
+        // Silently retry status update (only log if it fails)
         try {
           await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.done);
           this.claudeCompletedTaskIds.delete(task.id);
-          this.logger.success(`Board status update recovered for: "${taskLabel(task)}"`);
         } catch (retryError) {
           this.logger.error(`Board status update retry failed for "${taskLabel(task)}": ${retryError.message}`);
           const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
@@ -752,11 +751,10 @@ export class Orchestrator {
       const source = childCandidate.source;
 
       if (this.claudeCompletedTaskIds.has(task.id)) {
-        this.logger.warn(`Task "${taskLabel(task)}" was already completed by Claude but is still on the board. Retrying status update.`);
+        // Silently retry status update (only log if it fails)
         try {
           await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.done);
           this.claudeCompletedTaskIds.delete(task.id);
-          this.logger.success(`Board status update recovered for: "${taskLabel(task)}"`);
         } catch (retryError) {
           this.logger.error(`Board status update retry failed for "${taskLabel(task)}": ${retryError.message}`);
           const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
