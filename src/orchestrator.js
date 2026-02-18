@@ -118,6 +118,18 @@ function buildContractJson(execution) {
   });
 }
 
+function formatContractForDisplay(execution) {
+  const parts = [];
+  if (execution.summary) parts.push(`Summary: ${execution.summary}`);
+  if (execution.status && execution.status !== 'done') parts.push(`Status: ${execution.status}`);
+  if (Array.isArray(execution.files) && execution.files.length > 0) {
+    parts.push(`Files: ${execution.files.length} modified`);
+  }
+  if (execution.tests) parts.push(`Tests: ${execution.tests}`);
+  if (execution.notes) parts.push(`Notes: ${execution.notes}`);
+  return parts.length > 0 ? parts.join(' • ') : 'No details available';
+}
+
 async function checkActiveFixes(port = 4100) {
   try {
     const response = await fetch(`http://localhost:${port}/api/board/has-active-fixes`, {
@@ -165,7 +177,8 @@ export class Orchestrator {
       try {
         await this.usageStore.recordUsage(task.id, task.name, execution.usage);
       } catch (err) {
-        this.logger.warn(`Failed to record token usage: ${err.message}`);
+        // Log to console only (not to Live Feed - not critical)
+        console.debug(`[orchestrator] Failed to record token usage: ${err.message}`);
       }
     }
   }
@@ -425,8 +438,16 @@ export class Orchestrator {
         let executionElapsed = Date.now() - executionStartTime;
 
         if (normalize(execution.status) !== 'done') {
-          this.logger.info(`Claude finished: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`);
-          this.logger.info(buildContractJson(execution));
+          // Emit consolidated completion bubble for failed execution
+          const failGroupId = `task-exec-fail-${task.id}`;
+          this.logger.progressive(
+            'warn',
+            failGroupId,
+            'complete',
+            `Claude finished with issues: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`,
+            { status: execution.status || 'unknown', details: formatContractForDisplay(execution) },
+            buildContractJson(execution)
+          );
 
           // Try auto-recovery before marking as failed
           if (autoRecovery.canRecover(task.id)) {
@@ -497,7 +518,9 @@ export class Orchestrator {
           this.logger.info(`Claude retry finished: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`);
 
           if (normalize(execution.status) !== 'done') {
-            this.logger.info(buildContractJson(execution));
+            // Log contract to console only (details available in task markdown)
+            console.debug('[orchestrator] Retry execution contract:', buildContractJson(execution));
+
             await this.runStore.markFailed(task, `Retry also returned status=${execution.status || 'unknown'}`);
             this.logger.warn(`Task blocked on retry: "${taskLabel(task)}" (status: ${execution.status || 'unknown'})`);
 
@@ -510,7 +533,9 @@ export class Orchestrator {
 
           const retryValidation = validateExecution(this.config.claude.workdir, retryHeadBefore, execution);
           if (!retryValidation.valid) {
-            this.logger.info(buildContractJson(execution));
+            // Log contract to console only (details available in task markdown)
+            console.debug('[orchestrator] Hallucination retry contract:', buildContractJson(execution));
+
             await this.runStore.markFailed(task, 'Hallucination persisted after retry. No artifacts produced.');
             this.logger.error(`Hallucination persisted after retry for "${taskLabel(task)}". Giving up.`);
 
@@ -522,7 +547,9 @@ export class Orchestrator {
           }
         }
 
-        this.logger.info(buildContractJson(execution));
+        // Log contract to console only (task completed successfully)
+        console.debug('[orchestrator] Task execution contract:', buildContractJson(execution));
+
         this.watchdog.recordSuccess(task.id);
         this.claudeCompletedTaskIds.set(task.id, Date.now());
 
@@ -818,8 +845,17 @@ export class Orchestrator {
         let executionElapsed = Date.now() - executionStartTime;
 
         if (normalize(execution.status) !== 'done') {
-          this.logger.info(`Claude finished: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`);
-          this.logger.info(buildContractJson(execution));
+          // Emit consolidated completion bubble for failed execution
+          const epicFailGroupId = `epic-task-exec-fail-${task.id}`;
+          this.logger.progressive(
+            'warn',
+            epicFailGroupId,
+            'complete',
+            `Claude finished with issues: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`,
+            { status: execution.status || 'unknown', details: formatContractForDisplay(execution) },
+            buildContractJson(execution)
+          );
+
           await this.runStore.markFailed(task, `Claude retornou status=${execution.status || 'desconhecido'}`);
           this.logger.warn(`Task blocked by Claude: "${taskLabel(task)}" (status: ${execution.status || 'unknown'})`);
 
@@ -861,7 +897,9 @@ export class Orchestrator {
           this.logger.info(`Claude retry finished: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`);
 
           if (normalize(execution.status) !== 'done') {
-            this.logger.info(buildContractJson(execution));
+            // Log contract to console only (details available in task markdown)
+            console.debug('[orchestrator] Retry execution contract:', buildContractJson(execution));
+
             await this.runStore.markFailed(task, `Retry also returned status=${execution.status || 'unknown'}`);
             this.logger.warn(`Task blocked on retry: "${taskLabel(task)}" (status: ${execution.status || 'unknown'})`);
 
@@ -874,7 +912,9 @@ export class Orchestrator {
 
           const retryValidation = validateExecution(this.config.claude.workdir, retryHeadBefore, execution);
           if (!retryValidation.valid) {
-            this.logger.info(buildContractJson(execution));
+            // Log contract to console only (details available in task markdown)
+            console.debug('[orchestrator] Hallucination retry contract:', buildContractJson(execution));
+
             await this.runStore.markFailed(task, 'Hallucination persisted after retry. No artifacts produced.');
             this.logger.error(`Hallucination persisted after retry for "${taskLabel(task)}". Giving up.`);
 
