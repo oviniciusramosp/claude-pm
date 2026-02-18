@@ -321,20 +321,20 @@ export class Orchestrator {
       return;
     }
 
-    // Deduplicate reasons for cleaner logs
-    const uniqueReasons = Array.from(new Set(reason.split(', '))).join(', ');
-    this.logger.info(`Starting board reconciliation (reason: ${uniqueReasons})`);
-
     // Check for incomplete epics first — they must be finished before standalone tasks.
     const initialTasks = await this.boardClient.listTasks();
     this.observeStatuses(initialTasks);
     await this.closeCompletedEpics(initialTasks);
 
     if (hasIncompleteEpic(initialTasks, this.config)) {
-      this.logger.info('Incomplete epic detected — delegating to epic reconciliation.');
+      // Delegate to epic reconciliation (it will log its own initialization)
       await this.reconcileEpic(reason);
       return;
     }
+
+    // Only log reconciliation start for standalone tasks
+    const uniqueReasons = Array.from(new Set(reason.split(', '))).join(', ');
+    this.logger.info(`Starting board reconciliation (reason: ${uniqueReasons})`);
 
     let processed = 0;
 
@@ -345,7 +345,7 @@ export class Orchestrator {
 
       // Re-check after closing epics — a new epic may now be the next priority.
       if (hasIncompleteEpic(tasks, this.config)) {
-        this.logger.info('Incomplete epic detected mid-reconciliation — delegating to epic reconciliation.');
+        // Delegate to epic reconciliation (it will log its own initialization)
         await this.reconcileEpic(reason);
         break;
       }
@@ -377,12 +377,8 @@ export class Orchestrator {
 
       if (source === 'not_started') {
         await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.inProgress);
-        await this.runStore.markStarted(task);
-        this.logger.info(`Moved to In Progress: "${taskLabel(task)}"`);
-      } else {
-        await this.runStore.markStarted(task);
-        this.logger.info(`Resuming In Progress Task: "${taskLabel(task)}"`);
       }
+      await this.runStore.markStarted(task);
 
       const markdown = await this.boardClient.getTaskMarkdown(task.id);
       const prompt = buildTaskPrompt(task, markdown, {
@@ -699,10 +695,6 @@ export class Orchestrator {
       return;
     }
 
-    // Deduplicate reasons for cleaner logs
-    const uniqueReasons = Array.from(new Set(reason.split(', '))).join(', ');
-    this.logger.info(`Starting epic reconciliation (reason: ${uniqueReasons})`);
-
     const tasks = await this.boardClient.listTasks();
     this.observeStatuses(tasks);
 
@@ -713,15 +705,36 @@ export class Orchestrator {
     }
 
     const epic = epicCandidate.task;
+    const groupId = `epic-init-${epic.id}`;
+
+    // Build initialization details
+    const initDetails = [];
+    const uniqueReasons = Array.from(new Set(reason.split(', '))).join(', ');
+    initDetails.push(`Reason: ${uniqueReasons}`);
 
     if (epicCandidate.source === 'not_started') {
       await this.boardClient.updateTaskStatus(epic.id, this.config.board.statuses.inProgress);
-      this.logger.info(`Epic moved to In Progress: "${taskLabel(epic)}"`);
+      initDetails.push(`Status: Moved to In Progress`);
 
-      await this.stampEpicChildrenStatuses(epic);
+      const childrenInfo = await this.stampEpicChildrenStatuses(epic);
+      if (childrenInfo) {
+        initDetails.push(`Children: Initialized ${childrenInfo.count} tasks`);
+        if (childrenInfo.firstTask) {
+          initDetails.push(`First task: "${childrenInfo.firstTask}"`);
+        }
+      }
     } else {
-      this.logger.info(`Resuming In Progress Epic: "${taskLabel(epic)}"`);
+      initDetails.push(`Status: Resuming In Progress`);
     }
+
+    // Emit consolidated bubble
+    this.logger.progressive(
+      'info',
+      groupId,
+      'complete',
+      `Epic initialized: "${taskLabel(epic)}"`,
+      { details: initDetails.join(' • ') }
+    );
 
     let processed = 0;
 
@@ -757,12 +770,8 @@ export class Orchestrator {
 
       if (source === 'not_started') {
         await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.inProgress);
-        await this.runStore.markStarted(task);
-        this.logger.info(`Moved to In Progress: "${taskLabel(task)}"`);
-      } else {
-        await this.runStore.markStarted(task);
-        this.logger.info(`Resuming In Progress Task: "${taskLabel(task)}"`);
       }
+      await this.runStore.markStarted(task);
 
       const markdown = await this.boardClient.getTaskMarkdown(task.id);
       const prompt = buildTaskPrompt(task, markdown, {
@@ -1173,9 +1182,14 @@ export class Orchestrator {
       await this.boardClient.updateTaskStatus(sorted[i].id, childStatus);
     }
 
+    // Return info instead of logging (will be included in epic init bubble)
     if (sorted.length > 0) {
-      this.logger.info(`Stamped ${sorted.length} children for epic "${taskLabel(epic)}" (first: In Progress, rest: Not Started)`);
+      return {
+        count: sorted.length,
+        firstTask: sorted.length > 0 ? taskLabel(sorted[0]) : null
+      };
     }
+    return null;
   }
 
   async closeCompletedEpics(tasks) {

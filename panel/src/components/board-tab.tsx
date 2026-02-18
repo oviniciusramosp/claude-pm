@@ -905,12 +905,20 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   }, [refreshTrigger, fetchBoard]);
 
   const columns = useMemo(() => {
-    return BOARD_COLUMNS.map((col) => ({
+    const allColumns = BOARD_COLUMNS.map((col) => ({
       ...col,
       tasks: col.statusMatch === null
         ? tasks.filter((t: BoardTask) => !t.status || t.status.trim() === '')
         : tasks.filter((t: BoardTask) => t.status && t.status.toLowerCase() === col.statusMatch)
     }));
+
+    // Hide Missing Status column when empty
+    return allColumns.filter((col) => {
+      if (col.key === 'missing_status') {
+        return col.tasks.length > 0;
+      }
+      return true;
+    });
   }, [tasks]);
 
   const totalCount = tasks.length;
