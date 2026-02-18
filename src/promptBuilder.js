@@ -1,4 +1,5 @@
 import { parseAcs, formatAcsForPrompt } from './acParser.js';
+import { loadTemplate } from './templateLoader.js';
 
 function normalizeText(value) {
   if (!value || String(value).trim().length === 0) {
@@ -247,51 +248,25 @@ export function buildTaskCompletionNotes(task, execution) {
   return lines.join('\n');
 }
 
-export function buildReviewPrompt(task, markdown, executionResult) {
+export async function buildReviewPrompt(task, markdown, executionResult) {
   const agents = task.agents.length > 0 ? task.agents.join(', ') : '(no agents specified)';
   const filesList = Array.isArray(executionResult.files) && executionResult.files.length > 0
     ? executionResult.files.join(', ')
     : '(none)';
 
-  const lines = [
-    'You are reviewing work done by another Claude model on the task below.',
-    'Your role is to verify the implementation meets acceptance criteria, identify issues, and fix them.',
-    '',
-    'Task Context:',
-    `- Name: ${normalizeText(task.name)}`,
-    `- ID: ${normalizeText(task.id)}`,
-    `- Type: ${normalizeText(task.type)}`,
-    `- Priority: ${normalizeText(task.priority)}`,
-    `- Agents: ${agents}`,
-    '',
-    '## Original Task Description',
-    normalizeText(markdown || '(no description)'),
-    '',
-    '## Previous Execution Result',
-    `- Status: ${executionResult.status || 'done'}`,
-    `- Summary: ${executionResult.summary || '(none)'}`,
-    `- Notes: ${executionResult.notes || '(none)'}`,
-    `- Tests: ${executionResult.tests || '(none)'}`,
-    `- Files Changed: ${filesList}`,
-    '',
-    'Review Instructions:',
-    '- Verify all Acceptance Criteria from the task description were met.',
-    '- Review changed files for correctness, code quality, and adherence to project conventions.',
-    '- If you find issues, fix them directly. Create a commit with your corrections.',
-    '- If everything is correct or you fixed all issues, return status "done".',
-    '- Use "blocked" only if there is a problem you cannot resolve (missing access, external dependency, ambiguous requirements).',
-    '- Never expose secrets in code, commits, or logs.',
-    '',
-    'Response Requirements:',
-    '- Respond ONLY with a valid JSON object in a single line.',
-    '- Required structure:',
-    '{"status":"done|blocked","summary":"...","notes":"...","files":["..."],"tests":"..."}',
-    '- Use "done" when the implementation is verified and correct (with or without your corrections).',
-    '- Use "blocked" only for problems you cannot resolve, and detail the reason in notes.',
-    ''
-  ];
-
-  return lines.join('\n');
+  return loadTemplate('opus-review.md', {
+    TASK_NAME: normalizeText(task.name),
+    TASK_ID: normalizeText(task.id),
+    TASK_TYPE: normalizeText(task.type),
+    TASK_PRIORITY: normalizeText(task.priority),
+    AGENTS: agents,
+    TASK_DESCRIPTION: normalizeText(markdown || '(no description)'),
+    EXEC_STATUS: executionResult.status || 'done',
+    EXEC_SUMMARY: executionResult.summary || '(none)',
+    EXEC_NOTES: executionResult.notes || '(none)',
+    EXEC_TESTS: executionResult.tests || '(none)',
+    EXEC_FILES: filesList,
+  });
 }
 
 export function buildEpicReviewPrompt(epicTask, children, epicSummary) {

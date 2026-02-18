@@ -1060,7 +1060,7 @@ export class Orchestrator {
   async reviewWithOpus(task, markdown, executionResult) {
     this.logger.info(`Starting Opus review for: "${taskLabel(task)}"`);
 
-    const reviewPrompt = buildReviewPrompt(task, markdown, executionResult);
+    const reviewPrompt = await buildReviewPrompt(task, markdown, executionResult);
     if (this.config.claude.logPrompt) {
       this.logger.block(`Opus review prompt for "${taskLabel(task)}"`, reviewPrompt);
     }
