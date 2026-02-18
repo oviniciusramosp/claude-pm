@@ -70,6 +70,7 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
   const [boardRefreshTrigger, setBoardRefreshTrigger] = useState(0);
   const [fixingTaskId, setFixingTaskId] = useState(null);
   const [unreadFeedCount, setUnreadFeedCount] = useState(0);
+  const [taskIdToOpen, setTaskIdToOpen] = useState(null);
   const logFeedRef = useRef(null);
   const didResolveInitialTabRef = useRef(false);
 
@@ -572,6 +573,13 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
     }));
   }, []);
 
+  const handleTaskClick = useCallback((taskId) => {
+    // Store the task ID to open
+    setTaskIdToOpen(taskId);
+    // Switch to the Board tab
+    setActiveTab(NAV_TAB_KEYS.board);
+  }, []);
+
   // Show loading state while checking auth or fetching server info
   if (loading || !serverInfo) {
     return (
@@ -683,6 +691,8 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
               onShowErrorDetail={(title, message) => setErrorModal({ open: true, title, message })}
               onError={onBoardError}
               setFixingTaskId={setFixingTaskId}
+              taskIdToOpen={taskIdToOpen}
+              onTaskOpened={() => setTaskIdToOpen(null)}
             />
           ) : activeTab === NAV_TAB_KEYS.git ? (
             <GitTab
@@ -703,6 +713,7 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
               busy={busy}
               orchestratorState={orchestratorState}
               fixingTaskId={fixingTaskId}
+              onTaskClick={handleTaskClick}
             />
           )}
         </div>

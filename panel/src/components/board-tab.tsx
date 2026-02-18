@@ -30,6 +30,8 @@ interface BoardTabProps {
   onShowErrorDetail: (title: string, message: string) => void;
   onError?: (message: string, details?: { stack?: string; exitCode?: number; stderr?: string; stdout?: string }) => void;
   setFixingTaskId?: (taskId: string | null) => void;
+  taskIdToOpen?: string | null;
+  onTaskOpened?: () => void;
 }
 
 interface BoardError {
@@ -375,7 +377,7 @@ function SkeletonCard() {
   );
 }
 
-export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDetail, onError, setFixingTaskId: setFixingTaskIdProp }: BoardTabProps) {
+export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDetail, onError, setFixingTaskId: setFixingTaskIdProp, taskIdToOpen, onTaskOpened }: BoardTabProps) {
   const [tasks, setTasks] = useState<BoardTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [boardError, setBoardError] = useState<BoardError | null>(null);
@@ -903,6 +905,17 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
       fetchBoard(true);
     }
   }, [refreshTrigger, fetchBoard]);
+
+  // Open task modal when taskIdToOpen is set (from Feed tab click)
+  useEffect(() => {
+    if (taskIdToOpen && tasks.length > 0) {
+      const task = tasks.find((t) => t.id === taskIdToOpen);
+      if (task) {
+        setSelectedTask(task);
+        onTaskOpened?.();
+      }
+    }
+  }, [taskIdToOpen, tasks, onTaskOpened]);
 
   const columns = useMemo(() => {
     const allColumns = BOARD_COLUMNS.map((col) => ({

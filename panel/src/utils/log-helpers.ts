@@ -445,6 +445,23 @@ export function extractModelFromMessage(message: unknown): string | null {
   return match[1].trim();
 }
 
+export function extractTaskIdFromMessage(message: unknown): { taskId: string; taskName: string } | null {
+  const text = normalizeText(message).trim();
+  if (!text) return null;
+
+  // Match patterns like: "Claude is working on: "S19.2 - Install and configure expo-glass-effect module""
+  // or "Opus is reviewing: "Epic-Auth""
+  const workingMatch = text.match(/^(Claude is working on|Opus is reviewing|Opus is reviewing epic): "(.+)"$/i);
+  if (workingMatch) {
+    return {
+      taskId: workingMatch[2],
+      taskName: workingMatch[2]
+    };
+  }
+
+  return null;
+}
+
 export function formatModelLabel(model: string): string {
   const m = model.match(/claude-(\w+)-(\d+)-(\d+)/);
   if (m) {

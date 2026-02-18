@@ -400,18 +400,19 @@ export class Orchestrator {
       const headBefore = getGitHead(this.config.claude.workdir);
 
       const onAcComplete = (acRef) => {
-        this.logger.info(`[DEBUG] onAcComplete called with: ${JSON.stringify(acRef)}`);
         if (acRef.type === 'numbered') {
           this.boardClient.updateCheckboxesByIndex(task.id, [acRef.index]).then(() => {
             this.logger.success(`AC completed: AC-${acRef.index}`);
           }).catch((err) => {
-            this.logger.warn(`Failed to update AC checkbox: ${err.message}`);
+            // Log to console only (not to Live Feed)
+            console.debug(`[orchestrator] Failed to update AC checkbox: ${err.message}`);
           });
         } else {
           this.boardClient.updateCheckboxes(task.id, [acRef.text]).then(() => {
             this.logger.success(`AC completed: "${acRef.text}"`);
           }).catch((err) => {
-            this.logger.warn(`Failed to update AC checkbox: ${err.message}`);
+            // Log to console only (not to Live Feed)
+            console.debug(`[orchestrator] Failed to update AC checkbox: ${err.message}`);
           });
         }
       };
@@ -792,18 +793,19 @@ export class Orchestrator {
       const headBefore = getGitHead(this.config.claude.workdir);
 
       const onAcComplete = (acRef) => {
-        this.logger.info(`[DEBUG] onAcComplete called with: ${JSON.stringify(acRef)}`);
         if (acRef.type === 'numbered') {
           this.boardClient.updateCheckboxesByIndex(task.id, [acRef.index]).then(() => {
             this.logger.success(`AC completed: AC-${acRef.index}`);
           }).catch((err) => {
-            this.logger.warn(`Failed to update AC checkbox: ${err.message}`);
+            // Log to console only (not to Live Feed)
+            console.debug(`[orchestrator] Failed to update AC checkbox: ${err.message}`);
           });
         } else {
           this.boardClient.updateCheckboxes(task.id, [acRef.text]).then(() => {
             this.logger.success(`AC completed: "${acRef.text}"`);
           }).catch((err) => {
-            this.logger.warn(`Failed to update AC checkbox: ${err.message}`);
+            // Log to console only (not to Live Feed)
+            console.debug(`[orchestrator] Failed to update AC checkbox: ${err.message}`);
           });
         }
       };
