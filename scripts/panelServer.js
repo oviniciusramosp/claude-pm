@@ -409,11 +409,18 @@ function parseProcessLogLine(rawLine, fallbackLevel = 'info') {
         const key = pair.slice(0, eqIndex).trim();
         let value = pair.slice(eqIndex + 1).trim();
 
-        // Special handling for expandableContent (comes as JSON string)
+        // Special handling for expandableContent (comes as Base64-encoded JSON)
         if (key === 'expandableContent') {
           try {
-            // Parse the JSON string to restore newlines and special chars
-            value = JSON.parse(value);
+            // Decode Base64 and parse JSON
+            if (value.startsWith('base64:')) {
+              const base64 = value.slice(7); // Remove 'base64:' prefix
+              const json = Buffer.from(base64, 'base64').toString('utf8');
+              value = JSON.parse(json);
+            } else {
+              // Fallback for old format (direct JSON)
+              value = JSON.parse(value);
+            }
           } catch {
             // If parsing fails, keep as-is
           }

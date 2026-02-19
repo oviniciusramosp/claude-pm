@@ -60,13 +60,15 @@ function formatMeta(meta) {
     return '';
   }
 
-  // Special handling for expandableContent - preserve it as JSON
+  // Special handling for expandableContent - preserve it as Base64-encoded JSON
+  // (avoids issues with | character in JSON strings breaking the parser)
   if (meta.expandableContent) {
     const { expandableContent, ...otherMeta } = meta;
     const parts = Object.entries(otherMeta).map(([key, value]) => `${key}=${formatValue(value)}`);
-    // Serialize expandableContent as compact JSON
+    // Serialize expandableContent as Base64-encoded JSON to avoid parsing issues
     const expandableJson = JSON.stringify(expandableContent);
-    parts.push(`expandableContent=${expandableJson}`);
+    const expandableBase64 = Buffer.from(expandableJson, 'utf8').toString('base64');
+    parts.push(`expandableContent=base64:${expandableBase64}`);
     return ` | ${parts.join(' | ')}`;
   }
 
