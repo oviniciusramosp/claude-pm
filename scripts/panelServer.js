@@ -409,8 +409,17 @@ function parseProcessLogLine(rawLine, fallbackLevel = 'info') {
         const key = pair.slice(0, eqIndex).trim();
         let value = pair.slice(eqIndex + 1).trim();
 
+        // Special handling for expandableContent (comes as JSON string)
+        if (key === 'expandableContent' && value.startsWith('"')) {
+          try {
+            // Parse the JSON string to restore newlines and special chars
+            value = JSON.parse(value);
+          } catch {
+            // If parsing fails, keep as-is
+          }
+        }
         // Try to parse JSON values
-        if (value === 'true') value = true;
+        else if (value === 'true') value = true;
         else if (value === 'false') value = false;
         else if (value === 'null') value = null;
         else if (/^\d+$/.test(value)) value = Number(value);

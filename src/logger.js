@@ -60,6 +60,16 @@ function formatMeta(meta) {
     return '';
   }
 
+  // Special handling for expandableContent - preserve it as JSON
+  if (meta.expandableContent) {
+    const { expandableContent, ...otherMeta } = meta;
+    const parts = Object.entries(otherMeta).map(([key, value]) => `${key}=${formatValue(value)}`);
+    // Serialize expandableContent as compact JSON
+    const expandableJson = JSON.stringify(expandableContent);
+    parts.push(`expandableContent=${expandableJson}`);
+    return ` | ${parts.join(' | ')}`;
+  }
+
   const parts = entries.map(([key, value]) => `${key}=${formatValue(value)}`);
   return ` | ${parts.join(' | ')}`;
 }

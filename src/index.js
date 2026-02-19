@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import express from 'express';
 import { config } from './config.js';
 import { logger } from './logger.js';
@@ -14,6 +15,17 @@ app.use(express.json({ limit: '2mb' }));
 
 // Collect startup info for consolidated log
 const startupInfo = [];
+
+// Add package info to startup (mimics npm start output)
+try {
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  const startCommand = pkg.scripts?.start || 'node src/index.js';
+  startupInfo.push(`> ${pkg.name}@${pkg.version} start`);
+  startupInfo.push(`> ${startCommand}`);
+  startupInfo.push(''); // Empty line separator
+} catch {
+  // Ignore if package.json can't be read
+}
 
 const boardClient = new LocalBoardClient(config);
 await boardClient.initialize();
