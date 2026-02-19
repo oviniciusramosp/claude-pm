@@ -312,9 +312,12 @@ app.listen(config.server.port, () => {
   // Store details as JSON array for frontend to render with icons
   const expandableDetails = startupInfo;
 
+  // Use timestamp-based groupId to ensure each startup message is unique
+  const startupGroupId = `app-startup-${Date.now()}`;
+
   logger.progressive(
     'success',
-    'app-startup',
+    startupGroupId,
     'complete',
     summary,
     { detailsType: 'startup' }, // Flag to indicate this is startup details with levels
