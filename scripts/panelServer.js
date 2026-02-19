@@ -224,9 +224,9 @@ const API_STATUS_NOISE_PATTERNS = [
 ];
 
 // Patterns that identify startup-phase log messages to be collapsed into a
-// single "Automation App started." bubble with expandable details.
+// single "API started." bubble with expandable details.
 const STARTUP_LOG_PATTERNS = [
-  /^Automation App (was )?started/i,
+  /^API (was )?started/i,
   /^Board directory:/i,
   /^Claude working directory:/i,
   /^Board structure validated successfully$/i,
@@ -508,7 +508,7 @@ function resolveProcessLogSource(source, parsed) {
 
 function processDisplayName(source) {
   if (source === 'api') {
-    return 'Automation App';
+    return 'API';
   }
 
   return 'Process';
@@ -1252,11 +1252,11 @@ async function autoStartApiIfNeeded() {
   const command = process.env.PANEL_API_START_COMMAND || 'npm start';
   const started = startManagedProcess(state.api, command, 'api', getApiProcessEnvOverrides());
   if (started) {
-    pushLog('info', LOG_SOURCE.panel, 'Automation App was started automatically when the panel opened.');
+    pushLog('info', LOG_SOURCE.panel, 'API was started automatically when the panel opened.');
     return;
   }
 
-  pushLog('warn', LOG_SOURCE.panel, 'Automation App auto-start skipped because process is already running.');
+  pushLog('warn', LOG_SOURCE.panel, 'API auto-start skipped because process is already running.');
 }
 
 function buildMacOsReuseTabScript(url) {
