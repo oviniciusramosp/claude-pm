@@ -381,12 +381,10 @@ function ProgressiveLogBubble({
 
 function ExpandablePrompt({
   title,
-  content,
-  onCopy
+  content
 }: {
   title: string;
   content: string;
-  onCopy: (text: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const lineCount = content ? content.split('\n').length : 0;
@@ -409,27 +407,18 @@ function ExpandablePrompt({
       </button>
 
       {expanded ? (
-        <div className="relative">
-          <pre className="m-0 max-h-[400px] max-w-full overflow-auto whitespace-pre-wrap break-words rounded-sm bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3 pr-12">
-            {content}
-          </pre>
-          <CopyButton
-            text={content}
-            onCopy={onCopy}
-            inExpandable={true}
-          />
-        </div>
+        <pre className="m-0 max-h-[400px] max-w-full overflow-auto whitespace-pre-wrap break-words rounded-sm bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3">
+          {content}
+        </pre>
       ) : null}
     </div>
   );
 }
 
 function ExpandableTaskResult({
-  contract,
-  onCopy
+  contract
 }: {
   contract: TaskContractData;
-  onCopy: (text: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -444,14 +433,6 @@ function ExpandableTaskResult({
   const badge = badgeParts.length > 0 ? ` \u2014 ${badgeParts.join(', ')}` : '';
 
   const hasDetails = Boolean(contract.summary || contract.notes || contract.files.length > 0 || contract.tests);
-
-  const copyText = formatClaudeTaskContract(JSON.stringify({
-    status: contract.status,
-    summary: contract.summary,
-    notes: contract.notes,
-    files: contract.files,
-    tests: contract.tests
-  })) || '';
 
   if (!hasDetails) {
     return (
@@ -479,33 +460,26 @@ function ExpandableTaskResult({
       </button>
 
       {expanded ? (
-        <div className="relative">
-          <div className="max-h-[400px] space-y-2 overflow-auto rounded-sm bg-primary/50 p-3 pr-12 text-xs leading-relaxed text-current">
-            {contract.summary ? (
-              <p className="m-0">{contract.summary}</p>
-            ) : null}
-            {contract.notes ? (
-              <p className="m-0 opacity-75">Notes: {contract.notes}</p>
-            ) : null}
-            {contract.files.length > 0 ? (
-              <div>
-                <p className="m-0 font-medium">Files ({contract.files.length}):</p>
-                <ul className="m-0 list-none pl-2">
-                  {contract.files.map((file, i) => (
-                    <li key={i} className="opacity-75">{file}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            {contract.tests ? (
-              <p className="m-0 opacity-75">Tests: {contract.tests}</p>
-            ) : null}
-          </div>
-          <CopyButton
-            text={copyText}
-            onCopy={onCopy}
-            inExpandable={true}
-          />
+        <div className="max-h-[400px] space-y-2 overflow-auto rounded-sm bg-primary/50 p-3 text-xs leading-relaxed text-current">
+          {contract.summary ? (
+            <p className="m-0">{contract.summary}</p>
+          ) : null}
+          {contract.notes ? (
+            <p className="m-0 opacity-75">Notes: {contract.notes}</p>
+          ) : null}
+          {contract.files.length > 0 ? (
+            <div>
+              <p className="m-0 font-medium">Files ({contract.files.length}):</p>
+              <ul className="m-0 list-none pl-2">
+                {contract.files.map((file, i) => (
+                  <li key={i} className="opacity-75">{file}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {contract.tests ? (
+            <p className="m-0 opacity-75">Tests: {contract.tests}</p>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -1036,7 +1010,6 @@ export function FeedTab({
                     <ExpandablePrompt
                       title={line.promptTitle || 'Prompt sent to Claude Code'}
                       content={displayMessage}
-                      onCopy={copyLiveFeedMessage}
                     />
                   ) : collapsibleLines ? (
                     <CollapsibleLogBubble

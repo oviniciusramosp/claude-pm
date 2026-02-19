@@ -306,7 +306,7 @@ app.listen(config.server.port, () => {
   }
 
   // Send consolidated startup message as progressive log
-  const summary = 'Automation App started successfully';
+  const summary = 'API started successfully';
 
   // Store details as JSON array for frontend to render with icons
   const expandableDetails = startupInfo;
