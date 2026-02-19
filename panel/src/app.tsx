@@ -398,10 +398,30 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
       }
 
       try {
-        await navigator.clipboard.writeText(text);
-        showToast('Message copied');
+        // Try modern clipboard API first
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          showToast('Message copied');
+        } else {
+          // Fallback to legacy method
+          const textarea = document.createElement('textarea');
+          textarea.value = text;
+          textarea.style.position = 'fixed';
+          textarea.style.left = '-999999px';
+          textarea.style.top = '-999999px';
+          document.body.appendChild(textarea);
+          textarea.focus();
+          textarea.select();
+          const successful = document.execCommand('copy');
+          document.body.removeChild(textarea);
+          if (successful) {
+            showToast('Message copied');
+          } else {
+            throw new Error('Copy command failed');
+          }
+        }
       } catch (error) {
-        showToast(`Failed to copy message: ${error.message}`, 'danger');
+        showToast('Failed to copy message', 'danger');
       }
     },
     [showToast]

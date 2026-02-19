@@ -1,6 +1,6 @@
 // panel/src/components/feed-tab.tsx
 
-import React, { type RefObject, useLayoutEffect, useState, useMemo, useCallback } from 'react';
+import React, { type RefObject, useLayoutEffect, useState, useMemo, useCallback, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Copy01, CpuChip01, Send01, TerminalBrowser, Check, ChevronSelectorVertical } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { Tooltip, TooltipTrigger } from './base/tooltip/tooltip';
@@ -31,6 +31,48 @@ import { SourceAvatar } from './source-avatar';
 import { TaskDetailModal } from './task-detail-modal';
 import { SetupRequiredBanner } from './setup-required-banner';
 import type { LogEntry, OrchestratorState, TaskContractData, ValidationReportData, BoardTask } from '../types';
+
+/**
+ * Copy button with visual feedback (check icon on success)
+ */
+function CopyButton({
+  text,
+  onCopy,
+  className,
+  inExpandable = false
+}: {
+  text: string;
+  onCopy: (text: string) => void;
+  className?: string;
+  inExpandable?: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (copied) {
+      const timer = setTimeout(() => setCopied(false), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [copied]);
+
+  return (
+    <Button
+      size="sm"
+      color="tertiary"
+      className={cx(
+        inExpandable ? 'h-6 w-6 shrink-0 [&_svg]:!size-3' : 'h-5 w-5 shrink-0 opacity-0 transition-opacity group-hover/msg:opacity-100 [&_svg]:!size-3.5',
+        inExpandable && 'absolute right-2 top-2',
+        className
+      )}
+      aria-label={copied ? 'Copied' : 'Copy'}
+      iconLeading={copied ? Check : Copy01}
+      onPress={() => {
+        onCopy(text);
+        setCopied(true);
+      }}
+    />
+  );
+}
 
 function getStartupGroupId(log: LogEntry): string | null {
   return log.meta?.startupGroupId || null;
@@ -217,13 +259,24 @@ function ProgressiveLogBubble({
 
   const message = latestLog.message || '';
   const expandableContent = firstMeta?.expandableContent;
-  const hasExpandable = expandableContent && expandableContent.length > 0;
-  const lineCount = hasExpandable ? expandableContent.split('\n').length : 0;
+
+  // Detect if expandableContent is an array of {level, text} (startup details)
+  const isDetailsArray = Array.isArray(expandableContent) && expandableContent.every(
+    (item: any) => item && typeof item === 'object' && 'level' in item && 'text' in item
+  );
+
+  const hasExpandable = expandableContent && (isDetailsArray || expandableContent.length > 0);
+  const lineCount = hasExpandable
+    ? (isDetailsArray ? expandableContent.length : expandableContent.split('\n').length)
+    : 0;
 
   // Extract task info from meta if available
   const taskInfo = (latestMeta as any).taskId && (latestMeta as any).taskName
     ? { taskId: (latestMeta as any).taskId, taskName: (latestMeta as any).taskName }
     : null;
+
+  // Full text to copy (message + expandable if exists)
+  const fullText = hasExpandable ? `${message}\n\nPrompt:\n${expandableContent}` : message;
 
   return (
     <div className="space-y-2">
@@ -266,7 +319,7 @@ function ProgressiveLogBubble({
         </div>
       )}
 
-      {/* Expandable prompt */}
+      {/* Expandable details/prompt */}
       {hasExpandable && (
         <div>
           <button
@@ -276,26 +329,37 @@ function ProgressiveLogBubble({
             aria-expanded={expanded}
           >
             <Icon icon={expanded ? ChevronDown : ChevronRight} className="size-4 shrink-0" />
-            <span>Prompt</span>
+            <span>{isDetailsArray ? 'Details' : 'Prompt'}</span>
             {!expanded && lineCount > 0 ? (
               <span className="ml-1 text-[11px] font-normal text-tertiary">
-                ({lineCount} {lineCount === 1 ? 'line' : 'lines'})
+                ({lineCount} {lineCount === 1 ? (isDetailsArray ? 'configuration' : 'line') : (isDetailsArray ? 'configurations' : 'lines')})
               </span>
             ) : null}
           </button>
 
           {expanded ? (
             <div className="relative mt-2">
-              <pre className="m-0 max-h-[400px] max-w-full overflow-auto whitespace-pre-wrap break-words rounded-sm bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3">
-                {expandableContent}
-              </pre>
-              <Button
-                size="sm"
-                color="tertiary"
-                className="absolute right-2 top-2 h-6 w-6 shrink-0 [&_svg]:!size-3"
-                aria-label="Copy prompt"
-                iconLeading={Copy01}
-                onPress={() => onCopy(expandableContent || '')}
+              {isDetailsArray ? (
+                <div className="max-h-[400px] overflow-auto rounded-sm bg-primary/50 p-2 sm:p-3 pr-10">
+                  {expandableContent.map((item: any, idx: number) => {
+                    const levelMeta = logLevelMeta(item.level);
+                    return (
+                      <div key={idx} className="mb-1.5 flex items-start gap-2 text-xs leading-relaxed last:mb-0">
+                        <Icon icon={levelMeta.icon} className="mt-0.5 size-3.5 shrink-0" />
+                        <span>{item.text}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <pre className="m-0 max-h-[400px] max-w-full overflow-auto whitespace-pre-wrap break-words rounded-sm bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3 pr-12">
+                  {expandableContent}
+                </pre>
+              )}
+              <CopyButton
+                text={isDetailsArray ? expandableContent.map((item: any) => item.text).join('\n') : (expandableContent || '')}
+                onCopy={onCopy}
+                inExpandable={true}
               />
             </div>
           ) : null}
@@ -322,7 +386,7 @@ function ExpandablePrompt({
       <button
         type="button"
         className="m-0 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left text-xs font-medium leading-4 text-current hover:opacity-80 sm:text-sm sm:leading-5"
-        onClick={() => setExpanded((prev) => !prev)}
+        onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
       >
         <Icon icon={expanded ? ChevronDown : ChevronRight} className="size-4 shrink-0" />
@@ -336,16 +400,13 @@ function ExpandablePrompt({
 
       {expanded ? (
         <div className="relative">
-          <pre className="m-0 max-h-[400px] max-w-full overflow-auto whitespace-pre-wrap break-words rounded-sm bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3">
+          <pre className="m-0 max-h-[400px] max-w-full overflow-auto whitespace-pre-wrap break-words rounded-sm bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3 pr-12">
             {content}
           </pre>
-          <Button
-            size="sm"
-            color="tertiary"
-            className="absolute right-2 top-2 h-6 w-6 shrink-0 [&_svg]:!size-3"
-            aria-label="Copy prompt"
-            iconLeading={Copy01}
-            onPress={() => onCopy(content)}
+          <CopyButton
+            text={content}
+            onCopy={onCopy}
+            inExpandable={true}
           />
         </div>
       ) : null}
@@ -430,13 +491,10 @@ function ExpandableTaskResult({
               <p className="m-0 opacity-75">Tests: {contract.tests}</p>
             ) : null}
           </div>
-          <Button
-            size="sm"
-            color="tertiary"
-            className="absolute right-2 top-2 h-6 w-6 shrink-0 [&_svg]:!size-3"
-            aria-label="Copy result"
-            iconLeading={Copy01}
-            onPress={() => onCopy(copyText)}
+          <CopyButton
+            text={copyText}
+            onCopy={onCopy}
+            inExpandable={true}
           />
         </div>
       ) : null}
@@ -549,13 +607,10 @@ ${report.hasMoreWarnings ? `  ... and ${report.totalWarnings - report.warnings.l
               </div>
             ) : null}
           </div>
-          <Button
-            size="sm"
-            color="tertiary"
-            className="absolute right-2 top-2 h-6 w-6 shrink-0 [&_svg]:!size-3"
-            aria-label="Copy report"
-            iconLeading={Copy01}
-            onPress={() => onCopy(copyText)}
+          <CopyButton
+            text={copyText}
+            onCopy={onCopy}
+            inExpandable={true}
           />
         </div>
       ) : null}
@@ -605,13 +660,10 @@ function CollapsibleLogBubble({
               );
             })}
           </div>
-          <Button
-            size="sm"
-            color="tertiary"
-            className="absolute right-2 top-2 h-6 w-6 shrink-0 [&_svg]:!size-3"
-            aria-label="Copy details"
-            iconLeading={Copy01}
-            onPress={() => onCopy(copyText)}
+          <CopyButton
+            text={copyText}
+            onCopy={onCopy}
+            inExpandable={true}
           />
         </div>
       ) : null}
@@ -668,13 +720,10 @@ function StartupBubble({
               );
             })}
           </div>
-          <Button
-            size="sm"
-            color="tertiary"
-            className="absolute right-2 top-2 h-6 w-6 shrink-0 [&_svg]:!size-3"
-            aria-label="Copy details"
-            iconLeading={Copy01}
-            onPress={() => onCopy(copyText)}
+          <CopyButton
+            text={copyText}
+            onCopy={onCopy}
+            inExpandable={true}
           />
         </div>
       ) : null}

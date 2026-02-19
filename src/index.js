@@ -13,24 +13,13 @@ const app = express();
 
 app.use(express.json({ limit: '2mb' }));
 
-// Collect startup info for consolidated log
+// Collect startup info for consolidated log (array of {level, text})
 const startupInfo = [];
-
-// Add package info to startup (mimics npm start output)
-try {
-  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-  const startCommand = pkg.scripts?.start || 'node src/index.js';
-  startupInfo.push(`> ${pkg.name}@${pkg.version} start`);
-  startupInfo.push(`> ${startCommand}`);
-  startupInfo.push(''); // Empty line separator
-} catch {
-  // Ignore if package.json can't be read
-}
 
 const boardClient = new LocalBoardClient(config);
 await boardClient.initialize();
-startupInfo.push(`Claude working directory: ${config.claude.workdir}`);
-startupInfo.push(`Board directory: ${config.board.dir}`);
+startupInfo.push({ level: 'info', text: `Claude working directory: ${config.claude.workdir}` });
+startupInfo.push({ level: 'info', text: `Board directory: ${config.board.dir}` });
 
 // Validate Board structure on startup
 const boardValidator = new BoardValidator(config);
@@ -39,7 +28,7 @@ try {
   if (!validationResult.valid) {
     logger.warn(`[VALIDATION_REPORT] ${boardValidator.formatForFeed(validationResult)}`);
   } else {
-    startupInfo.push('Board structure validated successfully');
+    startupInfo.push({ level: 'success', text: 'Board structure validated successfully' });
   }
 } catch (error) {
   logger.warn(`Board validation failed: ${error.message}`);
@@ -61,13 +50,13 @@ if (config.claude.injectClaudeMd) {
   try {
     const result = await syncClaudeMd(config, logger);
     if (result?.action === 'unchanged') {
-      startupInfo.push('CLAUDE.md managed section is already up to date');
+      startupInfo.push({ level: 'info', text: 'CLAUDE.md managed section is already up to date' });
     } else if (result?.action === 'updated') {
-      startupInfo.push('CLAUDE.md managed section updated');
+      startupInfo.push({ level: 'success', text: 'CLAUDE.md managed section updated' });
     } else if (result?.action === 'created') {
-      startupInfo.push('CLAUDE.md managed section created');
+      startupInfo.push({ level: 'success', text: 'CLAUDE.md managed section created' });
     } else if (result?.action === 'appended') {
-      startupInfo.push('CLAUDE.md managed section appended');
+      startupInfo.push({ level: 'success', text: 'CLAUDE.md managed section appended' });
     }
   } catch (error) {
     logger.warn(`Failed to sync CLAUDE.md in target project: ${error.message}`);
@@ -313,20 +302,22 @@ app.listen(config.server.port, () => {
     const minutes = Math.floor(config.queue.pollIntervalMs / 60000);
     const seconds = Math.floor((config.queue.pollIntervalMs % 60000) / 1000);
     const timeStr = minutes > 0 ? `${minutes} minute${minutes > 1 ? 's' : ''}` : `${seconds} second${seconds > 1 ? 's' : ''}`;
-    startupInfo.push(`Automatic reconciliation enabled every ${timeStr}`);
+    startupInfo.push({ level: 'info', text: `Automatic reconciliation enabled every ${timeStr}` });
   }
 
   // Send consolidated startup message as progressive log
   const configCount = startupInfo.length;
   const summary = `Automation App started successfully (${configCount} configuration${configCount !== 1 ? 's' : ''})`;
-  const expandableDetails = startupInfo.join('\n');
+
+  // Store details as JSON array for frontend to render with icons
+  const expandableDetails = startupInfo;
 
   logger.progressive(
     'success',
     'app-startup',
     'complete',
     summary,
-    {},
+    { detailsType: 'startup' }, // Flag to indicate this is startup details with levels
     expandableDetails
   );
 
