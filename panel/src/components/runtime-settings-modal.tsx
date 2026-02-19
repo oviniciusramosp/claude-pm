@@ -28,6 +28,7 @@ export function RuntimeSettingsModal({
       isOpen={runtimeSettingsModalOpen}
       onOpenChange={setRuntimeSettingsModalOpen}
       isDismissable
+      className="!overflow-hidden"
     >
       <Modal className="sm:max-w-xl">
         <Dialog>
