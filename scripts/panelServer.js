@@ -242,11 +242,8 @@ const STARTUP_LOG_PATTERNS = [
   /^>\s+NODE_OPTIONS=/i, // npm script command line
 ];
 
-// Startup message progressive grouping state
-let startupGroupId = null;
-let startupMessageCount = 0;
-let startupGroupTimer = null;
-const STARTUP_GROUP_TIMEOUT_MS = 5000; // Close startup group after 5s of no new messages
+// Startup message grouping: each process start gets a unique groupId
+let currentStartupGroupId = null;
 const CLAUDE_RAW_NOISE_PATTERNS = [
   /you(?:'|’)ve hit your limit/i,
   /hit your limit/i
@@ -279,96 +276,22 @@ function isStartupMessage(message) {
   return STARTUP_LOG_PATTERNS.some((pattern) => pattern.test(clean));
 }
 
-function closeStartupGroup() {
-  if (!startupGroupId) {
-    return;
-  }
-
-  const completeEntry = {
-    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    ts: new Date().toISOString(),
-    level: 'success',
-    source: 'api',
-    message: `Automation App started successfully (${startupMessageCount} configuration${startupMessageCount === 1 ? '' : 's'})`,
-    meta: {
-      groupId: startupGroupId,
-      state: 'complete',
-      duration: '' // Could calculate if we stored start time
-    }
-  };
-
-  logHistory.push(completeEntry);
-  if (logHistory.length > MAX_LOG_LINES) {
-    logHistory.shift();
-  }
-
-  appendLogToDisk(completeEntry);
-
-  const payload = `data: ${JSON.stringify(completeEntry)}\n\n`;
-  for (const client of logClients) {
-    client.write(payload);
-  }
-
-  startupGroupId = null;
-  startupMessageCount = 0;
-  if (startupGroupTimer) {
-    clearTimeout(startupGroupTimer);
-    startupGroupTimer = null;
-  }
-}
-
 function pushLog(level, source, message, extra) {
-  // Check if this is a startup message
+  // Tag startup messages with a groupId so the frontend can group them
   if (source === 'api' && isStartupMessage(message)) {
-    // Start new startup group if not already active
-    if (!startupGroupId) {
-      startupGroupId = `startup-${Date.now()}`;
-      startupMessageCount = 0;
+    if (!currentStartupGroupId) {
+      currentStartupGroupId = `startup-${Date.now()}`;
     }
-
-    startupMessageCount++;
-
-    // Determine state: first message is 'start', subsequent are 'progress'
-    const state = startupMessageCount === 1 ? 'start' : 'progress';
-
-    const entry = {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      ts: new Date().toISOString(),
-      level,
-      source,
-      message,
+    extra = {
       ...extra,
       meta: {
         ...(extra?.meta || {}),
-        groupId: startupGroupId,
-        state
+        startupGroupId: currentStartupGroupId
       }
     };
-
-    logHistory.push(entry);
-    if (logHistory.length > MAX_LOG_LINES) {
-      logHistory.shift();
-    }
-
-    appendLogToDisk(entry);
-
-    const payload = `data: ${JSON.stringify(entry)}\n\n`;
-    for (const client of logClients) {
-      client.write(payload);
-    }
-
-    // Reset the timer - close the group after N seconds of no new startup messages
-    if (startupGroupTimer) {
-      clearTimeout(startupGroupTimer);
-    }
-    startupGroupTimer = setTimeout(closeStartupGroup, STARTUP_GROUP_TIMEOUT_MS);
-
-    return;
-  }
-
-  // If we were collecting startup messages and this is not a startup message, close the group
-  if (startupGroupId) {
-    closeStartupGroup();
+  } else if (currentStartupGroupId) {
+    // Non-startup message arrived, close the group for future starts
+    currentStartupGroupId = null;
   }
 
   const entry = {

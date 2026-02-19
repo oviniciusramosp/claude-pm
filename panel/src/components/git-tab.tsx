@@ -8,12 +8,15 @@ import { cx } from '@/utils/cx';
 import { Icon } from './icon';
 import { GIT_CONVENTIONAL_TYPE_COLORS, GIT_POLL_INTERVAL_MS } from '../constants';
 import { CommitDetailModal } from './commit-detail-modal';
+import { SetupRequiredBanner } from './setup-required-banner';
 import type { GitCommit as GitCommitType } from '../types';
 
 interface GitTabProps {
   apiBaseUrl: string;
   showToast: (message: string, color?: 'success' | 'warning' | 'danger' | 'neutral') => void;
   refreshTrigger: number;
+  setupComplete: boolean;
+  onNavigateToSetup: () => void;
 }
 
 const PAGE_SIZE = 50;
@@ -119,7 +122,7 @@ function CommitRow({ commit, onClick }: { commit: GitCommitType; onClick: () => 
   );
 }
 
-export function GitTab({ apiBaseUrl, showToast, refreshTrigger }: GitTabProps) {
+export function GitTab({ apiBaseUrl, showToast, refreshTrigger, setupComplete, onNavigateToSetup }: GitTabProps) {
   const [commits, setCommits] = useState<GitCommitType[]>([]);
   const [loading, setLoading] = useState(true);
   const [gitError, setGitError] = useState<string | null>(null);
@@ -208,6 +211,9 @@ export function GitTab({ apiBaseUrl, showToast, refreshTrigger }: GitTabProps) {
 
   return (
     <>
+      {/* Setup required banner */}
+      {!setupComplete && <SetupRequiredBanner onNavigateToSetup={onNavigateToSetup} />}
+
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">

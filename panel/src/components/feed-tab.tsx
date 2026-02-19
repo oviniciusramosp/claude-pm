@@ -29,54 +29,90 @@ import {
 import { Icon } from './icon';
 import { SourceAvatar } from './source-avatar';
 import { TaskDetailModal } from './task-detail-modal';
+import { SetupRequiredBanner } from './setup-required-banner';
 import type { LogEntry, OrchestratorState, TaskContractData, ValidationReportData, BoardTask } from '../types';
 
+function getStartupGroupId(log: LogEntry): string | null {
+  return log.meta?.startupGroupId || null;
+}
+
 /**
- * Groups progressive logs by their groupId
- * Returns an array of either individual logs or grouped progressive log arrays
+ * Groups progressive logs and startup logs by their groupId.
+ * Returns an array of either individual logs or grouped log arrays.
+ * - Progressive groups: first element has isProgressiveLog() true
+ * - Startup groups: first element has meta.startupGroupId set
  */
-function groupProgressiveLogs(logs: LogEntry[]): Array<LogEntry | LogEntry[]> {
+function groupFeedLogs(logs: LogEntry[]): Array<LogEntry | LogEntry[]> {
   const result: Array<LogEntry | LogEntry[]> = [];
   const progressiveGroups = new Map<string, LogEntry[]>();
+  const startupGroups = new Map<string, LogEntry[]>();
 
   for (const log of logs) {
+    // Progressive logs
     if (isProgressiveLog(log)) {
       const meta = extractProgressiveMeta(log);
       if (meta && meta.groupId) {
         if (!progressiveGroups.has(meta.groupId)) {
           progressiveGroups.set(meta.groupId, []);
+          // Push a placeholder to mark position
+          result.push(log);
         }
         progressiveGroups.get(meta.groupId)!.push(log);
         continue;
       }
     }
+
+    // Startup logs
+    const startupId = getStartupGroupId(log);
+    if (startupId) {
+      if (!startupGroups.has(startupId)) {
+        startupGroups.set(startupId, []);
+        // Push a placeholder to mark position
+        result.push(log);
+      }
+      startupGroups.get(startupId)!.push(log);
+      continue;
+    }
+
     result.push(log);
   }
 
-  // Insert grouped logs at the position of their first occurrence
-  const insertedGroups = new Set<string>();
+  // Replace placeholders with their groups
   const finalResult: Array<LogEntry | LogEntry[]> = [];
+  const insertedProgressive = new Set<string>();
+  const insertedStartup = new Set<string>();
 
   for (const item of result) {
-    if (!Array.isArray(item) && isProgressiveLog(item)) {
+    if (Array.isArray(item)) {
+      finalResult.push(item);
+      continue;
+    }
+
+    // Check if this is a progressive placeholder
+    if (isProgressiveLog(item)) {
       const meta = extractProgressiveMeta(item);
-      if (meta && meta.groupId && !insertedGroups.has(meta.groupId)) {
+      if (meta?.groupId && !insertedProgressive.has(meta.groupId)) {
         const group = progressiveGroups.get(meta.groupId);
         if (group && group.length > 0) {
           finalResult.push(group);
-          insertedGroups.add(meta.groupId);
+          insertedProgressive.add(meta.groupId);
+          continue;
         }
       }
-    } else {
-      finalResult.push(item);
     }
-  }
 
-  // Add any remaining groups that weren't inserted
-  for (const [groupId, group] of progressiveGroups.entries()) {
-    if (!insertedGroups.has(groupId)) {
-      finalResult.push(group);
+    // Check if this is a startup placeholder
+    const startupId = getStartupGroupId(item);
+    if (startupId && !insertedStartup.has(startupId)) {
+      const group = startupGroups.get(startupId);
+      if (group && group.length > 0) {
+        finalResult.push(group);
+        insertedStartup.add(startupId);
+        continue;
+      }
     }
+
+    finalResult.push(item);
   }
 
   return finalResult;
@@ -583,6 +619,69 @@ function CollapsibleLogBubble({
   );
 }
 
+/**
+ * Renders all startup messages in a single bubble.
+ * Shows main "started" line and expandable details.
+ */
+function StartupBubble({
+  logs,
+  onCopy
+}: {
+  logs: LogEntry[];
+  onCopy: (text: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const detailLines = logs.map((l) => ({
+    level: normalizeLogLevel(l.level),
+    text: formatLiveFeedMessage(l)
+  }));
+
+  const copyText = detailLines.map((d) => d.text).join('\n');
+
+  return (
+    <div className="space-y-1.5">
+      <p className="m-0 whitespace-pre-wrap break-words text-xs font-medium leading-4 text-current sm:text-sm sm:leading-5">
+        Automation App started.
+      </p>
+
+      <button
+        type="button"
+        className="m-0 flex w-full cursor-pointer items-center gap-1.5 border-none bg-transparent p-0 text-left text-xs leading-4 text-current/60 hover:text-current/80 sm:text-sm sm:leading-5"
+        onClick={() => setExpanded((prev) => !prev)}
+        aria-expanded={expanded}
+      >
+        <Icon icon={expanded ? ChevronDown : ChevronRight} className="size-3.5 shrink-0" />
+        <span>{detailLines.length} detail{detailLines.length === 1 ? '' : 's'}</span>
+      </button>
+
+      {expanded ? (
+        <div className="relative">
+          <div className="max-h-[300px] space-y-1 overflow-auto rounded-md bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3">
+            {detailLines.map((detail, i) => {
+              const meta = logLevelMeta(detail.level);
+              return (
+                <div key={i} className="flex items-start gap-1.5">
+                  <Icon icon={meta.icon} className="mt-0.5 size-3 shrink-0 opacity-60" />
+                  <span className="opacity-85">{detail.text}</span>
+                </div>
+              );
+            })}
+          </div>
+          <Button
+            size="sm"
+            color="tertiary"
+            className="absolute right-2 top-2 h-6 w-6 shrink-0 [&_svg]:!size-3"
+            aria-label="Copy details"
+            iconLeading={Copy01}
+            onPress={() => onCopy(copyText)}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function FeedTab({
   logs,
   logFeedRef,
@@ -598,7 +697,9 @@ export function FeedTab({
   apiBaseUrl,
   showToast,
   onShowErrorDetail,
-  refreshTrigger
+  refreshTrigger,
+  setupComplete,
+  onNavigateToSetup
 }: {
   logs: LogEntry[];
   logFeedRef: RefObject<HTMLDivElement | null>;
@@ -615,6 +716,8 @@ export function FeedTab({
   showToast: (message: string, color?: 'success' | 'warning' | 'danger' | 'neutral') => void;
   onShowErrorDetail: (title: string, message: string) => void;
   refreshTrigger: number;
+  setupComplete: boolean;
+  onNavigateToSetup: () => void;
 }) {
   const [selectedTask, setSelectedTask] = useState(null);
   const [loadingTask, setLoadingTask] = useState(false);
@@ -651,7 +754,7 @@ export function FeedTab({
   }, [fetchTaskById]);
 
   // Group progressive logs
-  const groupedLogs = useMemo(() => groupProgressiveLogs(logs), [logs]);
+  const groupedLogs = useMemo(() => groupFeedLogs(logs), [logs]);
 
   useLayoutEffect(() => {
     const el = logFeedRef.current;
@@ -670,6 +773,9 @@ export function FeedTab({
         </h2>
         <p className="m-0 hidden text-sm text-tertiary sm:block">Unified stream for panel, app and direct Claude chat.</p>
       </div>
+
+      {/* Setup required banner */}
+      {!setupComplete && <SetupRequiredBanner onNavigateToSetup={onNavigateToSetup} />}
 
       {/* Fix in progress banner */}
       {fixingTaskId && (
@@ -752,6 +858,45 @@ export function FeedTab({
                       ? <SourceAvatar sourceMeta={sourceMeta} />
                       : <span className="size-8 shrink-0" aria-hidden="true" />
                   ) : null}
+                </div>
+              </div>
+            );
+          }
+
+          // Check if this is a startup log group
+          const isStartupGroup = Array.isArray(item) && item.length > 0 && getStartupGroupId(item[0]);
+
+          if (isStartupGroup) {
+            const group = item as LogEntry[];
+            const latestLog = group[group.length - 1];
+            const timestamp = formatFeedTimestamp(latestLog.ts);
+            const sourceMeta = logSourceMeta(latestLog);
+
+            return (
+              <div
+                key={`startup-${getStartupGroupId(group[0]) || index}`}
+                className="flex justify-start"
+              >
+                <div className="flex w-full min-w-0 max-w-[min(95%,900px)] items-end gap-2 justify-start">
+                  <SourceAvatar sourceMeta={sourceMeta} />
+
+                  <div
+                    className={cx(
+                      'group/msg min-w-0 max-w-[min(86%,760px)] rounded-xl rounded-bl-sm px-3 py-2.5 shadow-xs sm:px-4 sm:py-3',
+                      'bg-utility-success-50 text-success-primary'
+                    )}
+                  >
+                    <StartupBubble logs={group} onCopy={copyLiveFeedMessage} />
+
+                    <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-current/50">
+                      <div className="inline-flex items-center gap-1">
+                        <Icon icon={logLevelMeta('success').icon} className="size-3" />
+                        <span>Success</span>
+                        <span className="mx-0.5 opacity-60">&bull;</span>
+                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{timestamp}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             );

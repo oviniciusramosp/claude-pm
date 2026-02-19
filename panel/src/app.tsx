@@ -101,7 +101,18 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
   }, [orchestratorState]);
   const isPaused = orchestratorState?.paused === true;
 
-  const disabledTabs = useMemo(() => new Set<string>(), []);
+  const disabledTabs = useMemo(() => {
+    const disabled = new Set<string>();
+
+    // Disable Feed, Board, Git if setup is incomplete
+    if (!allFieldsValidated || hasBlockingErrors) {
+      disabled.add(NAV_TAB_KEYS.feed);
+      disabled.add(NAV_TAB_KEYS.board);
+      disabled.add(NAV_TAB_KEYS.git);
+    }
+
+    return disabled;
+  }, [allFieldsValidated, hasBlockingErrors]);
 
   useEffect(() => {
     if (apiRunning) {
@@ -683,12 +694,16 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
               onShowErrorDetail={(title, message) => setErrorModal({ open: true, title, message })}
               onError={onBoardError}
               setFixingTaskId={setFixingTaskId}
+              setupComplete={allFieldsValidated && !hasBlockingErrors}
+              onNavigateToSetup={() => setActiveTab(NAV_TAB_KEYS.setup)}
             />
           ) : activeTab === NAV_TAB_KEYS.git ? (
             <GitTab
               apiBaseUrl={apiBaseUrl}
               showToast={showToast}
               refreshTrigger={boardRefreshTrigger}
+              setupComplete={allFieldsValidated && !hasBlockingErrors}
+              onNavigateToSetup={() => setActiveTab(NAV_TAB_KEYS.setup)}
             />
           ) : (
             <FeedTab
@@ -707,6 +722,8 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
               showToast={showToast}
               onShowErrorDetail={(title, message) => setErrorModal({ open: true, title, message })}
               refreshTrigger={boardRefreshTrigger}
+              setupComplete={allFieldsValidated && !hasBlockingErrors}
+              onNavigateToSetup={() => setActiveTab(NAV_TAB_KEYS.setup)}
             />
           )}
         </div>

@@ -58,14 +58,15 @@ export const TEXT_FIELD_CONFIG: TextFieldConfig[] = [
     label: 'Claude Working Directory',
     icon: Folder,
     placeholder: '/Users/you/your-project',
-    description: 'Folder where Claude will run commands and modify files.',
+    description: 'The target project folder where Claude will execute tasks (NOT the Product Manager folder).',
     help: {
       title: 'How to choose Claude Working Directory',
-      summary: 'Pick the repository folder Claude should work on.',
+      summary: 'Select the project where your tasks will be executed.',
       steps: [
-        'Use Choose Folder to select a local directory.',
-        'Or type a path manually.',
-        'The automation will execute Claude commands in this folder.'
+        'Choose the folder of your target project (e.g., your React/Next.js app).',
+        'Create a "Board/" folder inside this project directory.',
+        'Tasks in Board/ will be executed in this project context.',
+        'Example: If your app is at /Users/you/my-app, select /Users/you/my-app and create /Users/you/my-app/Board/'
       ]
     },
     folderPicker: true

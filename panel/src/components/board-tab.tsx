@@ -15,6 +15,7 @@ import {
 } from '../constants';
 import { TaskDetailModal } from './task-detail-modal';
 import { CreateTaskModal } from './create-task-modal';
+import { SetupRequiredBanner } from './setup-required-banner';
 import type { BoardTask } from '../types';
 
 const COLUMN_STATUS_MAP: Record<string, string> = {
@@ -30,6 +31,8 @@ interface BoardTabProps {
   onShowErrorDetail: (title: string, message: string) => void;
   onError?: (message: string, details?: { stack?: string; exitCode?: number; stderr?: string; stdout?: string }) => void;
   setFixingTaskId?: (taskId: string | null) => void;
+  setupComplete: boolean;
+  onNavigateToSetup: () => void;
 }
 
 interface BoardError {
@@ -375,7 +378,7 @@ function SkeletonCard() {
   );
 }
 
-export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDetail, onError, setFixingTaskId: setFixingTaskIdProp }: BoardTabProps) {
+export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDetail, onError, setFixingTaskId: setFixingTaskIdProp, setupComplete, onNavigateToSetup }: BoardTabProps) {
   const [tasks, setTasks] = useState<BoardTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [boardError, setBoardError] = useState<BoardError | null>(null);
@@ -936,6 +939,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
 
   return (
     <section className="flex min-w-0 flex-col gap-5">
+      {/* Setup required banner */}
+      {!setupComplete && <SetupRequiredBanner onNavigateToSetup={onNavigateToSetup} />}
+
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
