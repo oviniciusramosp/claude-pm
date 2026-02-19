@@ -365,6 +365,16 @@ function ProgressiveLogBubble({
           ) : null}
         </div>
       )}
+
+      {/* Copy button for full message (always visible) */}
+      <div className="flex justify-end">
+        <CopyButton
+          text={fullText}
+          onCopy={onCopy}
+          inExpandable={false}
+          className="text-current/50 hover:text-current/80"
+        />
+      </div>
     </div>
   );
 }
@@ -1057,15 +1067,10 @@ export function FeedTab({
                       <span style={{ fontVariantNumeric: 'tabular-nums' }}>{timestamp}</span>
                     </div>
                     {!line.isPrompt ? (
-                      <Button
-                        size="sm"
-                        color="tertiary"
-                        className="h-5 w-5 shrink-0 opacity-0 transition-opacity group-hover/msg:opacity-100 [&_svg]:!size-3.5"
-                        aria-label="Copy message"
-                        iconLeading={Copy01}
-                        onPress={() => {
-                          copyLiveFeedMessage(displayMessage);
-                        }}
+                      <CopyButton
+                        text={displayMessage}
+                        onCopy={copyLiveFeedMessage}
+                        inExpandable={false}
                       />
                     ) : null}
                   </div>

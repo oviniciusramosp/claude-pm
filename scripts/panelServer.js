@@ -310,13 +310,6 @@ function pushLog(level, source, message, extra) {
 
   appendLogToDisk(entry);
 
-  // Debug: log entry structure
-  if (entry.meta?.expandableContent) {
-    console.log('[DEBUG SSE] Sending log with expandableContent, length:', entry.meta.expandableContent.length);
-    console.log('[DEBUG SSE] Entry keys:', Object.keys(entry));
-    console.log('[DEBUG SSE] Meta keys:', Object.keys(entry.meta));
-  }
-
   const payload = `data: ${JSON.stringify(entry)}\n\n`;
   for (const client of logClients) {
     client.write(payload);
@@ -418,13 +411,10 @@ function parseProcessLogLine(rawLine, fallbackLevel = 'info') {
 
         // Special handling for expandableContent (comes as JSON string)
         if (key === 'expandableContent') {
-          console.log('[DEBUG expandableContent] Raw value:', value.substring(0, 150));
           try {
             // Parse the JSON string to restore newlines and special chars
             value = JSON.parse(value);
-            console.log('[DEBUG expandableContent] Parsed successfully, length:', value?.length);
-          } catch (err) {
-            console.log('[DEBUG expandableContent] Parse failed:', err.message);
+          } catch {
             // If parsing fails, keep as-is
           }
         }
