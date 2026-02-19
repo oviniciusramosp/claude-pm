@@ -4247,6 +4247,12 @@ app.get('/api/git/log', async (req, res) => {
   const env = await readEnvPairs();
   const workdir = path.resolve(cwd, env.CLAUDE_WORKDIR || '.');
 
+  // Debug logs
+  console.log('[DEBUG] Git endpoint called');
+  console.log('[DEBUG] cwd:', cwd);
+  console.log('[DEBUG] env.CLAUDE_WORKDIR:', env.CLAUDE_WORKDIR);
+  console.log('[DEBUG] resolved workdir:', workdir);
+
   try {
     await fs.access(workdir);
   } catch {
@@ -4299,6 +4305,15 @@ app.get('/api/git/diff', async (req, res) => {
 
   const env = await readEnvPairs();
   const workdir = path.resolve(cwd, env.CLAUDE_WORKDIR || '.');
+
+  // NEVER show diffs from the Product Manager project itself
+  if (path.normalize(workdir) === path.normalize(cwd)) {
+    res.status(400).json({
+      ok: false,
+      message: 'Cannot show diffs from the Product Manager project. Configure CLAUDE_WORKDIR to point to your user project.'
+    });
+    return;
+  }
 
   try {
     const stat = await runGitCommand(['show', '--stat', '--format=', hash], workdir);

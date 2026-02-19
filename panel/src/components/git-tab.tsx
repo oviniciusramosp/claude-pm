@@ -253,8 +253,14 @@ export function GitTab({ apiBaseUrl, showToast, refreshTrigger }: GitTabProps) {
 
       {/* Error banner */}
       {gitError && !loading && (
-        <div className="mb-6 rounded-lg border border-dashed border-error-primary bg-utility-error-50 p-4 text-center text-sm text-error-primary">
-          {gitError}
+        <div className="mb-6 rounded-lg border border-dashed border-error-primary bg-utility-error-50 p-4 text-sm text-error-primary">
+          <p className="font-medium">⚠️ Git History Unavailable</p>
+          <p className="mt-1">{gitError}</p>
+          {gitError.includes('Product Manager project') && (
+            <p className="mt-2 text-xs text-error-secondary">
+              The Git page is designed to show commits from your user project only, not from the automation system itself.
+            </p>
+          )}
         </div>
       )}
 
