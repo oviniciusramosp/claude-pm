@@ -250,10 +250,10 @@ export const LOG_SOURCE_META: Record<string, LogSourceMeta> = {
     directClaude: true
   },
   api: {
-    label: 'Automation App',
+    label: 'API',
     icon: Server01,
     side: 'incoming',
-    avatarInitials: 'AA',
+    avatarInitials: 'API',
     directClaude: false
   },
 };

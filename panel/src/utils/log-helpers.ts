@@ -417,7 +417,7 @@ export function formatLiveFeedMessage(entry: LogEntry): string {
   }
 
   if (/^API auto-start is disabled \(PANEL_AUTO_START_API=false\)\.?$/i.test(trimmed)) {
-    return 'Automation App auto-start is disabled. Click "Start" to begin.';
+    return 'API auto-start is disabled. Click "Start" to begin.';
   }
 
   const reconciliationStartMatch = trimmed.match(/^Starting board reconciliation \(reason:\s*(.+)\)$/i);

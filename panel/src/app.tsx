@@ -521,9 +521,9 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
             method: 'POST',
             body: '{}'
           });
-          showToast('Saved and restarted app with latest configuration.', 'success');
+          showToast('Saved and restarted API with latest configuration.', 'success');
         } else if (apiRunning) {
-          showToast('Saved. Restart app to apply changes immediately.', 'warning');
+          showToast('Saved. Restart API to apply changes immediately.', 'warning');
         } else {
           showToast('Saved successfully.', 'success');
         }

@@ -73,7 +73,7 @@ export function RuntimeSettingsModal({
               </div>
             </div>
 
-            {!apiRunning ? <p className="m-0 mt-3 text-sm text-warning-primary">Start Automation App to change runtime settings.</p> : null}
+            {!apiRunning ? <p className="m-0 mt-3 text-sm text-warning-primary">Start API to change runtime settings.</p> : null}
 
             <div className="mt-5 flex justify-end">
               <Button

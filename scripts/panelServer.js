@@ -4303,7 +4303,7 @@ async function startServer() {
   const server = app.listen(panelPort, () => {
     const url = `http://localhost:${panelPort}`;
     console.log(`✅ Joy UI panel started: ${url}`);
-    console.log('ℹ️ Use this panel to configure .env, start app, and watch live logs.');
+    console.log('ℹ️ Use this panel to configure .env, start API, and watch live logs.');
     console.log(`📁 Board directory: ${boardDir}`);
     console.log(`🔧 Claude working directory: ${claudeWorkdir}`);
     if (panelAutoOpen) {

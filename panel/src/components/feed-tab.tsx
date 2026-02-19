@@ -38,13 +38,11 @@ import type { LogEntry, OrchestratorState, TaskContractData, ValidationReportDat
 function CopyButton({
   text,
   onCopy,
-  className,
-  inExpandable = false
+  className
 }: {
   text: string;
   onCopy: (text: string) => void;
   className?: string;
-  inExpandable?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -60,8 +58,7 @@ function CopyButton({
       size="sm"
       color="tertiary"
       className={cx(
-        inExpandable ? 'h-6 w-6 shrink-0 [&_svg]:!size-3' : 'h-5 w-5 shrink-0 opacity-0 transition-opacity group-hover/msg:opacity-100 [&_svg]:!size-3.5',
-        inExpandable && 'absolute right-2 top-2',
+        'h-5 w-5 shrink-0 opacity-0 transition-opacity group-hover/msg:opacity-100 [&_svg]:!size-3.5',
         className
       )}
       aria-label={copied ? 'Copied' : 'Copy'}
@@ -237,11 +234,9 @@ function MessageWithTaskLink({
  */
 function ProgressiveLogBubble({
   logs,
-  onCopy,
   onTaskClick
 }: {
   logs: LogEntry[];
-  onCopy: (text: string) => void;
   onTaskClick?: (taskId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -274,9 +269,6 @@ function ProgressiveLogBubble({
   const taskInfo = (latestMeta as any).taskId && (latestMeta as any).taskName
     ? { taskId: (latestMeta as any).taskId, taskName: (latestMeta as any).taskName }
     : null;
-
-  // Full text to copy (message + expandable if exists)
-  const fullText = hasExpandable ? `${message}\n\nPrompt:\n${expandableContent}` : message;
 
   return (
     <div className="space-y-2">
@@ -338,9 +330,9 @@ function ProgressiveLogBubble({
           </button>
 
           {expanded ? (
-            <div className="relative mt-2">
+            <div className="mt-2">
               {isDetailsArray ? (
-                <div className="max-h-[400px] overflow-auto rounded-sm bg-primary/50 p-2 sm:p-3 pr-12">
+                <div className="max-h-[400px] overflow-auto rounded-sm bg-primary/50 p-2 sm:p-3">
                   {expandableContent.map((item: any, idx: number) => {
                     const levelMeta = logLevelMeta(item.level);
                     return (
@@ -352,29 +344,14 @@ function ProgressiveLogBubble({
                   })}
                 </div>
               ) : (
-                <pre className="m-0 max-h-[400px] max-w-full overflow-auto whitespace-pre-wrap break-words rounded-sm bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3 pr-12">
+                <pre className="m-0 max-h-[400px] max-w-full overflow-auto whitespace-pre-wrap break-words rounded-sm bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3">
                   {expandableContent}
                 </pre>
               )}
-              <CopyButton
-                text={isDetailsArray ? expandableContent.map((item: any) => item.text).join('\n') : (expandableContent || '')}
-                onCopy={onCopy}
-                inExpandable={true}
-              />
             </div>
           ) : null}
         </div>
       )}
-
-      {/* Copy button for full message (always visible) */}
-      <div className="flex justify-end">
-        <CopyButton
-          text={fullText}
-          onCopy={onCopy}
-          inExpandable={false}
-          className="text-current/50 hover:text-current/80"
-        />
-      </div>
     </div>
   );
 }
@@ -487,11 +464,9 @@ function ExpandableTaskResult({
 }
 
 function ExpandableValidationReport({
-  report,
-  onCopy
+  report
 }: {
   report: ValidationReportData;
-  onCopy: (text: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -501,19 +476,6 @@ function ExpandableValidationReport({
     : '';
 
   const hasDetails = !report.valid && (report.errors.length > 0 || report.warnings.length > 0);
-
-  const copyText = `${statusLabel}
-
-📊 Summary:
-  - Total tasks: ${report.summary.totalTasks}
-  - Total epics: ${report.summary.totalEpics}
-
-${report.errors.length > 0 ? `🚨 Errors (${report.totalErrors}):
-${report.errors.map(e => `  - ${e.message}${e.suggestion ? `\n    💡 ${e.suggestion}` : ''}`).join('\n')}
-${report.hasMoreErrors ? `  ... and ${report.totalErrors - report.errors.length} more\n` : ''}` : ''}
-${report.warnings.length > 0 ? `⚠️  Warnings (${report.totalWarnings}):
-${report.warnings.map(w => `  - ${w.message}`).join('\n')}
-${report.hasMoreWarnings ? `  ... and ${report.totalWarnings - report.warnings.length} more` : ''}` : ''}`.trim();
 
   if (!hasDetails) {
     return (
@@ -544,8 +506,8 @@ ${report.hasMoreWarnings ? `  ... and ${report.totalWarnings - report.warnings.l
       </button>
 
       {expanded ? (
-        <div className="relative">
-          <div className="max-h-[400px] space-y-3 overflow-auto rounded-sm bg-primary/50 p-3 pr-12 text-xs leading-relaxed text-current">
+        <div>
+          <div className="max-h-[400px] space-y-3 overflow-auto rounded-sm bg-primary/50 p-3 text-xs leading-relaxed text-current">
             <div>
               <p className="m-0 font-medium">📊 Summary:</p>
               <ul className="m-0 mt-1 list-none pl-4">
@@ -591,11 +553,6 @@ ${report.hasMoreWarnings ? `  ... and ${report.totalWarnings - report.warnings.l
               </div>
             ) : null}
           </div>
-          <CopyButton
-            text={copyText}
-            onCopy={onCopy}
-            inExpandable={true}
-          />
         </div>
       ) : null}
     </div>
@@ -604,16 +561,12 @@ ${report.hasMoreWarnings ? `  ... and ${report.totalWarnings - report.warnings.l
 
 function CollapsibleLogBubble({
   mainMessage,
-  lines,
-  onCopy
+  lines
 }: {
   mainMessage: string;
   lines: CollapsibleLine[];
-  onCopy: (text: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-
-  const copyText = `${mainMessage}\n\n${lines.map((l) => `[${l.level.toUpperCase()}] ${formatLiveFeedMessage({ message: l.text } as LogEntry)}`).join('\n')}`;
 
   return (
     <div className="space-y-2">
@@ -630,25 +583,18 @@ function CollapsibleLogBubble({
       </button>
 
       {expanded ? (
-        <div className="relative">
-          <div className="max-h-[300px] space-y-1 overflow-auto rounded-sm bg-primary/50 p-2 pr-12 text-xs leading-relaxed text-current sm:p-3">
-            {lines.map((line, i) => {
-              const level = normalizeLogLevel(line.level);
-              const meta = logLevelMeta(level);
-              const text = formatLiveFeedMessage({ message: line.text } as LogEntry);
-              return (
-                <div key={i} className="flex items-start gap-1.5">
-                  <Icon icon={meta.icon} className="mt-0.5 size-3 shrink-0 opacity-60" />
-                  <span className="opacity-85">{text}</span>
-                </div>
-              );
-            })}
-          </div>
-          <CopyButton
-            text={copyText}
-            onCopy={onCopy}
-            inExpandable={true}
-          />
+        <div className="max-h-[300px] space-y-1 overflow-auto rounded-sm bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3">
+          {lines.map((line, i) => {
+            const level = normalizeLogLevel(line.level);
+            const meta = logLevelMeta(level);
+            const text = formatLiveFeedMessage({ message: line.text } as LogEntry);
+            return (
+              <div key={i} className="flex items-start gap-1.5">
+                <Icon icon={meta.icon} className="mt-0.5 size-3 shrink-0 opacity-60" />
+                <span className="opacity-85">{text}</span>
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </div>
@@ -660,11 +606,9 @@ function CollapsibleLogBubble({
  * Shows main "started" line and expandable details.
  */
 function StartupBubble({
-  logs,
-  onCopy
+  logs
 }: {
   logs: LogEntry[];
-  onCopy: (text: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -673,12 +617,10 @@ function StartupBubble({
     text: formatLiveFeedMessage(l)
   }));
 
-  const copyText = detailLines.map((d) => d.text).join('\n');
-
   return (
     <div className="space-y-1.5">
       <p className="m-0 whitespace-pre-wrap break-words text-xs font-medium leading-4 text-current sm:text-sm sm:leading-5">
-        Automation App started.
+        API started.
       </p>
 
       <button
@@ -692,35 +634,18 @@ function StartupBubble({
       </button>
 
       {expanded ? (
-        <div className="relative">
-          <div className="max-h-[300px] space-y-1 overflow-auto rounded-md bg-primary/50 p-2 pr-12 text-xs leading-relaxed text-current sm:p-3">
-            {detailLines.map((detail, i) => {
-              const meta = logLevelMeta(detail.level);
-              return (
-                <div key={i} className="flex items-start gap-1.5">
-                  <Icon icon={meta.icon} className="mt-0.5 size-3 shrink-0 opacity-60" />
-                  <span className="opacity-85">{detail.text}</span>
-                </div>
-              );
-            })}
-          </div>
-          <CopyButton
-            text={copyText}
-            onCopy={onCopy}
-            inExpandable={true}
-          />
+        <div className="max-h-[300px] space-y-1 overflow-auto rounded-md bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3">
+          {detailLines.map((detail, i) => {
+            const meta = logLevelMeta(detail.level);
+            return (
+              <div key={i} className="flex items-start gap-1.5">
+                <Icon icon={meta.icon} className="mt-0.5 size-3 shrink-0 opacity-60" />
+                <span className="opacity-85">{detail.text}</span>
+              </div>
+            );
+          })}
         </div>
       ) : null}
-
-      {/* Copy button for full message (always visible) */}
-      <div className="flex justify-end">
-        <CopyButton
-          text={`Automation App started.\n\n${copyText}`}
-          onCopy={onCopy}
-          inExpandable={false}
-          className="text-current/50 hover:text-current/80"
-        />
-      </div>
     </div>
   );
 }
@@ -860,6 +785,17 @@ export function FeedTab({
             const isGroupContinuation = false;
             const isLastInGroup = true;
 
+            // Compute copy text from expandable content
+            const firstMeta = extractProgressiveMeta(firstLog);
+            const expandableContent = firstMeta?.expandableContent;
+            const progressiveCopyText = (() => {
+              if (!expandableContent) return latestLog.message || '';
+              if (Array.isArray(expandableContent)) {
+                return expandableContent.map((item: any) => item.text).join('\n');
+              }
+              return expandableContent;
+            })();
+
             return (
               <div
                 key={`progressive-${extractProgressiveMeta(firstLog)?.groupId || index}`}
@@ -884,7 +820,7 @@ export function FeedTab({
                       logToneClasses(level, sourceMeta.side, sourceMeta.directClaude, 'progressive-log', true)
                     )}
                   >
-                    <ProgressiveLogBubble logs={group} onCopy={copyLiveFeedMessage} onTaskClick={handleTaskClick} />
+                    <ProgressiveLogBubble logs={group} onTaskClick={handleTaskClick} />
 
                     <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-current/50">
                       <div className="inline-flex items-center gap-1">
@@ -893,6 +829,10 @@ export function FeedTab({
                         <span className="mx-0.5 opacity-60">&bull;</span>
                         <span style={{ fontVariantNumeric: 'tabular-nums' }}>{timestamp}</span>
                       </div>
+                      <CopyButton
+                        text={progressiveCopyText}
+                        onCopy={copyLiveFeedMessage}
+                      />
                     </div>
                   </div>
 
@@ -915,6 +855,8 @@ export function FeedTab({
             const timestamp = formatFeedTimestamp(latestLog.ts);
             const sourceMeta = logSourceMeta(latestLog);
 
+            const startupCopyText = group.map(l => formatLiveFeedMessage(l)).join('\n');
+
             return (
               <div
                 key={`startup-${getStartupGroupId(group[0]) || index}`}
@@ -929,7 +871,7 @@ export function FeedTab({
                       'bg-utility-success-50 text-success-primary'
                     )}
                   >
-                    <StartupBubble logs={group} onCopy={copyLiveFeedMessage} />
+                    <StartupBubble logs={group} />
 
                     <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-current/50">
                       <div className="inline-flex items-center gap-1">
@@ -938,6 +880,10 @@ export function FeedTab({
                         <span className="mx-0.5 opacity-60">&bull;</span>
                         <span style={{ fontVariantNumeric: 'tabular-nums' }}>{timestamp}</span>
                       </div>
+                      <CopyButton
+                        text={startupCopyText}
+                        onCopy={copyLiveFeedMessage}
+                      />
                     </div>
                   </div>
                 </div>
@@ -972,6 +918,38 @@ export function FeedTab({
           const nextSourceKey = nextLine ? resolveLogSourceKey(nextLine.source, nextLine.message) : null;
           const isGroupContinuation = currentSourceKey === prevSourceKey;
           const isLastInGroup = currentSourceKey !== nextSourceKey;
+
+          // Compute copy text: use expandable content when available
+          const bubbleCopyText = (() => {
+            if (line.isPrompt) return displayMessage;
+            if (collapsibleLines) {
+              return collapsibleLines.map(l => formatLiveFeedMessage({ message: l.text } as LogEntry)).join('\n');
+            }
+            if (validationReport) {
+              const rpt = validationReport;
+              const sl = rpt.valid ? 'Board structure is valid' : 'Board structure has errors';
+              const parts = [sl, `Summary: ${rpt.summary.totalTasks} tasks, ${rpt.summary.totalEpics} epics`];
+              if (rpt.errors.length > 0) {
+                parts.push(`Errors (${rpt.totalErrors}):`);
+                rpt.errors.forEach(e => parts.push(`  - ${e.message}${e.suggestion ? ` (${e.suggestion})` : ''}`));
+              }
+              if (rpt.warnings.length > 0) {
+                parts.push(`Warnings (${rpt.totalWarnings}):`);
+                rpt.warnings.forEach(w => parts.push(`  - ${w.message}`));
+              }
+              return parts.join('\n');
+            }
+            if (taskContract) {
+              return formatClaudeTaskContract(JSON.stringify({
+                status: taskContract.status,
+                summary: taskContract.summary,
+                notes: taskContract.notes,
+                files: taskContract.files,
+                tests: taskContract.tests
+              })) || displayMessage;
+            }
+            return displayMessage;
+          })();
 
           return (
             <div
@@ -1015,17 +993,14 @@ export function FeedTab({
                     <CollapsibleLogBubble
                       mainMessage={displayMessage}
                       lines={collapsibleLines}
-                      onCopy={copyLiveFeedMessage}
                     />
                   ) : validationReport ? (
                     <ExpandableValidationReport
                       report={validationReport}
-                      onCopy={copyLiveFeedMessage}
                     />
                   ) : taskContract ? (
                     <ExpandableTaskResult
                       contract={taskContract}
-                      onCopy={copyLiveFeedMessage}
                     />
                   ) : (
                     <MessageWithTaskLink
@@ -1049,13 +1024,10 @@ export function FeedTab({
                       <span className="mx-0.5 opacity-60">&bull;</span>
                       <span style={{ fontVariantNumeric: 'tabular-nums' }}>{timestamp}</span>
                     </div>
-                    {!line.isPrompt ? (
-                      <CopyButton
-                        text={displayMessage}
-                        onCopy={copyLiveFeedMessage}
-                        inExpandable={false}
-                      />
-                    ) : null}
+                    <CopyButton
+                      text={bubbleCopyText}
+                      onCopy={copyLiveFeedMessage}
+                    />
                   </div>
                 </div>
 
@@ -1071,7 +1043,7 @@ export function FeedTab({
 
         {logs.length === 0 ? (
           <div className="rounded-xl bg-primary p-3 text-sm text-tertiary shadow-xs">
-            No logs yet. Start App or click <strong>Run Queue Now</strong> to see messages here.
+            No logs yet. Start API or click <strong>Run Queue Now</strong> to see messages here.
           </div>
         ) : null}
 
