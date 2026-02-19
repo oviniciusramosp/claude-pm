@@ -318,7 +318,8 @@ app.listen(config.server.port, () => {
     'complete',
     summary,
     { detailsType: 'startup' }, // Flag to indicate this is startup details with levels
-    expandableDetails
+    expandableDetails,
+    true // feedEnabled: show in Feed
   );
 
   // Trigger startup reconciliation if enabled

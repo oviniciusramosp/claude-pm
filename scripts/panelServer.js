@@ -732,6 +732,13 @@ function startManagedProcess(target, command, source, envOverrides = {}) {
     if (shouldSuppressProcessMessage(source, parsed.message)) {
       return;
     }
+
+    // Filter logs based on feedEnabled flag (defaults to true if not specified)
+    const feedEnabled = parsed.meta?.feedEnabled !== false;
+    if (!feedEnabled) {
+      return; // Skip sending to Feed, but log still appears in Terminal
+    }
+
     pushLog(parsed.level, resolveProcessLogSource(source, parsed), parsed.message, buildLogExtra(parsed));
   }
 

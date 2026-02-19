@@ -463,7 +463,8 @@ export class Orchestrator {
             'complete',
             `Claude finished with issues: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`,
             { status: execution.status || 'unknown', details: formatContractForDisplay(execution) },
-            buildContractJson(execution)
+            buildContractJson(execution),
+            true // feedEnabled
           );
 
           // Try auto-recovery before marking as failed
@@ -685,7 +686,7 @@ export class Orchestrator {
         await this.runStore.markDone(task, finalExecution);
         processed += 1;
 
-        this.logger.success(`Moved to Done: "${taskLabel(task)}"`);
+        this.logger.success(`Moved to Done: "${taskLabel(task)}"`, undefined, true);
       } catch (error) {
         this.watchdog.stop();
         const executionElapsed = Date.now() - executionStartTime;
@@ -777,7 +778,9 @@ export class Orchestrator {
       groupId,
       'complete',
       `Epic initialized: "${taskLabel(epic)}"`,
-      { details: initDetails.join(' • ') }
+      { details: initDetails.join(' • ') },
+      null, // no expandableContent
+      true // feedEnabled
     );
 
     let processed = 0;
@@ -872,7 +875,8 @@ export class Orchestrator {
             'complete',
             `Claude finished with issues: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`,
             { status: execution.status || 'unknown', details: formatContractForDisplay(execution) },
-            buildContractJson(execution)
+            buildContractJson(execution),
+            true // feedEnabled
           );
 
           await this.runStore.markFailed(task, `Claude retornou status=${execution.status || 'desconhecido'}`);
@@ -1064,7 +1068,7 @@ export class Orchestrator {
         await this.runStore.markDone(task, finalExecution);
         processed += 1;
 
-        this.logger.success(`Moved to Done: "${taskLabel(task)}"`);
+        this.logger.success(`Moved to Done: "${taskLabel(task)}"`, undefined, true);
       } catch (error) {
         this.watchdog.stop();
         const executionElapsed = Date.now() - executionStartTime;
@@ -1316,7 +1320,8 @@ export class Orchestrator {
             'start',
             `Epic review for: "${taskLabel(task)}" (${epicResult.children.length} children)`,
             { model: OPUS_REVIEW_MODEL },
-            this.config.claude.logPrompt ? reviewPrompt : null
+            this.config.claude.logPrompt ? reviewPrompt : null,
+            true // feedEnabled
           );
 
           const epicReviewStartTime = Date.now();
@@ -1333,7 +1338,9 @@ export class Orchestrator {
             {
               model: OPUS_REVIEW_MODEL,
               duration: formatDuration(epicReviewElapsed)
-            }
+            },
+            null, // no expandableContent
+            true // feedEnabled
           );
 
           if (normalize(reviewExecution.status) !== 'done') {

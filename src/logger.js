@@ -76,10 +76,14 @@ function formatMeta(meta) {
   return ` | ${parts.join(' | ')}`;
 }
 
-function write(streamFn, color, emoji, label, message, meta = undefined) {
+function write(streamFn, color, emoji, label, message, meta = undefined, feedEnabled = true) {
   const timestamp = nowStamp();
   const header = `${color}${emoji} ${label}${ANSI_RESET}`;
-  const line = `${header} - ${message}${formatMeta(meta)} ${ANSI_DIM}(${timestamp})${ANSI_RESET}`;
+
+  // Add feedEnabled flag to meta for panelServer filtering
+  const metaWithFeed = meta ? { ...meta, feedEnabled } : { feedEnabled };
+
+  const line = `${header} - ${message}${formatMeta(metaWithFeed)} ${ANSI_DIM}(${timestamp})${ANSI_RESET}`;
   streamFn(line);
 }
 
@@ -146,20 +150,40 @@ function writeBlock(title, content, meta = undefined) {
 }
 
 export const logger = {
-  info(message, meta) {
-    write(console.log, ANSI_CYAN, 'ℹ️', 'INFO', message, meta);
+  /**
+   * @param {string} message - Log message
+   * @param {object} meta - Metadata
+   * @param {boolean} feedEnabled - Whether to show in Feed (default: true)
+   */
+  info(message, meta, feedEnabled = true) {
+    write(console.log, ANSI_CYAN, 'ℹ️', 'INFO', message, meta, feedEnabled);
   },
 
-  success(message, meta) {
-    write(console.log, ANSI_GREEN, '✅', 'SUCCESS', message, meta);
+  /**
+   * @param {string} message - Log message
+   * @param {object} meta - Metadata
+   * @param {boolean} feedEnabled - Whether to show in Feed (default: true)
+   */
+  success(message, meta, feedEnabled = true) {
+    write(console.log, ANSI_GREEN, '✅', 'SUCCESS', message, meta, feedEnabled);
   },
 
-  warn(message, meta) {
-    write(console.warn, ANSI_YELLOW, '⚠️', 'WARN', message, meta);
+  /**
+   * @param {string} message - Log message
+   * @param {object} meta - Metadata
+   * @param {boolean} feedEnabled - Whether to show in Feed (default: true)
+   */
+  warn(message, meta, feedEnabled = true) {
+    write(console.warn, ANSI_YELLOW, '⚠️', 'WARN', message, meta, feedEnabled);
   },
 
-  error(message, meta) {
-    write(console.error, ANSI_RED, '❌', 'ERROR', message, meta);
+  /**
+   * @param {string} message - Log message
+   * @param {object} meta - Metadata
+   * @param {boolean} feedEnabled - Whether to show in Feed (default: true)
+   */
+  error(message, meta, feedEnabled = true) {
+    write(console.error, ANSI_RED, '❌', 'ERROR', message, meta, feedEnabled);
   },
 
   block(title, content, meta) {
@@ -174,8 +198,11 @@ export const logger = {
    * @param {string} message - Log message
    * @param {object} meta - Additional metadata
    * @param {string} [expandableContent] - Optional expandable content
+   * @param {boolean} feedEnabled - Whether to show in Feed (default: true)
    */
-  progressive(level, groupId, state, message, meta = {}, expandableContent = null) {
-    writeProgressive(level, groupId, state, message, meta, expandableContent);
+  progressive(level, groupId, state, message, meta = {}, expandableContent = null, feedEnabled = true) {
+    // Add feedEnabled to meta
+    const metaWithFeed = { ...meta, feedEnabled };
+    writeProgressive(level, groupId, state, message, metaWithFeed, expandableContent);
   }
 };
