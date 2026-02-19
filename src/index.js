@@ -312,6 +312,7 @@ app.listen(config.server.port, () => {
   // Store details as JSON array for frontend to render with icons
   const expandableDetails = startupInfo;
 
+  console.log('[DEBUG startup] Sending progressive log, details count:', expandableDetails.length);
   logger.progressive(
     'success',
     'app-startup',

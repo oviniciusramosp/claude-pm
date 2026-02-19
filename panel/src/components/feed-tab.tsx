@@ -340,7 +340,7 @@ function ProgressiveLogBubble({
           {expanded ? (
             <div className="relative mt-2">
               {isDetailsArray ? (
-                <div className="max-h-[400px] overflow-auto rounded-sm bg-primary/50 p-2 sm:p-3 pr-10">
+                <div className="max-h-[400px] overflow-auto rounded-sm bg-primary/50 p-2 sm:p-3 pr-12">
                   {expandableContent.map((item: any, idx: number) => {
                     const levelMeta = logLevelMeta(item.level);
                     return (
@@ -480,7 +480,7 @@ function ExpandableTaskResult({
 
       {expanded ? (
         <div className="relative">
-          <div className="max-h-[400px] space-y-2 overflow-auto rounded-sm bg-primary/50 p-3 text-xs leading-relaxed text-current">
+          <div className="max-h-[400px] space-y-2 overflow-auto rounded-sm bg-primary/50 p-3 pr-12 text-xs leading-relaxed text-current">
             {contract.summary ? (
               <p className="m-0">{contract.summary}</p>
             ) : null}
@@ -571,7 +571,7 @@ ${report.hasMoreWarnings ? `  ... and ${report.totalWarnings - report.warnings.l
 
       {expanded ? (
         <div className="relative">
-          <div className="max-h-[400px] space-y-3 overflow-auto rounded-sm bg-primary/50 p-3 text-xs leading-relaxed text-current">
+          <div className="max-h-[400px] space-y-3 overflow-auto rounded-sm bg-primary/50 p-3 pr-12 text-xs leading-relaxed text-current">
             <div>
               <p className="m-0 font-medium">📊 Summary:</p>
               <ul className="m-0 mt-1 list-none pl-4">
@@ -657,7 +657,7 @@ function CollapsibleLogBubble({
 
       {expanded ? (
         <div className="relative">
-          <div className="max-h-[300px] space-y-1 overflow-auto rounded-sm bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3">
+          <div className="max-h-[300px] space-y-1 overflow-auto rounded-sm bg-primary/50 p-2 pr-12 text-xs leading-relaxed text-current sm:p-3">
             {lines.map((line, i) => {
               const level = normalizeLogLevel(line.level);
               const meta = logLevelMeta(level);
@@ -719,7 +719,7 @@ function StartupBubble({
 
       {expanded ? (
         <div className="relative">
-          <div className="max-h-[300px] space-y-1 overflow-auto rounded-md bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3">
+          <div className="max-h-[300px] space-y-1 overflow-auto rounded-md bg-primary/50 p-2 pr-12 text-xs leading-relaxed text-current sm:p-3">
             {detailLines.map((detail, i) => {
               const meta = logLevelMeta(detail.level);
               return (
@@ -737,6 +737,16 @@ function StartupBubble({
           />
         </div>
       ) : null}
+
+      {/* Copy button for full message (always visible) */}
+      <div className="flex justify-end">
+        <CopyButton
+          text={`Automation App started.\n\n${copyText}`}
+          onCopy={onCopy}
+          inExpandable={false}
+          className="text-current/50 hover:text-current/80"
+        />
+      </div>
     </div>
   );
 }
