@@ -29,10 +29,10 @@ Each AC must be a markdown checkbox: `- [ ] Description`. Each AC must be testab
 **By task type:**
 
 - **Epic**: Focus on high-level business outcomes, NOT technical implementation details. Each AC describes a complete, user-visible capability. Avoid file names, function names, or code structure. Typically 3-7 ACs.
-- **UserStory**: Focus on specific, testable behaviors and technical requirements. Include UI behavior, data validation, error handling, and edge cases. Reference specific elements when applicable. Typically 4-10 ACs.
-- **Bug**: First AC: reproduction steps that currently fail. Second AC: expected behavior after fix. Additional ACs: edge cases and regression test requirements. Typically 3-6 ACs.
-- **Chore**: Focus on operational outcomes and verification steps. Include verification (e.g., "Build passes without warnings"). Typically 2-5 ACs.
-- **Discovery**: Focus on research outcomes and documentation deliverables. Each AC describes a specific question answered or artifact produced. Typically 3-6 ACs.
+- **UserStory**: Every AC must be assertable via an automated test (unit, integration, or e2e). Do NOT write ACs that require manual human observation ("UI looks correct", "user sees X", "page renders"). Do NOT duplicate Standard Completion Criteria (TypeScript, linting, tests passing). No redundancy — each AC tests a distinct code path. Keep it tight: 4-6 ACs max. GOOD: "Submit button is disabled when form has validation errors" / "POST /api/login returns 401 for invalid credentials". BAD: "Login form renders correctly" / "User can see the dashboard".
+- **Bug**: Every AC must be assertable in a test — no "verify manually" or "check visually". First AC: expected behavior after fix, assertable in a regression test. Additional ACs: edge cases that must still work. Include: "Regression test added to prevent recurrence". Typically 3-5 ACs.
+- **Chore**: ACs describe a verifiable completed state (e.g., "npm ci exits with code 0"). For pure config/infra tasks, operational verification ACs are acceptable. Do NOT duplicate Standard Completion Criteria. Typically 2-4 ACs.
+- **Discovery**: Each AC describes a specific deliverable — a decision documented, a question answered, an artifact produced. Reference the expected output (e.g., "ADR document created at docs/adr/001-auth.md"). Typically 3-5 ACs.
 
 ### 2. Task Description Clarity
 

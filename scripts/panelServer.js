@@ -3187,27 +3187,28 @@ ${outputFormatBlock}`;
   };
 
   const acGuidance = {
-    UserStory: `   - Focus on specific, testable behaviors and technical requirements
-   - Each AC must be concrete and verifiable through code, tests, or manual inspection
-   - Include UI behavior, data validation, error handling, and edge cases
-   - Reference specific elements when applicable (e.g., "Submit button is disabled when form is invalid")
-   - ACs should guide implementation directly
-   - Typically 4-10 ACs for a UserStory`,
+    UserStory: `   - Every AC must be assertable via an automated test (unit, integration, or e2e assertion)
+   - Do NOT write ACs that require manual human observation ("UI looks correct", "user sees X", "page renders", "visually verify")
+   - Do NOT duplicate what Standard Completion Criteria already covers (TypeScript compiling, linting, tests passing)
+   - No redundancy: each AC must test a distinct behavior or code path — merge or remove overlapping ACs
+   - Keep it tight: 4-6 ACs max — only what meaningfully defines "done" for this story
+   - GOOD: "Submit button is disabled when form has validation errors" / "POST /api/login returns 401 for invalid credentials" / "AuthContext.isAuthenticated is true after successful login"
+   - BAD: "Login form renders correctly" / "User can see the dashboard" / "The component works as expected"`,
 
-    Bug: `   - First AC: describe the expected behavior after the fix
-   - Additional ACs: edge cases, related scenarios that must still work
-   - Include regression test requirements
-   - Typically 3-6 ACs for a Bug`,
+    Bug: `   - First AC: the expected behavior after the fix, assertable in a regression test
+   - Additional ACs: edge cases and related scenarios that must keep working
+   - Every AC must be assertable in a test — no "verify manually" or "check visually"
+   - Include a regression test AC: "Regression test added to prevent recurrence"
+   - Typically 3-5 ACs for a Bug`,
 
-    Chore: `   - Focus on operational outcomes and verification steps
-   - Each AC describes a successful completion criterion
-   - Include verification steps (e.g., "Build passes without warnings")
-   - Typically 2-5 ACs for a Chore`,
+    Chore: `   - ACs describe a verifiable completed state (e.g., "npm ci exits with code 0", "package.json lists X as dependency")
+   - For pure config/infra tasks with nothing automatable, operational verification ACs are acceptable
+   - Do NOT duplicate what Standard Completion Criteria covers
+   - Keep it tight: 2-4 ACs for a Chore`,
 
-    Discovery: `   - Focus on research outcomes and documentation deliverables
-   - Each AC describes a specific question answered or artifact produced
-   - Include documentation requirements (e.g., "Decision document created with findings")
-   - Typically 3-6 ACs for a Discovery task`
+    Discovery: `   - Each AC describes a specific deliverable: a decision documented, a question answered, a spike completed
+   - Reference the expected artifact (e.g., "ADR document created at docs/adr/001-auth.md with decision and rationale")
+   - Typically 3-5 ACs for a Discovery task`
   };
 
   return `You are an expert prompt engineer and product manager reviewing a ${taskType} for a Claude Code automation system.
@@ -3395,13 +3396,20 @@ app.post('/api/board/review-task', async (req, res) => {
 
 const GENERATE_STORIES_TIMEOUT_MS = 180000; // 3 minutes
 
-function buildGenerateStoriesPrompt({ epicName, epicBody, existingChildren }) {
+function buildGenerateStoriesPrompt({ epicName, epicBody, existingChildren, siblingEpics }) {
   const childList = existingChildren.length > 0
     ? existingChildren.map((c) => `- ${c.name}`).join('\n')
     : '(none)';
 
-  return `You are a senior product manager and prompt engineering expert. Your job is to analyze an Epic description and break it down into concrete, actionable user stories.
+  const siblingBlock = siblingEpics && siblingEpics.length > 0
+    ? `\n<product_context>
+The following other Epics exist in this project. Use them to understand what is already built or planned, and avoid generating stories that duplicate work owned by another Epic.
+${siblingEpics.map((e) => `- ${e.name} (${e.status})`).join('\n')}
+</product_context>\n`
+    : '';
 
+  return `You are a senior product manager. Analyze this Epic and break it down into concrete, actionable user stories for a Claude Code automation system.
+${siblingBlock}
 <epic>
 <name>${epicName}</name>
 <body>
@@ -3414,62 +3422,76 @@ ${childList}
 </existing_children>
 
 <instructions>
-1. Analyze the Epic description and identify all distinct features, behaviors, or capabilities.
-2. For each feature, create a user story with:
-   - A clear, concise name (imperative form, e.g., "Implement login form")
-   - A priority: P0 (critical), P1 (high), P2 (medium), P3 (low)
-   - A complete markdown body following this structure:
+1. Identify all distinct features, behaviors, or capabilities in the Epic.
+2. For each feature, create one user story. Each story must be small enough for Claude Code to complete in one session.
+3. Order stories logically — foundational work first, then features that build on it.
+4. Generate between 2 and 15 stories. Do not exceed 15.
+5. DO NOT duplicate stories listed in existing_children.
+6. If sibling Epics cover related functionality, do NOT generate stories for work those Epics own.
 
-     # [Story Name]
+Each story body must follow this exact structure:
 
-     **User Story**: As a [role], I want [goal] so that [benefit].
+# [Story Name]
 
-     ## Acceptance Criteria
-     - [ ] First acceptance criterion (specific, testable, checkbox format)
-     - [ ] Second acceptance criterion
-     (... more as needed, typically 3-8 per story)
+**User Story**: As a [role], I want [goal] so that [benefit].
 
-     ## Technical Tasks
-     1. First implementation step with specific file paths when possible
-     2. Second implementation step
-     (... numbered, sequential steps)
+## Acceptance Criteria
+- [ ] (3-6 ACs — see AC rules below)
 
-     ## Tests
-     - Describe what should be tested
-     - Mention specific test file paths if applicable
-     - Or "N/A — infrastructure task" if no tests needed
+## Technical Tasks
+1. Numbered, sequential implementation steps with specific file paths
+2. Each step is directly actionable by Claude Code
 
-     ## Dependencies
-     - List any prerequisites, blocking tasks, or required packages
-     - Or "None" if standalone
+## Tests
+- Specific test file path (e.g., \`__tests__/feature.test.ts\`)
+- List each test case by name
+- Or "N/A — infrastructure task, no business logic to test"
 
-     ## Standard Completion Criteria
-     - [ ] Tests written and passing (or N/A)
-     - [ ] TypeScript compiles without errors
-     - [ ] Linter passes
-     - [ ] Commit message follows conventional commits format
+## Dependencies
+- Prerequisites, blocking tasks, or required packages
+- Or "None" if standalone
 
-3. DO NOT duplicate stories that already exist (see existing_children above).
-4. Each story should be small enough for a single developer to complete in one session.
-5. Order stories logically — foundational work first, then features that build on it.
-6. Generate between 2 and 15 stories. Do not generate more than 15.
-7. Use imperative language: "Implement X", "Add Y", "Create Z".
+## Standard Completion Criteria
+- [ ] Tests written and passing (or N/A)
+- [ ] TypeScript compiles without errors
+- [ ] Linter passes
+- [ ] Commit: \`feat|fix|chore(scope): description\`
 </instructions>
 
+<ac_rules>
+STRICT rules for Acceptance Criteria in every story:
+
+1. Every AC must be assertable via an automated test (unit, integration, or e2e assertion).
+   - GOOD: "Submit button is disabled when form has validation errors"
+   - GOOD: "POST /api/login returns 401 for invalid credentials"
+   - GOOD: "AuthContext.isAuthenticated is true after successful login"
+   - BAD: "User sees an error message" (requires human eyes)
+   - BAD: "Page renders correctly" (not a meaningful assertion)
+   - BAD: "The UI looks clean and modern" (untestable)
+
+2. Do NOT duplicate what Standard Completion Criteria already covers.
+   - No AC for "TypeScript compiles", "linter passes", or "tests pass" — those are in Standard Completion Criteria.
+
+3. No redundancy between ACs — each one tests a distinct behavior or code path.
+   - If two ACs test the same logic, merge them or remove the weaker one.
+
+4. Keep it tight: 3-6 ACs per story. Only what meaningfully defines "done".
+</ac_rules>
+
 <output_format>
-Return ONLY a valid JSON array. No markdown code blocks, no explanation text — just the raw JSON.
+Return ONLY a valid JSON array. No markdown code blocks, no explanation — just raw JSON.
 
 Each element must have:
-- "name": string (story name)
+- "name": string (story name, imperative form)
 - "priority": string ("P0", "P1", "P2", or "P3")
 - "body": string (complete markdown body with \\n for newlines)
 
 Example:
 [
   {
-    "name": "Implement user registration form",
+    "name": "Implement login form",
     "priority": "P1",
-    "body": "# Implement User Registration Form\\n\\n**User Story**: As a new user, I want to register ...\\n\\n## Acceptance Criteria\\n- [ ] Registration form renders ...\\n..."
+    "body": "# Implement Login Form\\n\\n**User Story**: As a user, I want to log in ...\\n\\n## Acceptance Criteria\\n- [ ] POST /api/auth/login returns 200 with JWT token for valid credentials\\n- [ ] POST /api/auth/login returns 401 when password is incorrect\\n..."
   }
 ]
 </output_format>`;
@@ -3753,11 +3775,18 @@ app.post('/api/board/generate-stories', async (req, res) => {
     const allTasks = await client.listTasks();
     const existingChildren = allTasks.filter((t) => t.parentId === epicId);
 
+    // Collect sibling epics for product context
+    const epicTypeValue = boardConfig.board.typeValues.epic;
+    const siblingEpics = allTasks
+      .filter((t) => t.type === epicTypeValue && t.id !== epicId)
+      .map((t) => ({ name: t.name, status: t.status }));
+
     // Build prompt and call Claude
     const prompt = buildGenerateStoriesPrompt({
       epicName,
       epicBody: epicBody.trim(),
-      existingChildren: existingChildren.map((c) => ({ name: c.name }))
+      existingChildren: existingChildren.map((c) => ({ name: c.name })),
+      siblingEpics
     });
 
     const { reply } = await runClaudePrompt(prompt, 'claude-sonnet-4-5-20250929', GENERATE_STORIES_TIMEOUT_MS);

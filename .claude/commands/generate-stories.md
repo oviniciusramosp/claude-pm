@@ -70,13 +70,29 @@ You are a senior product manager and prompt engineering expert. Analyze the Epic
 ### Rules
 
 1. **DO NOT duplicate** stories that already exist as children of the Epic.
-2. Each story should be small enough for a single developer to complete in one session.
-3. Order stories logically — foundational work first, then features that build on it.
-4. Generate between 2 and 15 stories. Do not generate more than 15.
-5. Use imperative language: "Implement X", "Add Y", "Create Z".
-6. Each acceptance criterion must be specific and testable — avoid vague ACs like "works correctly".
-7. Include UI behavior, data validation, error handling, and edge cases in ACs.
-8. Reference specific file paths in technical tasks when possible.
+2. Check other Epics in the Board for context — do not generate stories for work owned by sibling Epics.
+3. Each story should be small enough for Claude Code to complete in one session.
+4. Order stories logically — foundational work first, then features that build on it.
+5. Generate between 2 and 15 stories. Do not generate more than 15.
+6. Use imperative language: "Implement X", "Add Y", "Create Z".
+7. Reference specific file paths in technical tasks when possible.
+
+### Acceptance Criteria Rules (STRICT)
+
+Every AC in every story must follow these rules:
+
+1. **Assertable via automated test** — every AC must be expressible as a unit, integration, or e2e assertion.
+   - GOOD: "Submit button is disabled when form has validation errors"
+   - GOOD: "POST /api/login returns 401 for invalid credentials"
+   - BAD: "User sees an error message" (requires human eyes)
+   - BAD: "Page renders correctly" (not a meaningful assertion)
+   - BAD: "The UI looks clean" (untestable)
+
+2. **No overlap with Standard Completion Criteria** — do not add ACs for "TypeScript compiles", "linter passes", or "tests pass". Those go in Standard Completion Criteria.
+
+3. **No redundancy** — each AC tests a distinct behavior or code path. Merge or remove overlapping ACs.
+
+4. **Keep it tight** — 3-6 ACs per story. Only what meaningfully defines "done".
 
 ### YAML Frontmatter for each story file
 
