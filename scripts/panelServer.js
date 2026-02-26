@@ -1503,6 +1503,46 @@ app.get('/api/status', async (_req, res) => {
   });
 });
 
+app.get('/api/claude/cli-status', async (_req, res) => {
+  const childEnv = { ...process.env };
+  delete childEnv.CLAUDECODE;
+  delete childEnv.CLAUDE_CODE_ENTRYPOINT;
+  delete childEnv.CLAUDE_AGENT_SDK_VERSION;
+  delete childEnv.CLAUDE_CODE_OAUTH_TOKEN;
+
+  // Check CLI is installed and get version.
+  const cliInstalled = await new Promise((resolve) => {
+    const child = spawn(`${DEFAULT_CLAUDE_COMMAND.split(' ')[0]} --version`, {
+      shell: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: childEnv
+    });
+    let output = '';
+    child.stdout.on('data', (d) => { output += String(d); });
+    child.stderr.on('data', (d) => { output += String(d); });
+    child.on('close', (code) => resolve(code === 0 ? output.trim() : null));
+    child.on('error', () => resolve(null));
+  });
+
+  // Check if user is logged in via auth file.
+  const authFile = path.join(os.homedir(), '.config', 'claude', 'auth.json');
+  let loggedIn = false;
+  try {
+    const raw = fsSync.readFileSync(authFile, 'utf8');
+    const parsed = JSON.parse(raw);
+    loggedIn = !!(parsed && (parsed.oauthToken || parsed.accessToken || parsed.token || Object.keys(parsed).length > 0));
+  } catch {
+    loggedIn = false;
+  }
+
+  res.json({
+    cliInstalled: cliInstalled !== null,
+    cliVersion: cliInstalled || null,
+    loggedIn,
+    authFile
+  });
+});
+
 app.get('/api/logs', (_req, res) => {
   res.json({
     lines: logHistory
