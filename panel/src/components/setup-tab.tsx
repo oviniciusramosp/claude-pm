@@ -34,27 +34,10 @@ type CliStatus = {
   cliInstalled: boolean;
   cliVersion: string | null;
   loggedIn: boolean;
+  authEmail: string | null;
 };
 
-function CopyCommand({ command }: { command: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        navigator.clipboard.writeText(command).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        });
-      }}
-      className="inline-flex items-center gap-1 rounded bg-primary px-2 py-0.5 font-mono text-xs text-primary ring-1 ring-secondary hover:bg-secondary cursor-pointer select-text"
-      title="Click to copy"
-    >
-      <code>{command}</code>
-      <span className="text-tertiary">{copied ? '✓' : '⧉'}</span>
-    </button>
-  );
-}
+const copyCodeClass = 'cursor-pointer select-all rounded bg-quaternary px-1.5 py-0.5 font-mono text-xs text-secondary';
 
 function ClaudeCliPrerequisites({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [status, setStatus] = useState<CliStatus | null>(null);
@@ -128,7 +111,7 @@ function ClaudeCliPrerequisites({ apiBaseUrl }: { apiBaseUrl: string }) {
                 <a href="https://claude.ai/code" target="_blank" rel="noopener noreferrer" className="underline">
                   claude.ai/code
                 </a>{' '}
-                or via npm: <CopyCommand command="npm install -g @anthropic-ai/claude-code" />
+                or via npm: <code className={copyCodeClass} onClick={() => navigator.clipboard.writeText('npm install -g @anthropic-ai/claude-code')} title="Click to copy">npm install -g @anthropic-ai/claude-code</code>
               </p>
             )}
           </div>
@@ -144,10 +127,15 @@ function ClaudeCliPrerequisites({ apiBaseUrl }: { apiBaseUrl: string }) {
             <XCircle className="mt-0.5 size-4 shrink-0 text-error-primary" />
           )}
           <div className="min-w-0">
-            <p className="m-0 text-sm font-medium text-primary">Logged in to Claude</p>
+            <p className="m-0 text-sm font-medium text-primary">
+              Logged in to Claude
+              {status?.authEmail ? (
+                <span className="ml-1.5 font-normal text-tertiary">({status.authEmail})</span>
+              ) : null}
+            </p>
             {!loading && !status?.loggedIn && (
               <p className="m-0 mt-1 text-xs text-tertiary">
-                Run <CopyCommand command="claude login" /> in your terminal to authenticate.
+                Run <code className={copyCodeClass} onClick={() => navigator.clipboard.writeText('claude login')} title="Click to copy">claude login</code> in your terminal to authenticate.
               </p>
             )}
           </div>

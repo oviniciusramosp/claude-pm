@@ -1524,22 +1524,40 @@ app.get('/api/claude/cli-status', async (_req, res) => {
     child.on('error', () => resolve(null));
   });
 
-  // Check if user is logged in via auth file.
-  const authFile = path.join(os.homedir(), '.config', 'claude', 'auth.json');
+  // Check if user is logged in via `claude auth status`.
   let loggedIn = false;
-  try {
-    const raw = fsSync.readFileSync(authFile, 'utf8');
-    const parsed = JSON.parse(raw);
-    loggedIn = !!(parsed && (parsed.oauthToken || parsed.accessToken || parsed.token || Object.keys(parsed).length > 0));
-  } catch {
-    loggedIn = false;
+  let authEmail = null;
+  if (cliInstalled) {
+    const authResult = await new Promise((resolve) => {
+      const child = spawn(`${DEFAULT_CLAUDE_COMMAND.split(' ')[0]} auth status`, {
+        shell: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: childEnv
+      });
+      let output = '';
+      child.stdout.on('data', (d) => { output += String(d); });
+      child.stderr.on('data', (d) => { output += String(d); });
+      child.on('close', () => {
+        try {
+          const parsed = JSON.parse(output.trim());
+          resolve(parsed);
+        } catch {
+          resolve(null);
+        }
+      });
+      child.on('error', () => resolve(null));
+    });
+    if (authResult) {
+      loggedIn = authResult.loggedIn === true;
+      authEmail = authResult.email || null;
+    }
   }
 
   res.json({
     cliInstalled: cliInstalled !== null,
     cliVersion: cliInstalled || null,
     loggedIn,
-    authFile
+    authEmail
   });
 });
 
