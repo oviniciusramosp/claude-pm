@@ -266,7 +266,7 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
                   <Button
                     size="sm"
                     color="brand"
-                    onClick={handleSend}
+                    onPress={handleSend}
                     isDisabled={!draft.trim() || sending || generating}
                     aria-label="Send message"
                     className="shrink-0"
@@ -283,7 +283,7 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
                 <Button
                   size="md"
                   color="brand"
-                  onClick={handleGenerateEpics}
+                  onPress={handleGenerateEpics}
                   isDisabled={!hasConversation || sending || generating}
                   className="w-full"
                 >
@@ -321,14 +321,23 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
 
 // ── Chat Message Bubble ──────────────────────────────────────────────
 
+function parseMarkdownSafe(content: string): string {
+  try {
+    const result = marked.parse(content, { gfm: true, breaks: true });
+    return typeof result === 'string' ? result : content;
+  } catch {
+    return content;
+  }
+}
+
 function MessageBubble({ message }: { message: ChatMessage }) {
   if (message.role === 'system') {
     return (
       <div className="flex justify-center">
         <div className="max-w-md rounded-lg bg-tertiary px-4 py-3 text-center text-sm text-secondary">
           <div
-            className="prose prose-sm max-w-none text-secondary [&_p]:my-1 [&_ul]:my-1 [&_li]:my-0"
-            dangerouslySetInnerHTML={{ __html: marked.parse(message.content, { async: false, gfm: true, breaks: true }) as string }}
+            className="[&_p]:my-1 [&_ul]:my-1 [&_li]:my-0 [&_ul]:list-disc [&_ul]:pl-4"
+            dangerouslySetInnerHTML={{ __html: parseMarkdownSafe(message.content) }}
           />
         </div>
       </div>
@@ -350,8 +359,8 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     <div className="flex justify-start">
       <div className="max-w-[80%] rounded-lg rounded-tl-sm bg-secondary px-4 py-3 text-sm text-primary">
         <div
-          className="prose prose-sm max-w-none text-primary [&_p]:my-1 [&_ul]:my-1 [&_li]:my-0 [&_strong]:text-primary [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm"
-          dangerouslySetInnerHTML={{ __html: marked.parse(message.content, { async: false, gfm: true, breaks: true }) as string }}
+          className="[&_p]:my-1 [&_ul]:my-1 [&_li]:my-0 [&_ul]:list-disc [&_ul]:pl-4 [&_strong]:font-semibold [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold"
+          dangerouslySetInnerHTML={{ __html: parseMarkdownSafe(message.content) }}
         />
       </div>
     </div>
