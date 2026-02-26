@@ -641,7 +641,7 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
         serverInfo={serverInfo}
       />
 
-      <main className="flex min-h-0 max-w-[100vw] flex-1 flex-col overflow-clip lg:ml-[280px] lg:max-w-[calc(100vw-280px)]">
+      <main className="flex min-h-0 max-w-[100vw] flex-1 flex-col overflow-hidden lg:ml-[280px] lg:max-w-[calc(100vw-280px)]">
         <div className="flex items-center gap-3 border-b border-secondary bg-primary/90 px-4 py-3 backdrop-blur-xl lg:hidden">
           <button
             type="button"

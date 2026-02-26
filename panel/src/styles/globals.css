@@ -29,8 +29,7 @@
 }
 
 html,
-body,
-#root {
+body {
     height: 100%;
     margin: 0;
     overflow: clip;
@@ -41,6 +40,10 @@ body,
     font-variant-ligatures: contextual;
     -webkit-font-kerning: normal;
     font-kerning: normal;
+}
+
+#root {
+    height: 100%;
 }
 
 /* Hide the default expand arrow on Safari.  */
