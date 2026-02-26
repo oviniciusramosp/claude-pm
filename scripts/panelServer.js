@@ -2870,9 +2870,98 @@ app.post('/api/claude/chat', async (req, res) => {
   }
 });
 
+// ── Cross-Epic Board Context Helpers ──────────────────────────────────
+
+/**
+ * Extract the Epic Goal and Scope sections from an epic's markdown body.
+ * Truncates to ~500 characters to keep prompts concise.
+ */
+function extractEpicGoalScope(markdown) {
+  if (!markdown) return '(no description available)';
+
+  const { body } = parseFrontmatter(markdown);
+  if (!body || body.trim().length === 0) return '(no description available)';
+
+  // Try to extract the Epic Goal line (bold paragraph pattern)
+  const goalMatch = body.match(/\*\*Epic Goal\*\*:\s*(.+?)(?:\n\n|\n##)/s);
+  const goalText = goalMatch ? goalMatch[1].trim() : '';
+
+  // Try to extract the ## Scope section
+  const scopeMatch = body.match(/##\s*Scope\s*\n([\s\S]*?)(?=\n##|\n---|\n\*\*|$)/);
+  const scopeText = scopeMatch ? scopeMatch[1].trim() : '';
+
+  let result = '';
+  if (goalText) result += goalText;
+  if (scopeText) result += (result ? '\n' : '') + scopeText;
+
+  // Fallback: if neither pattern matched, take the first ~500 chars of the body
+  if (!result) {
+    result = body.trim();
+  }
+
+  // Truncate to ~500 characters
+  if (result.length > 500) {
+    result = result.slice(0, 497) + '...';
+  }
+
+  return result;
+}
+
+/**
+ * Build a concise XML block summarizing all OTHER epics on the board.
+ * Used to give cross-epic context to story generation and epic review prompts.
+ *
+ * @param {LocalBoardClient} client - An initialized board client
+ * @param {string|null} currentEpicId - The ID of the epic being processed (excluded from output)
+ * @returns {Promise<string>} XML string or empty string if no other epics
+ */
+async function buildBoardContext(client, currentEpicId) {
+  const allTasks = await client.listTasks();
+
+  // Identify epics: tasks with type === 'Epic' or tasks that are parents of other tasks
+  const parentIds = new Set(allTasks.filter(t => t.parentId).map(t => t.parentId));
+  const epics = allTasks.filter(t =>
+    (t.type === 'Epic' || parentIds.has(t.id)) && t.id !== currentEpicId
+  );
+
+  if (epics.length === 0) {
+    return '';
+  }
+
+  const epicSummaries = [];
+
+  for (const epic of epics) {
+    const markdown = await client.getTaskMarkdown(epic.id);
+    const goalScope = extractEpicGoalScope(markdown);
+
+    const children = allTasks
+      .filter(t => t.parentId === epic.id)
+      .map(t => `    - ${t.name} [${t.status}]`)
+      .join('\n');
+
+    epicSummaries.push(
+      `  <epic id="${epic.id}">` +
+      `\n    <name>${epic.name}</name>` +
+      `\n    <status>${epic.status}</status>` +
+      `\n    <goal_scope>${goalScope}</goal_scope>` +
+      (children ? `\n    <children>\n${children}\n    </children>` : '\n    <children>(none)</children>') +
+      `\n  </epic>`
+    );
+  }
+
+  return `<board_context>
+The following epics already exist on the board. Use this context to:
+- Avoid generating stories that duplicate work from other epics
+- Identify dependencies between this epic and others
+- Maintain consistent scope and granularity across the backlog
+
+${epicSummaries.join('\n\n')}
+</board_context>`;
+}
+
 // ── Review Task with Claude ───────────────────────────────────────────
 
-function buildReviewTaskPrompt({ name, priority, type, status, model, agents, body }) {
+function buildReviewTaskPrompt({ name, priority, type, status, model, agents, body, boardContext }) {
   const taskType = type || 'UserStory';
   const taskPriority = priority || 'P1';
   const taskModel = model || '(default)';
@@ -2907,20 +2996,29 @@ IMPORTANT:
 
   // ── Epic-specific prompt ──────────────────────────────────────────────
   if (taskType === 'Epic') {
-    return `You are an expert product manager reviewing an **Epic** definition for a Claude Code automation system.
+    return `You are an expert product manager reviewing an **Epic** definition for a Claude Code automation system. Your goal is to produce an Epic description that is **product-oriented** and detailed enough to generate **specific, non-generic User Stories and Discovery tasks** following agile methodology.
 
 <context>
-This Epic will NOT be executed directly by Claude. Instead, it serves as a **parent container** that defines a high-level business goal. Child User Stories will be generated from this Epic and those stories will be executed individually by Claude Code.
+This Epic will NOT be executed directly by Claude. Instead, it serves as a **parent container** that defines a high-level business goal. After review, child tasks (Discovery tasks and User Stories) will be generated from this Epic and executed individually by Claude Code.
+
+**How child tasks work:**
+- **Discovery tasks** (type: Discovery, model: claude-opus-4-6): Research tasks that investigate how a feature should be implemented — defining tools, frameworks, libraries, architecture patterns, and approaches. Their output is saved to a \`.md\` file inside the project that subsequent User Stories reference.
+- **User Stories** (type: UserStory, model: claude-sonnet-4-5-20250929): Implementation tasks that execute based on concrete specifications, often referencing the output of a preceding Discovery task.
 
 The Epic must be written at the RIGHT level of abstraction:
 - HIGH ENOUGH to describe business outcomes, not implementation details
-- DETAILED ENOUGH to generate meaningful User Stories from it
+- DETAILED ENOUGH that each scope item can be directly mapped to one or more child tasks (Discovery + UserStory pairs for complex features, or just UserStories for straightforward ones)
+- SPECIFIC ENOUGH about the desired end-user experience and product behavior to avoid generic stories
 </context>
 
 ${metadataBlock}
 
+${boardContext || ''}
+
 <review_instructions>
 Review this Epic and produce an improved version. The output MUST follow the **Epic format** (NOT a User Story format).
+
+**YOUR PRIMARY GOAL**: Make this Epic specific enough that the story generation step can produce **concrete, actionable tasks** — not vague stories like "Implement authentication" but specific ones like "Research JWT vs session-based auth and recommend approach" followed by "Implement JWT token generation endpoint".
 
 **REQUIRED SECTIONS** (in this exact order):
 
@@ -2930,37 +3028,51 @@ Review this Epic and produce an improved version. The output MUST follow the **E
 2. **Epic Goal** (bold paragraph, NOT a section header)
    - One paragraph starting with "**Epic Goal**:" that describes the high-level business objective
    - Focus on WHAT will be delivered and WHY, not HOW
-   - Example: "**Epic Goal**: Build a complete authentication system that allows users to securely create accounts, log in, and manage their sessions."
+   - Be specific about the end-user experience and product behavior
+   - Bad: "**Epic Goal**: Build an authentication system."
+   - Good: "**Epic Goal**: Build a complete authentication system that allows users to create accounts with email/password, log in with persistent sessions, and recover forgotten passwords via email — all with proper error feedback and rate limiting."
 
 3. **## Scope**
    - Bullet list of what this Epic includes
-   - Each bullet is a capability or feature area (NOT a technical task)
-   - Example: "- User login with email/password" (NOT "- Create LoginForm.tsx component")
+   - Each bullet is a **specific capability or feature area** — not a vague category
+   - For complex items, add a sub-bullet hinting that a Discovery task is needed
+   - Bad: "- Authentication" / "- User management"
+   - Good: "- User login with email/password (needs research: auth strategy — JWT vs sessions)"
+   - Good: "- Password recovery flow via email with time-limited tokens"
+   - Good: "- Rate limiting on auth endpoints (needs research: rate limiting library and strategy)"
 
 4. **## Acceptance Criteria**
    - Each AC must be a markdown checkbox: \`- [ ] Description\`
-   - **CRITICAL**: ACs must describe business outcomes and user-visible results
-   - DO NOT include technical details (file names, function names, component names, code patterns)
-   - DO NOT write ACs that sound like unit tests or implementation steps
-   - Good: "- [ ] Users can log in with valid credentials"
+   - **CRITICAL**: ACs must describe **specific, observable product behaviors**
+   - Each AC should map clearly to one or more child stories
+   - Good: "- [ ] Users can log in with email and password and are redirected to the dashboard"
+   - Good: "- [ ] Failed login attempts show specific error messages (wrong password vs. account not found)"
+   - Good: "- [ ] After 5 failed login attempts, the account is locked for 15 minutes"
+   - Bad: "- [ ] Authentication works correctly"
    - Bad: "- [ ] Login form component renders with email and password fields"
-   - Good: "- [ ] Error messages are shown for invalid inputs"
-   - Bad: "- [ ] Form validates email format using regex"
-   - Typically 3-7 ACs for an Epic
+   - Typically 5-10 ACs for an Epic (be thorough, cover edge cases and error scenarios)
 
 5. **## Technical Approach**
    - Bullet list of high-level architectural decisions and technology choices
-   - This guides the child stories but does NOT prescribe implementation
-   - Example: "- Use JWT tokens for authentication" or "- Store state in React Context"
+   - **Flag areas that need Discovery/research** with "(needs Discovery)" suffix
+   - Example: "- Authentication strategy: JWT vs sessions (needs Discovery)"
+   - Example: "- Email service for password recovery (needs Discovery)"
+   - Example: "- Use React Hook Form for form handling"
    - NO file paths, NO function signatures, NO code snippets
 
 6. **## Dependencies**
    - List prerequisites, external services, or blocking items
+   - Include dependencies on other epics (check <board_context> if available)
    - Or "- None" if standalone
 
 7. **## Child Tasks**
    - Always end with: "See individual user story files in this Epic folder."
    - This section is a placeholder — child stories are generated separately
+
+**TESTING RULES:**
+- ❌ NEVER mention manual testing, manual QA, or manual verification
+- ✅ Only reference automated tests (unit tests, integration tests, e2e tests)
+- If testing strategy is mentioned in Technical Approach, focus on automated testing frameworks and patterns
 
 **SECTIONS TO NEVER INCLUDE IN AN EPIC:**
 - ❌ "User Story" / "As a [role], I want..." (that's for child stories)
@@ -2968,6 +3080,13 @@ Review this Epic and produce an improved version. The output MUST follow the **E
 - ❌ "Tests" with specific test files or test cases
 - ❌ "Standard Completion Criteria" with build/lint/commit checks
 - ❌ File paths, component names, or code references in ACs
+- ❌ Manual testing or manual QA references
+
+**CROSS-EPIC AWARENESS:**
+- If <board_context> is provided, review this Epic's scope against other epics to ensure:
+  - No significant overlap in scope or acceptance criteria with other epics
+  - Dependencies on other epics are mentioned in the Dependencies section
+  - Naming and abstraction level are consistent with the rest of the backlog
 </review_instructions>
 
 ${outputFormatBlock}`;
@@ -3033,9 +3152,11 @@ ${acGuidance[taskType] || acGuidance.UserStory}
 
 4. **Tests Section**:
    - Specify test file path (e.g., "\`__tests__/LoginForm.test.tsx\`")
-   - List specific test cases to write
+   - List specific automated test cases to write (unit, integration, e2e)
    - Include edge case tests
    - For infrastructure/chore tasks, state "N/A — no business logic to test"
+   - For Discovery tasks, state "N/A — research task, no automated tests"
+   - NEVER include manual testing or manual QA steps — only automated tests
 
 5. **Dependencies Section**:
    - List any prerequisites or blocking tasks
@@ -3169,7 +3290,34 @@ app.post('/api/board/review-task', async (req, res) => {
   pushLog('info', LOG_SOURCE.panel, `Task review requested: "${name.trim()}"`);
 
   try {
-    const prompt = buildReviewTaskPrompt({ name: name.trim(), priority, type, status, model, agents, body: body.trim() });
+    // Gather cross-epic context only for Epic reviews
+    let boardContext = '';
+    if (type === 'Epic') {
+      try {
+        const env = await readEnvPairs();
+        const boardDir = resolveBoardDir(env);
+        const boardConfig = {
+          board: {
+            dir: boardDir,
+            statuses: {
+              notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+              inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+              done: env.BOARD_STATUS_DONE || 'Done'
+            },
+            typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
+          }
+        };
+        const client = new LocalBoardClient(boardConfig);
+        await client.initialize();
+        const allTasks = await client.listTasks();
+        const matchingEpic = allTasks.find(t => t.name === name.trim() && t.type === 'Epic');
+        boardContext = await buildBoardContext(client, matchingEpic ? matchingEpic.id : null);
+      } catch (err) {
+        pushLog('warn', LOG_SOURCE.panel, `Could not gather board context for epic review: ${err.message}`);
+      }
+    }
+
+    const prompt = buildReviewTaskPrompt({ name: name.trim(), priority, type, status, model, agents, body: body.trim(), boardContext });
     const selectedModel = reviewModel || 'claude-sonnet-4-5-20250929';
     const { reply } = await runClaudePromptViaApi(prompt, selectedModel);
     const parsed = parseReviewResponse(reply);
@@ -3186,12 +3334,12 @@ app.post('/api/board/review-task', async (req, res) => {
 
 // --- Generate Stories from Epic ---
 
-function buildGenerateStoriesPrompt({ epicName, epicBody, existingChildren }) {
+function buildGenerateStoriesPrompt({ epicName, epicBody, existingChildren, boardContext }) {
   const childList = existingChildren.length > 0
     ? existingChildren.map((c) => `- ${c.name}`).join('\n')
     : '(none)';
 
-  return `You are a senior product manager and prompt engineering expert. Your job is to analyze an Epic description and break it down into concrete, actionable user stories.
+  return `You are a senior product manager and prompt engineering expert following **agile methodology**. Your job is to analyze an Epic description and break it down into an **incremental sequence of Discovery tasks and User Stories**.
 
 <epic>
 <name>${epicName}</name>
@@ -3204,12 +3352,69 @@ ${epicBody}
 ${childList}
 </existing_children>
 
+${boardContext || ''}
+
+<agile_methodology>
+Follow these agile principles when generating tasks:
+
+**DISCOVERY-FIRST APPROACH:**
+- For complex features where the implementation approach is unclear (choice of library, architecture pattern, API design, etc.), create a **Discovery task BEFORE the implementation story**.
+- Discovery tasks (type: "Discovery") research and document the recommended approach. They use \`model: claude-opus-4-6\` for deeper analysis.
+- The Discovery task output MUST be saved to a markdown file inside the project (e.g., \`docs/discoveries/auth-strategy.md\`). This file becomes the reference for subsequent User Stories.
+- The User Story that follows a Discovery task MUST reference the Discovery output file in its Dependencies section.
+
+**WHEN TO USE DISCOVERY vs INLINE RESEARCH:**
+- **Use a Discovery task** for complex decisions: choosing frameworks/libraries, defining API contracts, architectural patterns, database schema design, integration strategies.
+- **Use inline ACs** (within a UserStory) for simpler research: checking if a package exists, reading existing code to understand a pattern, minor technology choices.
+
+**INCREMENTAL DELIVERY:**
+- Order tasks so each builds on the previous one — never assume something exists that hasn't been built yet.
+- Each task should produce a working, testable increment of the product.
+- Earlier tasks lay foundations; later tasks add features on top.
+</agile_methodology>
+
 <instructions>
 1. Analyze the Epic description and identify all distinct features, behaviors, or capabilities.
-2. For each feature, create a user story with:
-   - A clear, concise name (imperative form, e.g., "Implement login form")
-   - A priority: P0 (critical), P1 (high), P2 (medium), P3 (low)
-   - A complete markdown body following this structure:
+
+2. For each feature, decide if it needs a Discovery task:
+   - If the Epic mentions "(needs Discovery)" in its Technical Approach or Scope, create a Discovery task first.
+   - If the implementation approach involves choosing between alternatives (libraries, patterns, strategies), create a Discovery task.
+   - If the feature is straightforward with a clear implementation path, create just a UserStory.
+
+3. **For Discovery tasks**, use this structure:
+   - type: "Discovery"
+   - name: "Research [topic]" (e.g., "Research authentication strategy")
+   - body structure:
+
+     # [Discovery Name]
+
+     **Goal**: Research and document the recommended approach for [topic].
+
+     ## Research Questions
+     - [ ] What are the available options for [topic]?
+     - [ ] What are the trade-offs of each option?
+     - [ ] Which option is recommended for this project and why?
+
+     ## Acceptance Criteria
+     - [ ] Research document created at \`docs/discoveries/[topic-slug].md\`
+     - [ ] Document includes comparison of alternatives with pros/cons
+     - [ ] Document includes a clear recommendation with justification
+     - [ ] Document includes implementation guidelines for the recommended approach
+
+     ## Output
+     Save findings to: \`docs/discoveries/[topic-slug].md\`
+
+     ## Dependencies
+     - None (or list if depends on another Discovery)
+
+     ## Standard Completion Criteria
+     - [ ] Research document created and complete
+     - [ ] Commit: \`docs(discovery): research [topic]\`
+
+4. **For User Stories**, use this structure:
+   - type: "UserStory"
+   - name: Imperative form (e.g., "Implement login form")
+   - body structure:
 
      # [Story Name]
 
@@ -3218,7 +3423,7 @@ ${childList}
      ## Acceptance Criteria
      - [ ] First acceptance criterion (specific, testable, checkbox format)
      - [ ] Second acceptance criterion
-     (... more as needed, typically 3-8 per story)
+     (... typically 3-8 per story)
 
      ## Technical Tasks
      1. First implementation step with specific file paths when possible
@@ -3226,41 +3431,53 @@ ${childList}
      (... numbered, sequential steps)
 
      ## Tests
-     - Describe what should be tested
+     - Describe automated tests to write (unit, integration, e2e)
      - Mention specific test file paths if applicable
      - Or "N/A — infrastructure task" if no tests needed
+     - NEVER include manual testing steps
 
      ## Dependencies
-     - List any prerequisites, blocking tasks, or required packages
+     - Reference Discovery output files if applicable (e.g., "See \`docs/discoveries/auth-strategy.md\` for implementation approach")
+     - List any other prerequisites or blocking tasks
      - Or "None" if standalone
 
      ## Standard Completion Criteria
-     - [ ] Tests written and passing (or N/A)
+     - [ ] Automated tests written and passing (or N/A)
      - [ ] TypeScript compiles without errors
      - [ ] Linter passes
      - [ ] Commit message follows conventional commits format
 
-3. DO NOT duplicate stories that already exist (see existing_children above).
-4. Each story should be small enough for a single developer to complete in one session.
-5. Order stories logically — foundational work first, then features that build on it.
-6. Generate between 2 and 15 stories. Do not generate more than 15.
-7. Use imperative language: "Implement X", "Add Y", "Create Z".
+5. DO NOT duplicate stories that already exist (see existing_children above).
+6. Review the <board_context> section (if present). DO NOT generate stories that overlap with work described in other epics. If there are cross-epic dependencies, mention them in the story's Dependencies section.
+7. Each task should be small enough for a single developer to complete in one session.
+8. **Order tasks incrementally**: Discoveries first, then foundational stories, then features that build on them.
+9. Generate between 2 and 15 tasks. Do not generate more than 15.
+10. Use imperative language: "Research X", "Implement Y", "Add Z", "Create W".
+11. **NEVER include manual tests** — only automated tests (unit, integration, e2e).
 </instructions>
 
 <output_format>
 Return ONLY a valid JSON array. No markdown code blocks, no explanation text — just the raw JSON.
 
 Each element must have:
-- "name": string (story name)
+- "name": string (task name)
 - "priority": string ("P0", "P1", "P2", or "P3")
+- "type": string ("Discovery" or "UserStory") — defaults to "UserStory" if omitted
 - "body": string (complete markdown body with \\n for newlines)
 
 Example:
 [
   {
-    "name": "Implement user registration form",
+    "name": "Research authentication strategy",
+    "priority": "P0",
+    "type": "Discovery",
+    "body": "# Research Authentication Strategy\\n\\n**Goal**: Research and document the recommended authentication approach...\\n\\n## Research Questions\\n- [ ] JWT vs session-based auth...\\n\\n## Acceptance Criteria\\n- [ ] Research document created at \`docs/discoveries/auth-strategy.md\`...\\n\\n## Output\\nSave findings to: \`docs/discoveries/auth-strategy.md\`\\n..."
+  },
+  {
+    "name": "Implement JWT authentication endpoint",
     "priority": "P1",
-    "body": "# Implement User Registration Form\\n\\n**User Story**: As a new user, I want to register ...\\n\\n## Acceptance Criteria\\n- [ ] Registration form renders ...\\n..."
+    "type": "UserStory",
+    "body": "# Implement JWT Authentication Endpoint\\n\\n**User Story**: As a user, I want to authenticate via JWT...\\n\\n## Dependencies\\n- See \`docs/discoveries/auth-strategy.md\` for implementation approach\\n..."
   }
 ]
 </output_format>`;
@@ -3292,6 +3509,7 @@ function parseGenerateStoriesResponse(reply) {
     normalized.push({
       name: s.name.trim(),
       priority: ['P0', 'P1', 'P2', 'P3'].includes(s.priority) ? s.priority : 'P1',
+      type: ['Discovery', 'UserStory', 'Bug', 'Chore'].includes(s.type) ? s.type : 'UserStory',
       body: s.body
     });
     if (normalized.length >= 15) break; // Hard cap
@@ -3544,11 +3762,15 @@ app.post('/api/board/generate-stories', async (req, res) => {
     const allTasks = await client.listTasks();
     const existingChildren = allTasks.filter((t) => t.parentId === epicId);
 
+    // Gather cross-epic context from the board
+    const boardContext = await buildBoardContext(client, epicId);
+
     // Build prompt and call Claude
     const prompt = buildGenerateStoriesPrompt({
       epicName,
       epicBody: epicBody.trim(),
-      existingChildren: existingChildren.map((c) => ({ name: c.name }))
+      existingChildren: existingChildren.map((c) => ({ name: c.name })),
+      boardContext
     });
 
     const { reply } = await runClaudePromptViaApi(prompt, 'claude-sonnet-4-5-20250929');
@@ -3562,19 +3784,27 @@ app.post('/api/board/generate-stories', async (req, res) => {
       const story = stories[i];
       try {
         const fileName = generateStoryFileName(epicId, i, story.name);
+        const taskFields = { name: story.name, priority: story.priority, type: story.type || 'UserStory', status: 'Not Started' };
+        // Discovery tasks use Opus for deeper research analysis
+        if (story.type === 'Discovery') {
+          taskFields.model = 'claude-opus-4-6';
+        }
         await client.createTask(
-          { name: story.name, priority: story.priority, type: 'UserStory', status: 'Not Started' },
+          taskFields,
           story.body,
           { epicId, fileName }
         );
-        created.push({ name: story.name, fileName });
+        created.push({ name: story.name, fileName, type: story.type || 'UserStory' });
       } catch (err) {
         pushLog('warn', LOG_SOURCE.panel, `Failed to create story "${story.name}": ${err.message}`);
         failed++;
       }
     }
 
-    const summary = `Generated ${created.length} stories for "${epicName}"${failed > 0 ? ` (${failed} failed)` : ''}`;
+    const discoveryCount = created.filter(c => c.type === 'Discovery').length;
+    const storyCount = created.filter(c => c.type !== 'Discovery').length;
+    const typeBreakdown = discoveryCount > 0 ? ` (${discoveryCount} Discovery, ${storyCount} UserStory)` : '';
+    const summary = `Generated ${created.length} tasks${typeBreakdown} for "${epicName}"${failed > 0 ? ` (${failed} failed)` : ''}`;
     pushLog('success', LOG_SOURCE.claude, summary);
     res.json({ ok: true, created, total: stories.length, failed });
   } catch (error) {
