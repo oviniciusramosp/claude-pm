@@ -1074,14 +1074,14 @@ function runClaudePromptViaApi(prompt, model, customTimeoutMs) {
     const timeoutMs = customTimeoutMs || 120000;
 
     // Strip env vars that trigger Claude Code's nested-session detection.
+    // Also remove CLAUDE_CODE_OAUTH_TOKEN so the CLI authenticates via its
+    // own stored credentials (~/.config/claude/auth.json) rather than an
+    // automation token that is not valid for interactive CLI auth.
     const commandEnv = { ...process.env };
     delete commandEnv.CLAUDECODE;
     delete commandEnv.CLAUDE_CODE_ENTRYPOINT;
     delete commandEnv.CLAUDE_AGENT_SDK_VERSION;
-
-    if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-      commandEnv.CLAUDE_CODE_OAUTH_TOKEN = process.env.CLAUDE_CODE_OAUTH_TOKEN;
-    }
+    delete commandEnv.CLAUDE_CODE_OAUTH_TOKEN;
 
     const child = spawn(command, {
       shell: true,
