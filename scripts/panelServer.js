@@ -26,7 +26,7 @@ const envFilePath = path.join(cwd, '.env');
 const panelDistPath = path.join(cwd, 'panel', 'dist');
 const panelPort = Number(process.env.PANEL_PORT || 4100);
 const DEFAULT_CLAUDE_COMMAND = 'claude --print';
-const DEFAULT_CLAUDE_TIMEOUT_MS = 45 * 60 * 1000;
+
 const MAX_CHAT_MESSAGE_CHARS = 12000;
 const MAX_CHAT_LOG_CHARS = 8000;
 
@@ -1045,15 +1045,6 @@ function getAutomationHeaders() {
   return headers;
 }
 
-function resolveClaudeTimeoutMs() {
-  const value = Number(process.env.CLAUDE_TIMEOUT_MS);
-  if (!Number.isFinite(value) || value <= 0) {
-    return DEFAULT_CLAUDE_TIMEOUT_MS;
-  }
-
-  return value;
-}
-
 function truncateText(rawValue, maxChars = MAX_CHAT_LOG_CHARS) {
   const value = String(rawValue || '').trim();
   if (!value) {
@@ -1065,38 +1056,6 @@ function truncateText(rawValue, maxChars = MAX_CHAT_LOG_CHARS) {
   }
 
   return `${value.slice(0, maxChars)}...`;
-}
-
-function summarizeCommandOutput(stderr, stdout) {
-  const raw = String(stderr || stdout || 'No output');
-  const line = raw
-    .split('\n')
-    .map((item) => item.trim())
-    .filter(Boolean)[0];
-
-  if (!line) {
-    return 'No output';
-  }
-
-  if (line.length <= 320) {
-    return line;
-  }
-
-  return `${line.slice(0, 320)}...`;
-}
-
-function buildClaudePromptCommand(model) {
-  let command = DEFAULT_CLAUDE_COMMAND;
-
-  if (envEnabled(process.env.CLAUDE_FULL_ACCESS, false) && !command.includes('--dangerously-skip-permissions')) {
-    command = `${command} --dangerously-skip-permissions`;
-  }
-
-  if (model && model.trim()) {
-    command = `${command} --model ${model.trim()}`;
-  }
-
-  return command;
 }
 
 async function runClaudePromptViaApi(prompt, model) {
@@ -1137,88 +1096,6 @@ async function runClaudePromptViaApi(prompt, model) {
     reply: reply.trim(),
     workdir
   };
-}
-
-function runClaudePrompt(prompt, model, customTimeoutMs) {
-  return new Promise((resolve, reject) => {
-    const command = buildClaudePromptCommand(model);
-    const workdir = path.resolve(cwd, process.env.CLAUDE_WORKDIR || '.');
-    const timeoutMs = customTimeoutMs || resolveClaudeTimeoutMs();
-    const commandEnv = {
-      ...process.env
-    };
-
-    if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-      commandEnv.CLAUDE_CODE_OAUTH_TOKEN = process.env.CLAUDE_CODE_OAUTH_TOKEN;
-    }
-
-    const child = spawn(command, {
-      shell: true,
-      cwd: workdir,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: commandEnv
-    });
-
-    let stdout = '';
-    let stderr = '';
-    let settled = false;
-
-    function finish(error, payload) {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-
-      if (error) {
-        reject(error);
-        return;
-      }
-
-      resolve(payload);
-    }
-
-    const timer = setTimeout(() => {
-      try {
-        child.kill('SIGTERM');
-      } catch {
-        // Ignore kill errors on timeout fallback.
-      }
-
-      finish(new Error(`Claude prompt timed out after ${timeoutMs}ms.`));
-    }, timeoutMs);
-
-    child.stdout.on('data', (chunk) => {
-      stdout += String(chunk);
-    });
-
-    child.stderr.on('data', (chunk) => {
-      stderr += String(chunk);
-    });
-
-    child.on('error', (error) => {
-      finish(error);
-    });
-
-    child.on('close', (code, signal) => {
-      if (code !== 0) {
-        const summary = summarizeCommandOutput(stderr, stdout);
-        finish(new Error(`Claude command failed (exit=${code}, signal=${signal || 'none'}): ${summary}`));
-        return;
-      }
-
-      finish(null, {
-        reply: String(stdout || stderr || '').trim(),
-        workdir
-      });
-    });
-
-    child.stdin.on('error', () => {
-      // Ignore EPIPE when process exits early.
-    });
-    child.stdin.write(String(prompt || ''));
-    child.stdin.end();
-  });
 }
 
 async function autoStartApiIfNeeded() {
@@ -3183,8 +3060,6 @@ function parseReviewResponse(reply) {
   }
 }
 
-const REVIEW_TIMEOUT_MS = 120000; // 2 minutes
-
 app.post('/api/board/review-task', async (req, res) => {
   const { name, priority, type, status, model, agents, body, reviewModel } = req.body;
 
@@ -3209,7 +3084,7 @@ app.post('/api/board/review-task', async (req, res) => {
   try {
     const prompt = buildReviewTaskPrompt({ name: name.trim(), priority, type, status, model, agents, body: body.trim() });
     const selectedModel = reviewModel || 'claude-sonnet-4-5-20250929';
-    const { reply } = await runClaudePrompt(prompt, selectedModel, REVIEW_TIMEOUT_MS);
+    const { reply } = await runClaudePromptViaApi(prompt, selectedModel);
     const parsed = parseReviewResponse(reply);
 
     pushLog('success', LOG_SOURCE.claude, `Task review completed: "${name.trim()}" — ${parsed.summary}`);
@@ -3223,8 +3098,6 @@ app.post('/api/board/review-task', async (req, res) => {
 });
 
 // --- Generate Stories from Epic ---
-
-const GENERATE_STORIES_TIMEOUT_MS = 180000; // 3 minutes
 
 function buildGenerateStoriesPrompt({ epicName, epicBody, existingChildren }) {
   const childList = existingChildren.length > 0
@@ -3591,7 +3464,7 @@ app.post('/api/board/generate-stories', async (req, res) => {
       existingChildren: existingChildren.map((c) => ({ name: c.name }))
     });
 
-    const { reply } = await runClaudePrompt(prompt, 'claude-sonnet-4-5-20250929', GENERATE_STORIES_TIMEOUT_MS);
+    const { reply } = await runClaudePromptViaApi(prompt, 'claude-sonnet-4-5-20250929');
     const stories = parseGenerateStoriesResponse(reply);
 
     // Create each story as a task file with numbered pattern S{epic}-{story}-{slug}
@@ -3725,7 +3598,7 @@ app.post('/api/board/fix-epic-stories', async (req, res) => {
       stories: allStories
     });
 
-    const { reply } = await runClaudePrompt(prompt, 'claude-sonnet-4-5-20250929', GENERATE_STORIES_TIMEOUT_MS);
+    const { reply } = await runClaudePromptViaApi(prompt, 'claude-sonnet-4-5-20250929');
     const fixedStories = parseFixEpicStoriesResponse(reply);
 
     // Phase 1: Update content for each story
