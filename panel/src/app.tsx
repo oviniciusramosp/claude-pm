@@ -589,7 +589,7 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
   return (
     <div
       className={cx(
-        'flex h-screen overflow-hidden transition-colors duration-300',
+        'flex h-full overflow-hidden transition-colors duration-300',
         isDark ? 'bg-linear-to-b from-gray-950 via-gray-900 to-gray-950' : 'bg-linear-to-b from-utility-brand-50 via-secondary to-primary'
       )}
     >
