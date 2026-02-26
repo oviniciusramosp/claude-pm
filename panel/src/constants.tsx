@@ -41,7 +41,7 @@ export const TEXT_FIELD_CONFIG: TextFieldConfig[] = [
     label: 'Claude OAuth Token',
     icon: User01,
     placeholder: 'sk-ant-...',
-    description: 'Allows Claude to run in non-interactive mode.',
+    description: 'Used by the automation runner to execute tasks non-interactively. Not required for panel features (Review, Generate Stories, Chat) — those use your local Claude CLI login.',
     help: {
       title: 'How to get Claude OAuth Token',
       summary: 'Generate a token from Claude CLI on your machine.',
