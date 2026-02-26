@@ -1,4 +1,5 @@
 // panel/src/components/sidebar-nav.tsx
+/// <reference path="../vite-env.d.ts" />
 
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertOctagon, Asterisk02, ChevronDown, LayersThree01, Moon01, PauseCircle, PlayCircle, Server01, Settings01, StopCircle, Sun } from '@untitledui/icons';
@@ -331,6 +332,8 @@ export function SidebarNav({
         </button>
 
         {serverInfo?.authEnabled && <UserMenu compact />}
+
+        <p className="mt-1 px-3 text-[11px] text-quaternary">v{__APP_VERSION__}</p>
       </div>
     </aside>
   );
