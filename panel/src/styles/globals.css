@@ -46,6 +46,18 @@ body {
     height: 100%;
 }
 
+/*
+ * React Aria's AriaSwitch renders a visually-hidden <input> with
+ * position: absolute. On focus the browser runs scrollIntoView which
+ * propagates up every scroll container, displacing the viewport.
+ * position: fixed takes the input out of the document flow so
+ * scrollIntoView has no ancestor to scroll. The input stays focusable
+ * (keyboard a11y preserved) and label association still works.
+ */
+input[role="switch"] {
+    position: fixed !important;
+}
+
 /* Hide the default expand arrow on Safari.  */
 details summary::-webkit-details-marker {
     display: none;
