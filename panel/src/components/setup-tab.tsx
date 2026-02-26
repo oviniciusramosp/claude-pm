@@ -4,14 +4,12 @@ import { useEffect, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle,
-  ChevronDown,
   Eye,
   EyeOff,
   Folder,
   RefreshCw01,
   Save01,
   Settings01,
-  Terminal,
   XCircle
 } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
@@ -54,92 +52,81 @@ function ClaudeCliPrerequisites({ apiBaseUrl }: { apiBaseUrl: string }) {
 
   useEffect(() => { fetchStatus(); }, [apiBaseUrl]);
 
-  const allGood = status?.cliInstalled && status?.loggedIn;
+  function StatusIcon({ ok }: { ok: boolean | undefined }) {
+    if (loading) return <div className="mt-0.5 size-4 shrink-0 animate-pulse rounded-full bg-quaternary" />;
+    return ok
+      ? <CheckCircle className="mt-0.5 size-4 shrink-0 text-success-primary" />
+      : <XCircle className="mt-0.5 size-4 shrink-0 text-error-primary" />;
+  }
 
   return (
-    <div className={cx(
-      'rounded-lg border p-4',
-      allGood
-        ? 'border-success-secondary bg-utility-success-50 dark:bg-utility-success-50/10'
-        : 'border-warning-secondary bg-utility-warning-50 dark:bg-utility-warning-50/10'
-    )}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Icon
-            icon={Terminal}
-            className={cx('size-4 shrink-0', allGood ? 'text-success-primary' : 'text-warning-primary')}
-          />
-          <span className={cx('text-sm font-semibold', allGood ? 'text-success-primary' : 'text-warning-primary')}>
-            Claude CLI Prerequisites
-          </span>
+    <div className="space-y-4">
+      {/* Step 1 – Install CLI */}
+      <div className="rounded-lg border border-secondary bg-secondary p-3 sm:p-4">
+        <div className="flex items-start gap-2 sm:gap-3">
+          <Badge type="pill-color" color="brand" size="sm" className="mt-0.5 shrink-0">1</Badge>
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="m-0 text-sm font-semibold text-primary">Install Claude CLI</h4>
+              <div className="flex items-center gap-2">
+                <StatusIcon ok={status?.cliInstalled} />
+                <button
+                  type="button"
+                  onClick={fetchStatus}
+                  disabled={loading}
+                  className="text-tertiary hover:text-secondary disabled:opacity-50"
+                  title="Refresh status"
+                >
+                  <RefreshCw01 className={cx('size-3.5', loading && 'animate-spin')} />
+                </button>
+              </div>
+            </div>
+            <p className="m-0 text-sm text-tertiary">
+              {status?.cliInstalled ? (
+                <>Claude CLI is installed. <span className="text-quaternary">{status.cliVersion}</span></>
+              ) : (
+                <>Required for Review with Claude, Generate Stories, and Chat.</>
+              )}
+            </p>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={fetchStatus}
-          disabled={loading}
-          className="text-tertiary hover:text-secondary disabled:opacity-50"
-          title="Refresh status"
-        >
-          <RefreshCw01 className={cx('size-3.5', loading && 'animate-spin')} />
-        </button>
+        {!loading && !status?.cliInstalled && (
+          <ol className="mt-3 list-decimal space-y-1 pl-6 text-sm text-tertiary sm:ml-9 sm:pl-4">
+            <li>
+              Install from{' '}
+              <a href="https://claude.ai/code" target="_blank" rel="noopener noreferrer" className="underline">claude.ai/code</a>{' '}
+              or via npm: <code className={copyCodeClass} onClick={() => navigator.clipboard.writeText('npm install -g @anthropic-ai/claude-code')} title="Click to copy">npm install -g @anthropic-ai/claude-code</code>
+            </li>
+            <li>Verify by running <code className={copyCodeClass} onClick={() => navigator.clipboard.writeText('claude --version')} title="Click to copy">claude --version</code> in your terminal.</li>
+          </ol>
+        )}
       </div>
 
-      <p className="mt-1.5 text-sm text-tertiary">
-        Panel features like <strong>Review with Claude</strong>, <strong>Generate Stories</strong>, and <strong>Chat</strong> require the Claude CLI to be installed and logged in on this machine.
-      </p>
-
-      <div className="mt-3 space-y-2">
-        {/* Check 1: CLI installed */}
-        <div className="flex items-start gap-2">
-          {loading ? (
-            <div className="mt-0.5 size-4 shrink-0 animate-pulse rounded-full bg-secondary" />
-          ) : status?.cliInstalled ? (
-            <CheckCircle className="mt-0.5 size-4 shrink-0 text-success-primary" />
-          ) : (
-            <XCircle className="mt-0.5 size-4 shrink-0 text-error-primary" />
-          )}
-          <div className="min-w-0">
-            <p className="m-0 text-sm font-medium text-primary">
-              Claude CLI installed
-              {status?.cliVersion ? (
-                <span className="ml-1.5 font-normal text-tertiary">({status.cliVersion})</span>
-              ) : null}
+      {/* Step 2 – Login */}
+      <div className="rounded-lg border border-secondary bg-secondary p-3 sm:p-4">
+        <div className="flex items-start gap-2 sm:gap-3">
+          <Badge type="pill-color" color="brand" size="sm" className="mt-0.5 shrink-0">2</Badge>
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="m-0 text-sm font-semibold text-primary">Log in to Claude</h4>
+              <StatusIcon ok={status?.loggedIn} />
+            </div>
+            <p className="m-0 text-sm text-tertiary">
+              {status?.loggedIn ? (
+                <>Authenticated as <span className="font-medium text-secondary">{status.authEmail}</span>.</>
+              ) : (
+                <>Authenticate with your Anthropic account to enable CLI features.</>
+              )}
             </p>
-            {!loading && !status?.cliInstalled && (
-              <p className="m-0 mt-1 text-xs text-tertiary">
-                Install from{' '}
-                <a href="https://claude.ai/code" target="_blank" rel="noopener noreferrer" className="underline">
-                  claude.ai/code
-                </a>{' '}
-                or via npm: <code className={copyCodeClass} onClick={() => navigator.clipboard.writeText('npm install -g @anthropic-ai/claude-code')} title="Click to copy">npm install -g @anthropic-ai/claude-code</code>
-              </p>
-            )}
           </div>
         </div>
-
-        {/* Check 2: Logged in */}
-        <div className="flex items-start gap-2">
-          {loading ? (
-            <div className="mt-0.5 size-4 shrink-0 animate-pulse rounded-full bg-secondary" />
-          ) : status?.loggedIn ? (
-            <CheckCircle className="mt-0.5 size-4 shrink-0 text-success-primary" />
-          ) : (
-            <XCircle className="mt-0.5 size-4 shrink-0 text-error-primary" />
-          )}
-          <div className="min-w-0">
-            <p className="m-0 text-sm font-medium text-primary">
-              Logged in to Claude
-              {status?.authEmail ? (
-                <span className="ml-1.5 font-normal text-tertiary">({status.authEmail})</span>
-              ) : null}
-            </p>
-            {!loading && !status?.loggedIn && (
-              <p className="m-0 mt-1 text-xs text-tertiary">
-                Run <code className={copyCodeClass} onClick={() => navigator.clipboard.writeText('claude login')} title="Click to copy">claude login</code> in your terminal to authenticate.
-              </p>
-            )}
-          </div>
-        </div>
+        {!loading && !status?.loggedIn && (
+          <ol className="mt-3 list-decimal space-y-1 pl-6 text-sm text-tertiary sm:ml-9 sm:pl-4">
+            <li>Run <code className={copyCodeClass} onClick={() => navigator.clipboard.writeText('claude login')} title="Click to copy">claude login</code> in your terminal.</li>
+            <li>Complete the browser authentication flow.</li>
+            <li>Click the refresh icon above to verify.</li>
+          </ol>
+        )}
       </div>
     </div>
   );
@@ -174,7 +161,7 @@ export function SetupTab({
   onSaveClick: () => void;
   apiBaseUrl: string;
 }) {
-  let stepNumber = 0;
+  let stepNumber = 2; // Steps 1 & 2 are the CLI prerequisites above
 
   return (
     <section className="rounded-xl border border-secondary bg-primary p-3 shadow-sm sm:p-5">
@@ -188,13 +175,8 @@ export function SetupTab({
         </p>
       </div>
 
-      {/* Claude CLI Prerequisites */}
-      <div className="mt-4">
-        <ClaudeCliPrerequisites apiBaseUrl={apiBaseUrl} />
-      </div>
-
       {/* Board Validation Alert */}
-      <div className="mt-3">
+      <div className="mt-4">
         <BoardValidationAlert apiBaseUrl={apiBaseUrl} />
       </div>
 
@@ -205,6 +187,11 @@ export function SetupTab({
               <h3 className="m-0 text-md font-semibold text-primary">{section.title}</h3>
               <p className="m-0 text-sm text-tertiary">{section.description}</p>
             </div>
+
+            {/* CLI Prerequisites as Steps 1 & 2 inside the first section */}
+            {section.key === 'claude' && (
+              <ClaudeCliPrerequisites apiBaseUrl={apiBaseUrl} />
+            )}
 
             {section.textKeys.length > 0 ? (
               <div className="space-y-4">
