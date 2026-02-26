@@ -210,11 +210,6 @@ export function SetupTab({
         </p>
       </div>
 
-      {/* Board Validation Alert */}
-      <div className="mt-4">
-        <BoardValidationAlert apiBaseUrl={apiBaseUrl} />
-      </div>
-
       <div className="mt-6 space-y-6">
         {SETUP_SECTIONS.map((section) => {
           // Sections beyond "claude" are gated by core config readiness.
@@ -381,6 +376,11 @@ export function SetupTab({
                   })}
                 </div>
               ) : null}
+
+              {/* Board Validation Alert — shown after workdir field */}
+              {section.key === 'claude' && coreConfigReady && (
+                <BoardValidationAlert apiBaseUrl={apiBaseUrl} />
+              )}
 
               {section.toggleKeys.length > 0 ? (
                 <div className={cx('space-y-3', visibleTextKeys.length > 0 ? 'mt-1' : '')}>
