@@ -1058,44 +1058,73 @@ function truncateText(rawValue, maxChars = MAX_CHAT_LOG_CHARS) {
   return `${value.slice(0, maxChars)}...`;
 }
 
-async function runClaudePromptViaApi(prompt, model) {
-  const token = process.env.CLAUDE_CODE_OAUTH_TOKEN;
-  if (!token) {
-    throw new Error('CLAUDE_CODE_OAUTH_TOKEN is required to use Anthropic API directly');
-  }
+function runClaudePromptViaApi(prompt, model, customTimeoutMs) {
+  return new Promise((resolve, reject) => {
+    let command = DEFAULT_CLAUDE_COMMAND;
 
-  const workdir = path.resolve(cwd, process.env.CLAUDE_WORKDIR || '.');
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'anthropic-version': '2023-06-01'
-    },
-    body: JSON.stringify({
-      model: model || 'claude-sonnet-4-5-20250929',
-      max_tokens: 4096,
-      messages: [
-        {
-          role: 'user',
-          content: prompt
-        }
-      ]
-    })
+    if (envEnabled(process.env.CLAUDE_FULL_ACCESS, false) && !command.includes('--dangerously-skip-permissions')) {
+      command = `${command} --dangerously-skip-permissions`;
+    }
+
+    if (model && model.trim()) {
+      command = `${command} --model ${model.trim()}`;
+    }
+
+    const workdir = path.resolve(cwd, process.env.CLAUDE_WORKDIR || '.');
+    const timeoutMs = customTimeoutMs || 120000;
+
+    // Strip env vars that trigger Claude Code's nested-session detection.
+    const commandEnv = { ...process.env };
+    delete commandEnv.CLAUDECODE;
+    delete commandEnv.CLAUDE_CODE_ENTRYPOINT;
+    delete commandEnv.CLAUDE_AGENT_SDK_VERSION;
+
+    if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
+      commandEnv.CLAUDE_CODE_OAUTH_TOKEN = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+    }
+
+    const child = spawn(command, {
+      shell: true,
+      cwd: workdir,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: commandEnv
+    });
+
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+
+    function finish(error, payload) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error) { reject(error); return; }
+      resolve(payload);
+    }
+
+    const timer = setTimeout(() => {
+      try { child.kill('SIGTERM'); } catch { /* ignore */ }
+      finish(new Error(`Claude prompt timed out after ${timeoutMs}ms.`));
+    }, timeoutMs);
+
+    child.stdout.on('data', (chunk) => { stdout += String(chunk); });
+    child.stderr.on('data', (chunk) => { stderr += String(chunk); });
+    child.on('error', (error) => { finish(error); });
+
+    child.on('close', (code, signal) => {
+      if (code !== 0) {
+        const raw = String(stderr || stdout || 'No output');
+        const summary = raw.split('\n').map((l) => l.trim()).filter(Boolean)[0] || 'No output';
+        finish(new Error(`Claude command failed (exit=${code}, signal=${signal || 'none'}): ${summary}`));
+        return;
+      }
+      finish(null, { reply: String(stdout || stderr || '').trim(), workdir });
+    });
+
+    child.stdin.on('error', () => { /* ignore EPIPE */ });
+    child.stdin.write(String(prompt || ''));
+    child.stdin.end();
   });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Anthropic API error (${response.status}): ${errorText}`);
-  }
-
-  const data = await response.json();
-  const reply = data.content?.[0]?.text || '';
-
-  return {
-    reply: reply.trim(),
-    workdir
-  };
 }
 
 async function autoStartApiIfNeeded() {
