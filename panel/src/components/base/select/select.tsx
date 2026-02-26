@@ -67,7 +67,7 @@ export function Select({
       onChange(optionValue);
       setIsOpen(false);
       setFocusedIndex(-1);
-      buttonRef.current?.focus();
+      buttonRef.current?.focus({ preventScroll: true });
     },
     [onChange]
   );
@@ -94,7 +94,7 @@ export function Select({
           e.preventDefault();
           setIsOpen(false);
           setFocusedIndex(-1);
-          buttonRef.current?.focus();
+          buttonRef.current?.focus({ preventScroll: true });
           break;
         case 'ArrowDown':
           e.preventDefault();

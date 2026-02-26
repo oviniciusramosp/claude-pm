@@ -16,7 +16,7 @@ export function DiscardConfirmOverlay({ open, reviewing, onKeepEditing, onDiscar
   // Auto-focus the dialog when it opens so it receives keyboard events
   useEffect(() => {
     if (open && dialogRef.current) {
-      dialogRef.current.focus();
+      dialogRef.current.focus({ preventScroll: true });
     }
   }, [open]);
 

@@ -51,7 +51,7 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
   // Focus textarea when modal opens
   useEffect(() => {
     if (open) {
-      setTimeout(() => textareaRef.current?.focus(), 100);
+      setTimeout(() => textareaRef.current?.focus({ preventScroll: true }), 100);
     }
   }, [open]);
 
@@ -135,7 +135,7 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
       setDraft(msg);
     } finally {
       setSending(false);
-      setTimeout(() => textareaRef.current?.focus(), 50);
+      setTimeout(() => textareaRef.current?.focus({ preventScroll: true }), 50);
     }
   }, [draft, sending, generating, sessionId, apiBaseUrl, showToast]);
 
