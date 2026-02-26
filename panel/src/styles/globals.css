@@ -33,6 +33,7 @@ body,
 #root {
     height: 100%;
     margin: 0;
+    overflow: clip;
     font-family: var(--font-body);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
