@@ -1,7 +1,7 @@
 // panel/src/components/board-tab.tsx
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Columns03, CpuChip01, Folder, FolderPlus, Plus, RefreshCw01, Stars01, Tool01, Users01 } from '@untitledui/icons';
+import { ChevronDown, Columns03, CpuChip01, Folder, FolderPlus, Lightbulb02, Plus, RefreshCw01, Stars01, Tool01, Users01 } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { Tooltip, TooltipTrigger } from './base/tooltip/tooltip';
@@ -15,6 +15,7 @@ import {
 } from '../constants';
 import { TaskDetailModal } from './task-detail-modal';
 import { CreateTaskModal } from './create-task-modal';
+import { IdeaToEpicsModal } from './idea-to-epics-modal';
 import type { BoardTask } from '../types';
 
 const COLUMN_STATUS_MAP: Record<string, string> = {
@@ -378,6 +379,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createDefaultEpicId, setCreateDefaultEpicId] = useState<string | undefined>(undefined);
+  const [ideaModalOpen, setIdeaModalOpen] = useState(false);
   const [generatingEpicId, setGeneratingEpicId] = useState(null as string | null);
   const [fixingEpicId, setFixingEpicId] = useState(null as string | null);
   const [boardExists, setBoardExists] = useState<boolean | null>(null);
@@ -829,6 +831,15 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
               Updated {lastRefreshed.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
             </span>
           )}
+          <Tooltip title="Idea to Epics" description="Brainstorm product ideas with Claude and generate Epics">
+            <TooltipTrigger
+              onPress={() => setIdeaModalOpen(true)}
+              aria-label="Idea to Epics"
+              className="rounded-sm p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary"
+            >
+              <Lightbulb02 className="size-4" />
+            </TooltipTrigger>
+          </Tooltip>
           <Tooltip title="Create task" description="Create a new task or epic">
             <TooltipTrigger
               onPress={() => { setCreateDefaultEpicId(undefined); setCreateModalOpen(true); }}
@@ -1310,6 +1321,15 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
         onCreated={() => fetchBoard(true)}
         tasks={tasks}
         defaultEpicId={createDefaultEpicId}
+        onShowErrorDetail={onShowErrorDetail}
+      />
+
+      <IdeaToEpicsModal
+        open={ideaModalOpen}
+        onClose={() => setIdeaModalOpen(false)}
+        apiBaseUrl={apiBaseUrl}
+        showToast={showToast}
+        onCreated={() => fetchBoard(true)}
         onShowErrorDetail={onShowErrorDetail}
       />
     </section>

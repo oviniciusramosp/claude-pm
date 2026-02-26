@@ -5,6 +5,7 @@ import os from 'node:os';
 import { spawn, execFile } from 'node:child_process';
 import readline from 'node:readline';
 import process from 'node:process';
+import crypto from 'node:crypto';
 import dotenv from 'dotenv';
 import express from 'express';
 import cookieParser from 'cookie-parser';
@@ -13,7 +14,7 @@ import rateLimit from 'express-rate-limit';
 import { LocalBoardClient } from '../src/local/client.js';
 import { isEpicTask, sortCandidates } from '../src/selectTask.js';
 import { parseFrontmatter } from '../src/local/frontmatter.js';
-import { generateStoryFileName } from '../src/local/helpers.js';
+import { generateStoryFileName, slugFromTitle } from '../src/local/helpers.js';
 import { configurePassport, getEnabledProviders } from '../src/auth/passport-config.js';
 import { generateToken, getCookieOptions } from '../src/auth/jwt.js';
 import { requireAuth, optionalAuth } from '../src/auth/middleware.js';
@@ -159,6 +160,21 @@ const generateStoriesState = {
 const fixEpicStoriesState = {
   running: false
 };
+const ideaChatState = {
+  running: false
+};
+
+// In-memory session store for Idea to Epics brainstorming
+const ideaSessions = new Map(); // sessionId -> { messages: [], createdAt: number }
+
+// Cleanup stale sessions every 30 minutes (sessions older than 2 hours)
+setInterval(() => {
+  const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
+  for (const [id, session] of ideaSessions) {
+    if (session.createdAt < twoHoursAgo) ideaSessions.delete(id);
+  }
+}, 30 * 60 * 1000);
+
 const LOG_SOURCE = {
   panel: 'panel',
   claude: 'claude',
@@ -4034,6 +4050,314 @@ app.post('/api/board/fix-epic-stories', async (req, res) => {
     fixEpicStoriesState.running = false;
   }
 });
+
+// ── Idea to Epics — Brainstorming & Epic Generation ──────────────────
+
+function buildIdeaBrainstormPrompt(messages, boardContext) {
+  const conversationBlock = messages
+    .map((m) => `[${m.role === 'user' ? 'User' : 'Assistant'}]\n${m.content}`)
+    .join('\n\n');
+
+  return `You are a senior product manager helping a user refine their product ideas into well-structured Epics for implementation by an AI coding assistant (Claude Code).
+
+<role>
+You are a product thinker, NOT an engineer. Your job is to:
+- Understand the user's vision and goals
+- Ask clarifying questions about scope, target users, and priorities
+- Help organize ideas into logical feature groups (future Epics)
+- Identify which features belong together in the same system and which should be separate Epics
+- Suggest a logical implementation order (foundations first)
+- Point out gaps, risks, or missing features the user may not have considered
+
+IMPORTANT RULES:
+- Do NOT jump to implementation details — focus on WHAT the product does, not HOW it's built
+- Do NOT create or list Epics yet — this is the brainstorming phase
+- Ask 2-3 focused questions per turn to keep momentum
+- Summarize your understanding before asking questions
+- Since implementation is done entirely by AI, features can be built in their final versions — there is NO need for MVP or phased releases
+- Keep responses concise and conversational (not walls of text)
+- Write in the same language the user is writing in
+</role>
+
+${boardContext || ''}
+
+<conversation>
+${conversationBlock}
+</conversation>
+
+Continue the brainstorming conversation. Respond to the user's latest message, summarize what you understand so far, and ask 2-3 clarifying questions to refine the product vision.`;
+}
+
+function buildIdeasToEpicsPrompt(messages, boardContext) {
+  const conversationBlock = messages
+    .map((m) => `[${m.role === 'user' ? 'User' : 'Assistant'}]\n${m.content}`)
+    .join('\n\n');
+
+  return `You are a senior product manager converting a brainstorming session into structured Epics for a Kanban board. The Epics will be implemented by an AI coding assistant (Claude Code).
+
+<role>
+Analyze the COMPLETE brainstorming conversation below and extract all agreed-upon features, organizing them into Epics.
+
+PRINCIPLES:
+- Each Epic = a cohesive feature area that can be developed independently
+- Epics should be ordered for linear, incremental implementation (foundations first)
+- Since AI implements the code, features are built in their FINAL versions (no MVP or phased releases)
+- Only automated tests are used (NEVER manual testing or manual QA)
+- Flag areas that need research with "(needs Discovery)" in Scope or Technical Approach sections
+- Do NOT create user stories or tasks — ONLY the Epic structure
+- Each Epic should be specific enough to generate concrete child tasks later
+</role>
+
+${boardContext || ''}
+
+<brainstorm_session>
+${conversationBlock}
+</brainstorm_session>
+
+<output_format>
+Return ONLY a valid JSON array. No markdown code blocks, no explanation text — just the raw JSON.
+
+Each element must have:
+- "name": string (Epic name, e.g., "Authentication System")
+- "folderName": string (Epic folder name with E{NN} prefix, e.g., "E01-Authentication-System")
+- "priority": string ("P0", "P1", "P2", or "P3")
+- "body": string (complete Epic markdown body with \\n for newlines)
+
+The body for each Epic MUST follow this exact format:
+
+# [Epic Name] Epic
+
+**Epic Goal**: [1 paragraph describing WHAT will be delivered and WHY — focus on end-user value]
+
+## Scope
+- [Specific capability or feature area 1]
+- [Capability that needs research (needs Discovery)]
+- [Another capability]
+
+## Acceptance Criteria
+- [ ] [Specific observable product behavior 1]
+- [ ] [Specific observable product behavior 2]
+(... 5-10 ACs per Epic, describing concrete user-visible behaviors)
+
+## Technical Approach
+- [High-level architectural decision 1]
+- [Technology choice that needs research (needs Discovery)]
+
+## Dependencies
+- [List dependencies on other Epics or external services, or "None"]
+
+## Child Tasks
+See individual user story files in this Epic folder.
+
+RULES:
+- Order Epics by implementation priority (E01 = most foundational)
+- Use E{NN} prefix in folderName, numbered sequentially (E01, E02, E03...)
+- Write 5-10 ACs per Epic describing specific, observable product behaviors
+- Flag complex areas with "(needs Discovery)" suffix
+- NEVER include manual tests — only reference automated testing
+- ACs must NOT be generic — they must describe concrete behavior
+- Dependencies section must reference other Epics by name when applicable
+</output_format>`;
+}
+
+function parseIdeasToEpicsResponse(reply) {
+  const text = String(reply || '').trim();
+
+  const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  const jsonStr = codeBlockMatch ? codeBlockMatch[1].trim() : text;
+
+  let epics;
+  try {
+    epics = JSON.parse(jsonStr);
+  } catch {
+    throw new Error('Claude did not return valid JSON. Raw response: ' + text.slice(0, 500));
+  }
+
+  if (!Array.isArray(epics)) {
+    throw new Error('Expected a JSON array of Epics but got: ' + typeof epics);
+  }
+
+  const normalized = [];
+  for (const e of epics) {
+    if (!e.name || typeof e.name !== 'string') continue;
+    if (!e.body || typeof e.body !== 'string') continue;
+    normalized.push({
+      name: e.name.trim(),
+      folderName: (e.folderName && typeof e.folderName === 'string') ? e.folderName.trim() : slugFromTitle(e.name.trim()),
+      priority: ['P0', 'P1', 'P2', 'P3'].includes(e.priority) ? e.priority : 'P1',
+      body: e.body
+    });
+    if (normalized.length >= 20) break; // Hard cap
+  }
+
+  if (normalized.length === 0) {
+    throw new Error('Claude returned no valid Epics. Raw response: ' + text.slice(0, 500));
+  }
+
+  return normalized;
+}
+
+app.post('/api/ideas/chat', async (req, res) => {
+  const { sessionId: reqSessionId, message } = req.body;
+
+  if (!message || typeof message !== 'string' || !message.trim()) {
+    res.status(400).json({ ok: false, message: 'Message is required.' });
+    return;
+  }
+
+  if (ideaChatState.running) {
+    res.status(409).json({ ok: false, message: 'A brainstorming request is already in progress. Please wait.' });
+    return;
+  }
+
+  ideaChatState.running = true;
+
+  try {
+    // Get or create session
+    let sessionId = reqSessionId;
+    let session;
+
+    if (sessionId && ideaSessions.has(sessionId)) {
+      session = ideaSessions.get(sessionId);
+    } else {
+      sessionId = crypto.randomUUID();
+      session = { messages: [], createdAt: Date.now() };
+      ideaSessions.set(sessionId, session);
+    }
+
+    // Add user message
+    session.messages.push({ role: 'user', content: message.trim() });
+
+    pushLog('info', LOG_SOURCE.panel, `Idea brainstorm (turn ${Math.ceil(session.messages.length / 2)}): "${message.trim().slice(0, 80)}..."`);
+
+    // Gather board context for cross-epic awareness
+    let boardContext = '';
+    try {
+      const env = await readEnvPairs();
+      const boardDir = resolveBoardDir(env);
+      const boardConfig = {
+        board: {
+          dir: boardDir,
+          statuses: {
+            notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+            inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+            done: env.BOARD_STATUS_DONE || 'Done'
+          },
+          typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
+        }
+      };
+      const client = new LocalBoardClient(boardConfig);
+      await client.initialize();
+      boardContext = await buildBoardContext(client, null);
+    } catch {
+      // Non-fatal: proceed without board context
+    }
+
+    const prompt = buildIdeaBrainstormPrompt(session.messages, boardContext);
+    const { reply } = await runClaudePromptViaApi(prompt, 'claude-opus-4-6', 180000);
+
+    const normalizedReply = normalizeMarkdownNewlines(String(reply || '').trim());
+    session.messages.push({ role: 'assistant', content: normalizedReply });
+
+    res.json({
+      ok: true,
+      sessionId,
+      reply: normalizedReply,
+      messageCount: session.messages.length
+    });
+  } catch (error) {
+    pushLog('error', LOG_SOURCE.claude, `Idea brainstorm failed: ${error.message}`);
+    res.status(500).json({ ok: false, message: error.message });
+  } finally {
+    ideaChatState.running = false;
+  }
+});
+
+app.post('/api/ideas/generate-epics', async (req, res) => {
+  const { sessionId } = req.body;
+
+  if (!sessionId || !ideaSessions.has(sessionId)) {
+    res.status(404).json({ ok: false, message: 'Brainstorm session not found. Start a new conversation.' });
+    return;
+  }
+
+  if (ideaChatState.running) {
+    res.status(409).json({ ok: false, message: 'A brainstorming request is already in progress. Please wait.' });
+    return;
+  }
+
+  ideaChatState.running = true;
+  pushLog('info', LOG_SOURCE.panel, 'Generating Epics from brainstorm session...');
+
+  try {
+    const session = ideaSessions.get(sessionId);
+
+    // Gather board context
+    const env = await readEnvPairs();
+    const boardDir = resolveBoardDir(env);
+    const boardConfig = {
+      board: {
+        dir: boardDir,
+        statuses: {
+          notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+          inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+          done: env.BOARD_STATUS_DONE || 'Done'
+        },
+        typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
+      }
+    };
+    const client = new LocalBoardClient(boardConfig);
+    await client.initialize();
+
+    const boardContext = await buildBoardContext(client, null);
+
+    // Build prompt and call Claude
+    const prompt = buildIdeasToEpicsPrompt(session.messages, boardContext);
+    const { reply } = await runClaudePromptViaApi(prompt, 'claude-opus-4-6', 180000);
+    const epics = parseIdeasToEpicsResponse(reply);
+
+    // Create each Epic as a folder with epic.md
+    const created = [];
+    let failed = 0;
+
+    for (const epic of epics) {
+      try {
+        await client.createTask(
+          { name: epic.name, priority: epic.priority, type: 'Epic', status: 'Not Started' },
+          epic.body,
+          { fileName: epic.folderName }
+        );
+        created.push({ name: epic.name, folderName: epic.folderName });
+      } catch (err) {
+        pushLog('warn', LOG_SOURCE.panel, `Failed to create Epic "${epic.name}": ${err.message}`);
+        failed++;
+      }
+    }
+
+    const summary = `Generated ${created.length} Epics from brainstorm${failed > 0 ? ` (${failed} failed)` : ''}`;
+    pushLog('success', LOG_SOURCE.claude, summary);
+
+    // Clean up session
+    ideaSessions.delete(sessionId);
+
+    res.json({ ok: true, created, total: epics.length, failed });
+  } catch (error) {
+    pushLog('error', LOG_SOURCE.claude, `Epic generation from ideas failed: ${error.message}`);
+    res.status(500).json({ ok: false, message: error.message });
+  } finally {
+    ideaChatState.running = false;
+  }
+});
+
+app.post('/api/ideas/delete-session', (req, res) => {
+  const { sessionId } = req.body;
+  if (sessionId) {
+    ideaSessions.delete(sessionId);
+  }
+  res.json({ ok: true });
+});
+
+// ── Automation Runtime ───────────────────────────────────────────────
 
 app.get('/api/automation/runtime', async (_req, res) => {
   const baseUrl = getApiBaseUrl();
