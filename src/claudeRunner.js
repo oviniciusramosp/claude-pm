@@ -370,13 +370,9 @@ export function runClaudeTask(task, prompt, config, { signal, onAcComplete, over
 
               if (onAcComplete) {
                 const acs = extractAcCompletions(event);
-                if (acs.length > 0) {
-                  process.stdout.write(`[DEBUG] Extracted ${acs.length} ACs from event\n`);
-                }
                 for (const ac of acs) {
                   const label = ac.type === 'numbered' ? `AC-${ac.index}` : ac.text;
                   process.stdout.write(`[PM_AC_COMPLETE] ${label}\n`);
-                  process.stdout.write(`[DEBUG] Calling onAcComplete with: ${JSON.stringify(ac)}\n`);
                   onAcComplete(ac);
                 }
               }
@@ -439,6 +435,14 @@ export function runClaudeTask(task, prompt, config, { signal, onAcComplete, over
       }
 
       const parsed = (streamJsonDetected ? parseStreamJsonResult(stdout) : parseJsonFromOutput(stdout)) || {};
+      const collectedAcs = collectAcCompletionsFromStdout(stdout, streamJsonDetected);
+
+      // Diagnostic: warn if execution completed with done status but no ACs were emitted
+      if (parsed.status === 'done' && collectedAcs.length === 0) {
+        process.stdout.write(`[PM_WARNING] Task marked as done but NO {"ac_complete": N} markers were detected in output.\n`);
+        process.stdout.write(`[PM_WARNING] This likely means the model (Sonnet) ignored AC tracking instructions.\n`);
+        process.stdout.write(`[PM_WARNING] AC verification will fail and trigger automatic AC fix.\n`);
+      }
 
       resolve({
         status: parsed.status || 'done',
@@ -446,7 +450,7 @@ export function runClaudeTask(task, prompt, config, { signal, onAcComplete, over
         notes: parsed.notes || '',
         files: Array.isArray(parsed.files) ? parsed.files : [],
         tests: parsed.tests || '',
-        collectedAcIndices: collectAcCompletionsFromStdout(stdout, streamJsonDetected),
+        collectedAcIndices: collectedAcs,
         usage: streamJsonDetected ? extractUsageFromStreamJson(stdout) : null,
         stdout,
         stderr

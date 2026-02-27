@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { loadTemplate } from './templateLoader.js';
+import { config } from './config.js';
 
 const START_MARKER = '<!-- PRODUCT-MANAGER:START -->';
 const END_MARKER = '<!-- PRODUCT-MANAGER:END -->';
@@ -10,7 +11,15 @@ function escapeRegex(str) {
 }
 
 export async function generateManagedContent() {
-  return loadTemplate('managed-claude.md');
+  const baseContent = await loadTemplate('managed-claude.md');
+
+  // Conditionally inject versioning rules when AUTO_VERSION_ENABLED is true
+  if (config.claude.autoVersionEnabled) {
+    const versioningRules = await loadTemplate('versioning-rules.md');
+    return `${baseContent}\n\n${versioningRules}`;
+  }
+
+  return baseContent;
 }
 
 export async function syncClaudeMd(config, logger) {
@@ -33,7 +42,6 @@ export async function syncClaudeMd(config, logger) {
 
   if (!fileExists) {
     await fs.writeFile(targetPath, fullSection + '\n', 'utf8');
-    logger.success(`Created CLAUDE.md with managed section at: ${targetPath}`);
     return { action: 'created' };
   }
 
@@ -45,18 +53,15 @@ export async function syncClaudeMd(config, logger) {
 
   if (match) {
     if (match[0] === fullSection) {
-      logger.info('CLAUDE.md managed section is already up to date');
       return { action: 'unchanged' };
     }
 
     const updated = existingContent.replace(markerRegex, fullSection);
     await fs.writeFile(targetPath, updated, 'utf8');
-    logger.success(`Updated managed section in CLAUDE.md at: ${targetPath}`);
     return { action: 'updated' };
   }
 
   const separator = existingContent.endsWith('\n') ? '\n' : '\n\n';
   await fs.writeFile(targetPath, existingContent + separator + fullSection + '\n', 'utf8');
-  logger.success(`Appended managed section to existing CLAUDE.md at: ${targetPath}`);
   return { action: 'appended' };
 }

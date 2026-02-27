@@ -88,6 +88,25 @@ export class LocalBoardClient {
     this._invalidateIndex();
   }
 
+  /**
+   * Update Epic order field in epic.md frontmatter
+   * @param {string} epicId - Epic ID (folder name, e.g., 'Epic-Auth')
+   * @param {number} orderValue - Order value (1-based)
+   */
+  async updateEpicOrder(epicId, orderValue) {
+    const epicPath = path.join(this.boardDir, epicId, 'epic.md');
+
+    if (!fs.existsSync(epicPath)) {
+      throw new Error(`Epic not found: ${epicId}`);
+    }
+
+    const content = await fs.readFile(epicPath, 'utf8');
+    const updated = updateFrontmatterField(content, 'order', orderValue);
+    await fs.writeFile(epicPath, updated, 'utf8');
+
+    this._invalidateIndex(); // Force refresh on next listTasks()
+  }
+
   async getTaskMarkdown(taskId) {
     const task = await this._findTaskById(taskId);
     if (!task) {

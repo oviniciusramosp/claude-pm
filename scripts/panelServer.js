@@ -307,7 +307,7 @@ const PROMPT_BLOCK_HEADER_REGEX = /^🧠\s+PROMPT\s*-\s*(.+)$/i;
 const PROMPT_BLOCK_LINE_REGEX = /^\s*│\s?(.*)$/;
 const PROMPT_BLOCK_END_REGEX = /^\s*└[-─]+\s*$/;
 const WATCH_RESTART_REGEX = /^Restarting ['"].+['"]$/i;
-const NPM_SCRIPT_LINE_REGEX = /^>\s.+$/;
+const NPM_SCRIPT_LINE_REGEX = /^>\s/;
 const PROGRESS_MARKER_REGEX = /^\[PM_PROGRESS]\s+(.+)$/;
 const AC_COMPLETE_MARKER_REGEX = /^\[PM_AC_COMPLETE]\s+(.+)$/;
 const API_STATUS_NOISE_PATTERNS = [
@@ -315,8 +315,9 @@ const API_STATUS_NOISE_PATTERNS = [
 ];
 
 // Patterns that identify startup-phase log messages to be collapsed into a
-// single "Automation App started." bubble with expandable details.
+// single "API started." bubble with expandable details.
 const STARTUP_LOG_PATTERNS = [
+  /^API (was )?started/i,
   /^Board directory:/i,
   /^Claude working directory:/i,
   /^Board structure validated successfully$/i,
@@ -326,10 +327,14 @@ const STARTUP_LOG_PATTERNS = [
   /^Appended managed section/i,
   /^Periodic reconciliation (enabled|disabled)/i,
   /^Automatic reconciliation/i,
-  /^Startup reconciliation disabled/i,
+  /^Startup reconciliation (is )?disabled/i,
   /^\[VALIDATION_REPORT\]/i,
+  /^>\s+[\w-]+@[\d.]+\s+start$/i, // npm script line like "> product-manager-automation@1.60.0 start"
+  /^>\s+NODE_OPTIONS=/i, // npm script command line
 ];
-const STARTUP_BUFFER_WINDOW_MS = 3000;
+
+// Startup message grouping: each process start gets a unique groupId
+let currentStartupGroupId = null;
 const CLAUDE_RAW_NOISE_PATTERNS = [
   /you(?:'|’)ve hit your limit/i,
   /hit your limit/i
@@ -356,7 +361,30 @@ const authLimiter = rateLimit({
 
 app.use('/panel', express.static(panelDistPath));
 
+function isStartupMessage(message) {
+  if (!message) return false;
+  const clean = String(message).trim();
+  return STARTUP_LOG_PATTERNS.some((pattern) => pattern.test(clean));
+}
+
 function pushLog(level, source, message, extra) {
+  // Tag startup messages with a groupId so the frontend can group them
+  if (source === 'api' && isStartupMessage(message)) {
+    if (!currentStartupGroupId) {
+      currentStartupGroupId = `startup-${Date.now()}`;
+    }
+    extra = {
+      ...extra,
+      meta: {
+        ...(extra?.meta || {}),
+        startupGroupId: currentStartupGroupId
+      }
+    };
+  } else if (currentStartupGroupId) {
+    // Non-startup message arrived, close the group for future starts
+    currentStartupGroupId = null;
+  }
+
   const entry = {
     id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     ts: new Date().toISOString(),
@@ -472,8 +500,24 @@ function parseProcessLogLine(rawLine, fallbackLevel = 'info') {
         const key = pair.slice(0, eqIndex).trim();
         let value = pair.slice(eqIndex + 1).trim();
 
+        // Special handling for expandableContent (comes as Base64-encoded JSON)
+        if (key === 'expandableContent') {
+          try {
+            // Decode Base64 and parse JSON
+            if (value.startsWith('base64:')) {
+              const base64 = value.slice(7); // Remove 'base64:' prefix
+              const json = Buffer.from(base64, 'base64').toString('utf8');
+              value = JSON.parse(json);
+            } else {
+              // Fallback for old format (direct JSON)
+              value = JSON.parse(value);
+            }
+          } catch {
+            // If parsing fails, keep as-is
+          }
+        }
         // Try to parse JSON values
-        if (value === 'true') value = true;
+        else if (value === 'true') value = true;
         else if (value === 'false') value = false;
         else if (value === 'null') value = null;
         else if (/^\d+$/.test(value)) value = Number(value);
@@ -555,7 +599,7 @@ function resolveProcessLogSource(source, parsed) {
 
 function processDisplayName(source) {
   if (source === 'api') {
-    return 'Automation App';
+    return 'API';
   }
 
   return 'Process';
@@ -565,6 +609,11 @@ function shouldSuppressProcessMessage(source, message) {
   const clean = String(message || '').trim();
   if (!clean) {
     return true;
+  }
+
+  // Don't suppress startup messages - they will be grouped
+  if (source === 'api' && isStartupMessage(clean)) {
+    return false;
   }
 
   if (NPM_SCRIPT_LINE_REGEX.test(clean)) {
@@ -752,68 +801,35 @@ function startManagedProcess(target, command, source, envOverrides = {}) {
   target.pid = child.pid || null;
 
   function buildLogExtra(parsed) {
-    if (parsed.isPrompt) return { isPrompt: true, promptTitle: parsed.promptTitle };
-    if (parsed.isAcComplete) return { isAcComplete: true };
-    if (parsed.isToolUse) return { isToolUse: true };
-    return undefined;
-  }
+    const extra = {};
 
-  // Startup log collector: buffers startup-phase messages and emits them as a
-  // single "Automation App started." bubble with collapsible detail lines.
-  const startupCollector = {
-    buffer: [],
-    timer: null,
-    flushed: false,
-
-    isStartupMessage(message) {
-      const clean = String(message || '').trim();
-      return STARTUP_LOG_PATTERNS.some((pattern) => pattern.test(clean));
-    },
-
-    flush() {
-      if (this.flushed) return;
-      this.flushed = true;
-      if (this.timer) {
-        clearTimeout(this.timer);
-        this.timer = null;
-      }
-      const extra = this.buffer.length > 0
-        ? { meta: { collapsibleLines: this.buffer } }
-        : undefined;
-      pushLog('success', source, `${processDisplayName(source)} started.`, extra);
-    },
-
-    resetTimer() {
-      if (this.timer) {
-        clearTimeout(this.timer);
-      }
-      this.timer = setTimeout(() => this.flush(), STARTUP_BUFFER_WINDOW_MS);
-    },
-
-    /** Returns true if the message was consumed (buffered or triggered flush). */
-    handle(parsed) {
-      if (this.flushed) return false;
-
-      if (this.isStartupMessage(parsed.message)) {
-        this.buffer.push({ level: parsed.level, text: parsed.message });
-        this.resetTimer();
-        return true;
-      }
-
-      // Non-startup message arrived — flush the startup bubble first, then let
-      // the caller emit the non-startup message normally.
-      this.flush();
-      return false;
+    // Include special flags
+    if (parsed.isPrompt) {
+      extra.isPrompt = true;
+      extra.promptTitle = parsed.promptTitle;
     }
-  };
+    if (parsed.isAcComplete) extra.isAcComplete = true;
+    if (parsed.isToolUse) extra.isToolUse = true;
+
+    // Include meta if present (contains expandableContent, progressive flags, etc)
+    if (parsed.meta && Object.keys(parsed.meta).length > 0) {
+      extra.meta = parsed.meta;
+    }
+
+    return Object.keys(extra).length > 0 ? extra : undefined;
+  }
 
   function forwardLog(parsed) {
     if (shouldSuppressProcessMessage(source, parsed.message)) {
       return;
     }
-    if (startupCollector.handle(parsed)) {
-      return;
+
+    // Filter logs based on feedEnabled flag (defaults to true if not specified)
+    const feedEnabled = parsed.meta?.feedEnabled !== false;
+    if (!feedEnabled) {
+      return; // Skip sending to Feed, but log still appears in Terminal
     }
+
     pushLog(parsed.level, resolveProcessLogSource(source, parsed), parsed.message, buildLogExtra(parsed));
   }
 
@@ -854,7 +870,6 @@ function startManagedProcess(target, command, source, envOverrides = {}) {
   child.on('close', (code, signal) => {
     stdoutForwarder.flush();
     stderrForwarder.flush();
-    startupCollector.flush();
     stdoutReader.close();
     stderrReader.close();
 
@@ -1234,11 +1249,11 @@ async function autoStartApiIfNeeded() {
   const command = process.env.PANEL_API_START_COMMAND || 'npm start';
   const started = startManagedProcess(state.api, command, 'api', getApiProcessEnvOverrides());
   if (started) {
-    pushLog('info', LOG_SOURCE.panel, 'Automation App was started automatically when the panel opened.');
+    pushLog('info', LOG_SOURCE.panel, 'API was started automatically when the panel opened.');
     return;
   }
 
-  pushLog('warn', LOG_SOURCE.panel, 'Automation App auto-start skipped because process is already running.');
+  pushLog('warn', LOG_SOURCE.panel, 'API auto-start skipped because process is already running.');
 }
 
 function buildMacOsReuseTabScript(url) {
@@ -1914,7 +1929,7 @@ app.post('/api/automation/unpause', async (_req, res) => {
       return;
     }
 
-    pushLog('success', LOG_SOURCE.panel, 'Orchestrator unpaused successfully');
+    pushLog('success', LOG_SOURCE.panel, 'Orchestrator activated. Checking for tasks to execute...');
     res.json({ ok: true, payload });
   } catch (error) {
     pushLog('error', LOG_SOURCE.panel, `Unpause error: ${error.message}`);
@@ -2288,8 +2303,6 @@ app.post('/api/board/fix-task', async (req, res) => {
     startedAt: new Date().toISOString()
   });
 
-  pushLog('info', LOG_SOURCE.panel, `Task fix requested for: ${taskId}`);
-
   const env = await readEnvPairs();
   const boardDir = resolveBoardDir(env);
   const claudeWorkdir = env.CLAUDE_WORKDIR || '.';
@@ -2335,10 +2348,23 @@ app.post('/api/board/fix-task', async (req, res) => {
       ? buildEpicFixPrompt(taskId, task.name, taskContent, task._filePath, childTasks)
       : buildFixTaskPrompt(taskId, task.name, taskContent, task._filePath);
 
-    // Execute Claude in one-shot mode
-    pushLog('info', LOG_SOURCE.panel, `Running Claude to verify and fix ACs for: ${taskId}`);
-
+    // Generate unique group ID for progressive log tracking
+    const groupId = `ac-fix-${taskId}-${Date.now()}`;
     const claudeModel = task.model || env.CLAUDE_DEFAULT_MODEL || 'claude-sonnet-4-5-20250929';
+    const startTime = Date.now();
+
+    // Emit progressive log: start
+    pushLog('info', LOG_SOURCE.panel, `Task fix requested for: "${task.name}"`, {
+      meta: {
+        progressive: true,
+        groupId,
+        state: 'start',
+        taskId,
+        taskName: task.name,
+        model: claudeModel,
+        expandableContent: null
+      }
+    });
 
     // Build command string (claude CLI uses shell command parsing)
     let command = env.CLAUDE_COMMAND || DEFAULT_CLAUDE_COMMAND;
@@ -2405,7 +2431,21 @@ app.post('/api/board/fix-task', async (req, res) => {
 
     if (timedOut) {
       const errorMsg = `Task fix timed out after ${AC_FIX_TIMEOUT_MS / 1000}s`;
-      pushLog('error', LOG_SOURCE.panel, `${errorMsg}: ${taskId}`);
+      const duration = `${Math.round((Date.now() - startTime) / 1000)}s`;
+
+      // Emit progressive log: error (timeout)
+      pushLog('error', LOG_SOURCE.panel, `Task fix timed out: "${task.name}"`, {
+        meta: {
+          progressive: true,
+          groupId,
+          state: 'error',
+          taskId,
+          taskName: task.name,
+          model: claudeModel,
+          duration,
+          error: errorMsg
+        }
+      });
 
       // Mark task as failed
       state.fixTasks.set(taskId, {
@@ -2485,7 +2525,20 @@ app.post('/api/board/fix-task', async (req, res) => {
           }
         }
 
-        pushLog('success', LOG_SOURCE.panel, `Epic fix completed: ${taskId} (${childTasks.length} children processed)`);
+        const duration = `${Math.round((Date.now() - startTime) / 1000)}s`;
+
+        // Emit progressive log: complete
+        pushLog('success', LOG_SOURCE.panel, `Epic fix completed: "${task.name}"`, {
+          meta: {
+            progressive: true,
+            groupId,
+            state: 'complete',
+            taskId,
+            taskName: task.name,
+            model: claudeModel,
+            duration
+          }
+        });
 
         // Mark task as successfully fixed
         state.fixTasks.set(taskId, {
@@ -2542,7 +2595,20 @@ app.post('/api/board/fix-task', async (req, res) => {
           }
         }
 
-        pushLog('success', LOG_SOURCE.panel, `Task fix completed successfully: ${taskId}`);
+        const duration = `${Math.round((Date.now() - startTime) / 1000)}s`;
+
+        // Emit progressive log: complete
+        pushLog('success', LOG_SOURCE.panel, `Task fix completed: "${task.name}"`, {
+          meta: {
+            progressive: true,
+            groupId,
+            state: 'complete',
+            taskId,
+            taskName: task.name,
+            model: claudeModel,
+            duration
+          }
+        });
 
         // Mark task as successfully fixed
         state.fixTasks.set(taskId, {
@@ -2562,7 +2628,21 @@ app.post('/api/board/fix-task', async (req, res) => {
       }
     } else {
       const errorMsg = `Claude execution failed (exit code ${exitCode})`;
-      pushLog('error', LOG_SOURCE.panel, `Task fix failed for ${taskId} (exit code ${exitCode}): ${stderr.slice(0, 200)}`);
+      const duration = `${Math.round((Date.now() - startTime) / 1000)}s`;
+
+      // Emit progressive log: error (execution failure)
+      pushLog('error', LOG_SOURCE.panel, `Task fix failed: "${task.name}"`, {
+        meta: {
+          progressive: true,
+          groupId,
+          state: 'error',
+          taskId,
+          taskName: task.name,
+          model: claudeModel,
+          duration,
+          error: errorMsg
+        }
+      });
 
       // Mark task as failed
       state.fixTasks.set(taskId, {
@@ -2659,6 +2739,63 @@ app.post('/api/board/update-status', async (req, res) => {
       stack: error.stack
     });
 
+    res.status(500).json({ ok: false, message: msg });
+  }
+});
+
+// --- Reorder epics ---
+app.post('/api/board/reorder-epics', async (req, res) => {
+  const { epicIds, status } = req.body;
+
+  if (!Array.isArray(epicIds) || epicIds.length === 0) {
+    res.status(400).json({ ok: false, message: 'epicIds must be a non-empty array' });
+    return;
+  }
+
+  pushLog('info', LOG_SOURCE.panel, `Reordering ${epicIds.length} epics in status "${status}"`);
+
+  const env = await readEnvPairs();
+  const boardDir = resolveBoardDir(env);
+
+  const boardConfig = {
+    board: {
+      dir: boardDir,
+      statuses: {
+        notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+        inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+        done: env.BOARD_STATUS_DONE || 'Done'
+      },
+      typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
+    }
+  };
+
+  try {
+    const client = new LocalBoardClient(boardConfig);
+    await client.initialize();
+
+    // Update order field for each epic (1-based)
+    for (let i = 0; i < epicIds.length; i++) {
+      const epicId = epicIds[i];
+      const orderValue = i + 1;
+
+      try {
+        await client.updateEpicOrder(epicId, orderValue);
+      } catch (err) {
+        pushLog('error', LOG_SOURCE.panel, `Failed to update order for ${epicId}: ${err.message}`);
+        // Continue with other epics
+      }
+    }
+
+    pushLog('success', LOG_SOURCE.panel, `Reordered ${epicIds.length} epics successfully`);
+
+    res.json({
+      ok: true,
+      updatedCount: epicIds.length,
+      status
+    });
+  } catch (error) {
+    const msg = error.message || String(error);
+    pushLog('error', LOG_SOURCE.panel, `Failed to reorder epics: ${msg}`, { stack: error.stack });
     res.status(500).json({ ok: false, message: msg });
   }
 });
@@ -2893,30 +3030,62 @@ Now examine the codebase and update ALL task files (epic + children) with accura
 }
 
 function buildFixTaskPrompt(taskId, taskName, taskContent, taskFilePath) {
-  return `You are verifying acceptance criteria for task "${taskName}" (${taskId}).
+  return `🔍 ACCEPTANCE CRITERIA VERIFICATION FOR: "${taskName}" (${taskId})
 
-The task file is located at: ${taskFilePath}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️  CONTEXT: The previous execution completed but did NOT mark Acceptance Criteria.
+⚠️  This means the model (likely Sonnet) ignored AC tracking instructions.
+⚠️  Your job is to verify the actual codebase and mark ACs that ARE genuinely complete.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Your goal is to:
-1. Read the task acceptance criteria (markdown checkboxes: \`- [ ]\` or \`- [x]\`)
-2. Examine the codebase to determine which ACs have been implemented
-3. Update the task file to check off (\`- [x]\`) any completed ACs
-4. Leave unchecked (\`- [ ]\`) any ACs that are not yet implemented
+📂 Task file location: ${taskFilePath}
 
-**IMPORTANT**:
-- Only mark an AC as complete if the code/implementation clearly satisfies it
-- If unsure or if the implementation is incomplete, leave the AC unchecked
-- Use the Edit tool to update the task file
-- After updating, provide a brief summary (e.g., "3/5 ACs completed")
+🎯 YOUR MISSION:
+1. Read the task file to extract all Acceptance Criteria (markdown checkboxes)
+2. For EACH AC, examine the codebase to determine if it's actually implemented
+3. Use the Edit tool to update the task file and check off (\`- [x]\`) any completed ACs
+4. Leave unchecked (\`- [ ]\`) any ACs that are NOT yet implemented
 
-**AC Completion Rules**:
-- AC is COMPLETE if: code exists, tests pass (if applicable), functionality works as described
-- AC is INCOMPLETE if: code is missing, implementation is partial, tests fail, or you're uncertain
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 AC COMPLETION CRITERIA (Use these to judge if an AC is done)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Current task file content:
+✅ Mark AC as COMPLETE (\`- [x]\`) ONLY if:
+   - The code/files described in the AC exist in the codebase
+   - The functionality described in the AC is implemented and working
+   - Tests (if mentioned in the AC) exist and would pass
+   - The AC's requirements are genuinely satisfied
+
+❌ Leave AC as INCOMPLETE (\`- [ ]\`) if:
+   - The code/files are missing or don't exist
+   - The implementation is partial or incomplete
+   - Tests are missing or would fail
+   - You're uncertain or the AC is ambiguous
+   - The AC describes future work or planning (not actual implementation)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔎 VERIFICATION WORKFLOW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+For EACH AC in the task file:
+1. Read the AC text carefully
+2. Use Grep/Glob/Read to search for evidence of implementation
+3. Determine if the AC's requirements are met
+4. Record your decision (complete = check, incomplete = leave unchecked)
+
+After reviewing ALL ACs:
+- Use the Edit tool to update the task file with your findings
+- Provide a summary (e.g., "Verified 3/5 ACs complete, 2 remain unchecked")
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📄 CURRENT TASK FILE CONTENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 \`\`\`markdown
 ${taskContent}
 \`\`\`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Now examine the codebase and update the task file with accurate AC completion status.`;
 }
@@ -2944,10 +3113,10 @@ app.post('/api/claude/chat', async (req, res) => {
   pushLog('info', LOG_SOURCE.chatUser, truncateText(message));
 
   try {
-    // Use Anthropic API directly to avoid "Claude Code cannot be launched inside another Claude Code session" error
-    const { reply, workdir } = await runClaudePromptViaApi(message, model);
+    // Use Claude CLI via subprocess (OAuth token works correctly here)
+    const { reply, workdir } = await runClaudePrompt(message, model);
     const normalizedReply = reply || '(Claude returned empty output)';
-    pushLog('success', LOG_SOURCE.chatClaude, truncateText(normalizedReply));
+    pushLog('info', LOG_SOURCE.chatClaude, truncateText(normalizedReply));
     res.json({
       ok: true,
       workdir,
@@ -3177,26 +3346,28 @@ ${outputFormatBlock}`;
   };
 
   const acGuidance = {
-    UserStory: `   - Each AC must be technically verifiable — checkable by automated tests, build commands, or code inspection
-   - Include data validation, error handling, and edge cases
-   - Reference specific endpoints, components, or behaviors
-   - ACs should directly guide Claude Code's implementation
-   - Typically 3-8 ACs for a task`,
+    UserStory: `   - Every AC must be assertable via an automated test (unit, integration, or e2e assertion)
+   - Do NOT write ACs that require manual human observation ("UI looks correct", "user sees X", "page renders", "visually verify")
+   - Do NOT duplicate what the Completion section already covers (TypeScript compiling, linting, tests passing)
+   - No redundancy: each AC must test a distinct behavior or code path — merge or remove overlapping ACs
+   - Keep it tight: 3-8 ACs — only what meaningfully defines "done" for this task
+   - GOOD: "Submit button is disabled when form has validation errors" / "POST /api/login returns 401 for invalid credentials" / "AuthContext.isAuthenticated is true after successful login"
+   - BAD: "Login form renders correctly" / "User can see the dashboard" / "The component works as expected"`,
 
-    Bug: `   - First AC: describe the expected behavior after the fix
-   - Additional ACs: edge cases, related scenarios that must still work
-   - Include regression test requirements
-   - Typically 3-6 ACs for a Bug`,
+    Bug: `   - First AC: the expected behavior after the fix, assertable in a regression test
+   - Additional ACs: edge cases and related scenarios that must keep working
+   - Every AC must be assertable in a test — no "verify manually" or "check visually"
+   - Include a regression test AC: "Regression test added to prevent recurrence"
+   - Typically 3-5 ACs for a Bug`,
 
-    Chore: `   - Focus on operational outcomes and verification steps
-   - Each AC describes a successful completion criterion
-   - Include verification commands (e.g., "Build passes without warnings")
-   - Typically 2-5 ACs for a Chore`,
+    Chore: `   - ACs describe a verifiable completed state (e.g., "npm ci exits with code 0", "package.json lists X as dependency")
+   - For pure config/infra tasks with nothing automatable, operational verification ACs are acceptable
+   - Do NOT duplicate what the Completion section covers
+   - Keep it tight: 2-4 ACs for a Chore`,
 
-    Discovery: `   - Focus on research outcomes and documentation deliverables
-   - Each AC describes a specific question answered or artifact produced
-   - Include documentation requirements (e.g., "Research document created at docs/discoveries/topic.md")
-   - Typically 3-6 ACs for a Discovery task`
+    Discovery: `   - Each AC describes a specific deliverable: a decision documented, a question answered, a spike completed
+   - Reference the expected artifact (e.g., "Research document created at docs/discoveries/topic.md with decision and rationale")
+   - Typically 3-5 ACs for a Discovery task`
   };
 
   return `You are a technical architect reviewing a ${taskType} for a Claude Code automation system.
@@ -3410,6 +3581,8 @@ app.post('/api/board/review-task', async (req, res) => {
 
 // --- Generate Stories from Epic ---
 
+const GENERATE_STORIES_TIMEOUT_MS = 180000; // 3 minutes
+
 function buildGenerateStoriesPrompt({ epicName, epicBody, existingChildren, boardContext }) {
   const childList = existingChildren.length > 0
     ? existingChildren.map((c) => `- ${c.name}`).join('\n')
@@ -3530,8 +3703,28 @@ ${boardContext || ''}
 12. Avoid narrative language — no "As a user...", no "motivation", no "user experience" sections. Write direct implementation instructions.
 </instructions>
 
+<ac_rules>
+STRICT rules for Acceptance Criteria in every story:
+
+1. Every AC must be assertable via an automated test (unit, integration, or e2e assertion).
+   - GOOD: "Submit button is disabled when form has validation errors"
+   - GOOD: "POST /api/login returns 401 for invalid credentials"
+   - GOOD: "AuthContext.isAuthenticated is true after successful login"
+   - BAD: "User sees an error message" (requires human eyes)
+   - BAD: "Page renders correctly" (not a meaningful assertion)
+   - BAD: "The UI looks clean and modern" (untestable)
+
+2. Do NOT duplicate what the Completion section already covers.
+   - No AC for "TypeScript compiles", "linter passes", or "tests pass" — those are in Completion.
+
+3. No redundancy between ACs — each one tests a distinct behavior or code path.
+   - If two ACs test the same logic, merge them or remove the weaker one.
+
+4. Keep it tight: 3-6 ACs per story. Only what meaningfully defines "done".
+</ac_rules>
+
 <output_format>
-Return ONLY a valid JSON array. No markdown code blocks, no explanation text — just the raw JSON.
+Return ONLY a valid JSON array. No markdown code blocks, no explanation — just raw JSON.
 
 Each element must have:
 - "name": string (task name, imperative form)
@@ -5634,6 +5827,12 @@ app.get('/api/git/log', async (req, res) => {
   const env = await readEnvPairs();
   const workdir = path.resolve(cwd, env.CLAUDE_WORKDIR || '.');
 
+  // Debug logs
+  console.log('[DEBUG] Git endpoint called');
+  console.log('[DEBUG] cwd:', cwd);
+  console.log('[DEBUG] env.CLAUDE_WORKDIR:', env.CLAUDE_WORKDIR);
+  console.log('[DEBUG] resolved workdir:', workdir);
+
   try {
     await fs.access(workdir);
   } catch {
@@ -5687,6 +5886,15 @@ app.get('/api/git/diff', async (req, res) => {
   const env = await readEnvPairs();
   const workdir = path.resolve(cwd, env.CLAUDE_WORKDIR || '.');
 
+  // NEVER show diffs from the Product Manager project itself
+  if (path.normalize(workdir) === path.normalize(cwd)) {
+    res.status(400).json({
+      ok: false,
+      message: 'Cannot show diffs from the Product Manager project. Configure CLAUDE_WORKDIR to point to your user project.'
+    });
+    return;
+  }
+
   try {
     const stat = await runGitCommand(['show', '--stat', '--format=', hash], workdir);
     res.json({ ok: true, stat: stat.trim() });
@@ -5717,7 +5925,7 @@ async function startServer() {
   const server = app.listen(panelPort, () => {
     const url = `http://localhost:${panelPort}`;
     console.log(`✅ Joy UI panel started: ${url}`);
-    console.log('ℹ️ Use this panel to configure .env, start app, and watch live logs.');
+    console.log('ℹ️ Use this panel to configure .env, start API, and watch live logs.');
     console.log(`📁 Board directory: ${boardDir}`);
     console.log(`🔧 Claude working directory: ${claudeWorkdir}`);
     if (panelAutoOpen) {

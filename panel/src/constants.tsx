@@ -58,14 +58,15 @@ export const TEXT_FIELD_CONFIG: TextFieldConfig[] = [
     label: 'Claude Working Directory',
     icon: Folder,
     placeholder: '/Users/you/your-project',
-    description: 'Folder where Claude will run commands and modify files.',
+    description: 'The target project folder where Claude will execute tasks (NOT the Product Manager folder).',
     help: {
       title: 'How to choose Claude Working Directory',
-      summary: 'Pick the repository folder Claude should work on.',
+      summary: 'Select the project where your tasks will be executed.',
       steps: [
-        'Use Choose Folder to select a local directory.',
-        'Or type a path manually.',
-        'The automation will execute Claude commands in this folder.'
+        'Choose the folder of your target project (e.g., your React/Next.js app).',
+        'Create a "Board/" folder inside this project directory.',
+        'Tasks in Board/ will be executed in this project context.',
+        'Example: If your app is at /Users/you/my-app, select /Users/you/my-app and create /Users/you/my-app/Board/'
       ]
     },
     folderPicker: true
@@ -140,6 +141,12 @@ export const TOGGLE_CONFIG: ToggleConfig[] = [
     description: 'Claude must create a commit before moving the task to Done.'
   },
   {
+    key: 'AUTO_VERSION_ENABLED',
+    label: 'Automatic Versioning',
+    icon: GitCommit,
+    description: 'Claude follows SemVer and Conventional Commits, bumping package.json version before each commit.'
+  },
+  {
     key: 'ENABLE_MULTI_AGENTS',
     label: 'Enable Multi-Agent Execution',
     icon: Users01,
@@ -170,9 +177,9 @@ export const SETUP_SECTIONS: SetupSection[] = [
   {
     key: 'quality',
     title: 'Quality Gates',
-    description: 'Enforce test creation, test runs, and commits before tasks are marked as done.',
+    description: 'Enforce test creation, test runs, commits, and versioning before tasks are marked as done.',
     textKeys: [],
-    toggleKeys: ['FORCE_TEST_CREATION', 'FORCE_TEST_RUN', 'FORCE_COMMIT']
+    toggleKeys: ['FORCE_TEST_CREATION', 'FORCE_TEST_RUN', 'FORCE_COMMIT', 'AUTO_VERSION_ENABLED']
   }
 ];
 
@@ -243,10 +250,10 @@ export const LOG_SOURCE_META: Record<string, LogSourceMeta> = {
     directClaude: true
   },
   api: {
-    label: 'Automation App',
+    label: 'API',
     icon: Server01,
     side: 'incoming',
-    avatarInitials: 'AA',
+    avatarInitials: 'API',
     directClaude: false
   },
 };

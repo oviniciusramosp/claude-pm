@@ -30,10 +30,10 @@ Each AC must be a markdown checkbox: `- [ ] Description`. Each AC must be techni
 **By task type:**
 
 - **Epic**: Focus on **technically verifiable conditions** — checkable by automated tests, build commands, or code inspection. Each AC should map to one or more child tasks. Be thorough and cover error handling, edge cases, data validation. Typically 5-10 ACs. Flag items needing Discovery with "(needs Discovery)" in Scope or Technical Approach.
-- **UserStory**: Focus on technically verifiable conditions. Include data validation, error handling, edge cases. Reference specific endpoints, components, or behaviors. Typically 3-8 ACs.
-- **Bug**: First AC: expected behavior after fix. Additional ACs: edge cases and regression tests. Typically 3-6 ACs.
-- **Chore**: Operational outcomes and verification commands (e.g., "Build passes without warnings"). Typically 2-5 ACs.
-- **Discovery**: Research outcomes and documentation deliverables. Output saved to `docs/discoveries/[topic].md`. Typically 3-6 ACs.
+- **UserStory**: Every AC must be assertable via an automated test (unit, integration, or e2e). Do NOT write ACs that require manual human observation ("UI looks correct", "user sees X", "page renders"). Do NOT duplicate Completion section criteria (TypeScript, linting, tests passing). No redundancy — each AC tests a distinct code path. Keep it tight: 3-8 ACs. GOOD: "Submit button is disabled when form has validation errors" / "POST /api/login returns 401 for invalid credentials". BAD: "Login form renders correctly" / "User can see the dashboard".
+- **Bug**: Every AC must be assertable in a test — no "verify manually" or "check visually". First AC: expected behavior after fix, assertable in a regression test. Additional ACs: edge cases that must still work. Include: "Regression test added to prevent recurrence". Typically 3-5 ACs.
+- **Chore**: ACs describe a verifiable completed state (e.g., "npm ci exits with code 0"). For pure config/infra tasks, operational verification ACs are acceptable. Do NOT duplicate Completion section criteria. Typically 2-4 ACs.
+- **Discovery**: Each AC describes a specific deliverable — a decision documented, a question answered, an artifact produced. Reference the expected output (e.g., "Research document created at docs/discoveries/[topic].md"). Typically 3-5 ACs.
 
 ### 2. Task Description Clarity
 

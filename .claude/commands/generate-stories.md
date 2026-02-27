@@ -135,10 +135,26 @@ Save findings to: `docs/discoveries/[topic-slug].md`
 4. **Order tasks incrementally**: Discoveries first, then foundational tasks, then features that build on them.
 5. Generate between 2 and 15 tasks. Do not generate more than 15.
 6. Use imperative language: "Research X", "Implement Y", "Add Z", "Create W".
-7. Each acceptance criterion must be technically verifiable — avoid vague ACs like "works correctly".
-8. Reference specific file paths in implementation steps when possible.
-9. **NEVER include manual tests** — only automated tests (unit, integration, e2e).
-10. No "As a user..." or "User Story" format — write direct implementation instructions.
+7. Reference specific file paths in implementation steps when possible.
+8. **NEVER include manual tests** — only automated tests (unit, integration, e2e).
+9. No "As a user..." or "User Story" format — write direct implementation instructions.
+
+### Acceptance Criteria Rules (STRICT)
+
+Every AC in every task must follow these rules:
+
+1. **Assertable via automated test** — every AC must be expressible as a unit, integration, or e2e assertion.
+   - GOOD: "Submit button is disabled when form has validation errors"
+   - GOOD: "POST /api/login returns 401 for invalid credentials"
+   - BAD: "User sees an error message" (requires human eyes)
+   - BAD: "Page renders correctly" (not a meaningful assertion)
+   - BAD: "The UI looks clean" (untestable)
+
+2. **No overlap with Completion section** — do not add ACs for "TypeScript compiles", "linter passes", or "tests pass". Those go in Completion.
+
+3. **No redundancy** — each AC tests a distinct behavior or code path. Merge or remove overlapping ACs.
+
+4. **Keep it tight** — 3-8 ACs per task. Only what meaningfully defines "done".
 
 ### YAML Frontmatter for Discovery tasks
 

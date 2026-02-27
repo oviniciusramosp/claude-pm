@@ -1,6 +1,6 @@
 // panel/src/components/feed-tab.tsx
 
-import React, { type RefObject, useLayoutEffect, useState, useMemo } from 'react';
+import React, { type RefObject, useLayoutEffect, useState, useMemo, useCallback, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Copy01, CpuChip01, Send01, TerminalBrowser, Check, ChevronSelectorVertical } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { Tooltip, TooltipTrigger } from './base/tooltip/tooltip';
@@ -22,62 +22,211 @@ import {
   parseCollapsibleLines,
   isProgressiveLog,
   extractProgressiveMeta,
+  extractTaskIdFromMessage,
   type ProgressiveLogMeta,
   type CollapsibleLine
 } from '../utils/log-helpers';
 import { Icon } from './icon';
 import { SourceAvatar } from './source-avatar';
-import type { LogEntry, OrchestratorState, TaskContractData, ValidationReportData } from '../types';
+import { TaskDetailModal } from './task-detail-modal';
+import { SetupRequiredBanner } from './setup-required-banner';
+import type { LogEntry, OrchestratorState, TaskContractData, ValidationReportData, BoardTask } from '../types';
 
 /**
- * Groups progressive logs by their groupId
- * Returns an array of either individual logs or grouped progressive log arrays
+ * Copy button with visual feedback (check icon on success)
  */
-function groupProgressiveLogs(logs: LogEntry[]): Array<LogEntry | LogEntry[]> {
+function CopyButton({
+  text,
+  onCopy,
+  className
+}: {
+  text: string;
+  onCopy: (text: string) => void;
+  className?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (copied) {
+      const timer = setTimeout(() => setCopied(false), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [copied]);
+
+  return (
+    <Button
+      size="sm"
+      color="tertiary"
+      className={cx(
+        'h-5 w-5 shrink-0 opacity-0 transition-opacity group-hover/msg:opacity-100 [&_svg]:!size-3.5',
+        className
+      )}
+      aria-label={copied ? 'Copied' : 'Copy'}
+      iconLeading={copied ? Check : Copy01}
+      onPress={() => {
+        onCopy(text);
+        setCopied(true);
+      }}
+    />
+  );
+}
+
+function getStartupGroupId(log: LogEntry): string | null {
+  return log.meta?.startupGroupId || null;
+}
+
+/**
+ * Groups progressive logs and startup logs by their groupId.
+ * Returns an array of either individual logs or grouped log arrays.
+ * - Progressive groups: first element has isProgressiveLog() true
+ * - Startup groups: first element has meta.startupGroupId set
+ */
+function groupFeedLogs(logs: LogEntry[]): Array<LogEntry | LogEntry[]> {
   const result: Array<LogEntry | LogEntry[]> = [];
   const progressiveGroups = new Map<string, LogEntry[]>();
+  const startupGroups = new Map<string, LogEntry[]>();
 
   for (const log of logs) {
+    // Progressive logs
     if (isProgressiveLog(log)) {
       const meta = extractProgressiveMeta(log);
       if (meta && meta.groupId) {
         if (!progressiveGroups.has(meta.groupId)) {
           progressiveGroups.set(meta.groupId, []);
+          // Push a placeholder to mark position
+          result.push(log);
         }
         progressiveGroups.get(meta.groupId)!.push(log);
         continue;
       }
     }
+
+    // Startup logs
+    const startupId = getStartupGroupId(log);
+    if (startupId) {
+      if (!startupGroups.has(startupId)) {
+        startupGroups.set(startupId, []);
+        // Push a placeholder to mark position
+        result.push(log);
+      }
+      startupGroups.get(startupId)!.push(log);
+      continue;
+    }
+
     result.push(log);
   }
 
-  // Insert grouped logs at the position of their first occurrence
-  const insertedGroups = new Set<string>();
+  // Replace placeholders with their groups
   const finalResult: Array<LogEntry | LogEntry[]> = [];
+  const insertedProgressive = new Set<string>();
+  const insertedStartup = new Set<string>();
 
   for (const item of result) {
-    if (!Array.isArray(item) && isProgressiveLog(item)) {
+    if (Array.isArray(item)) {
+      finalResult.push(item);
+      continue;
+    }
+
+    // Check if this is a progressive placeholder
+    if (isProgressiveLog(item)) {
       const meta = extractProgressiveMeta(item);
-      if (meta && meta.groupId && !insertedGroups.has(meta.groupId)) {
+      if (meta?.groupId && !insertedProgressive.has(meta.groupId)) {
         const group = progressiveGroups.get(meta.groupId);
         if (group && group.length > 0) {
           finalResult.push(group);
-          insertedGroups.add(meta.groupId);
+          insertedProgressive.add(meta.groupId);
+          continue;
         }
       }
-    } else {
-      finalResult.push(item);
     }
-  }
 
-  // Add any remaining groups that weren't inserted
-  for (const [groupId, group] of progressiveGroups.entries()) {
-    if (!insertedGroups.has(groupId)) {
-      finalResult.push(group);
+    // Check if this is a startup placeholder
+    const startupId = getStartupGroupId(item);
+    if (startupId && !insertedStartup.has(startupId)) {
+      const group = startupGroups.get(startupId);
+      if (group && group.length > 0) {
+        finalResult.push(group);
+        insertedStartup.add(startupId);
+        continue;
+      }
     }
+
+    finalResult.push(item);
   }
 
   return finalResult;
+}
+
+/**
+ * Renders a clickable task name that opens the task detail modal
+ */
+function TaskLink({
+  taskId,
+  taskName,
+  onClick
+}: {
+  taskId: string;
+  taskName: string;
+  onClick?: (taskId: string) => void;
+}) {
+  if (!onClick) {
+    return <span>&quot;{taskName}&quot;</span>;
+  }
+
+  return (
+    <button
+      type="button"
+      className="m-0 cursor-pointer border-none bg-transparent p-0 font-medium text-current underline decoration-current/30 underline-offset-2 transition-colors hover:decoration-current"
+      onClick={(e) => {
+        e.preventDefault();
+        onClick(taskId);
+      }}
+    >
+      &quot;{taskName}&quot;
+    </button>
+  );
+}
+
+/**
+ * Renders a message with clickable task links when task info is detected
+ */
+function MessageWithTaskLink({
+  message,
+  taskInfo,
+  onTaskClick
+}: {
+  message: string;
+  taskInfo: { taskId: string; taskName: string } | null;
+  onTaskClick?: (taskId: string) => void;
+}) {
+  if (!taskInfo || !onTaskClick) {
+    return <p className="m-0 whitespace-pre-wrap break-words text-xs leading-4 text-current sm:text-sm sm:leading-5">{message}</p>;
+  }
+
+  // Split message by the task name pattern to insert the clickable link
+  const parts = message.split(`"${taskInfo.taskName}"`);
+
+  if (parts.length === 1) {
+    // Task name not found in formatted message, render as plain text
+    return <p className="m-0 whitespace-pre-wrap break-words text-xs leading-4 text-current sm:text-sm sm:leading-5">{message}</p>;
+  }
+
+  return (
+    <p className="m-0 whitespace-pre-wrap break-words text-xs leading-4 text-current sm:text-sm sm:leading-5">
+      {parts.map((part, index) => (
+        <span key={index}>
+          {part}
+          {index < parts.length - 1 && (
+            <TaskLink
+              taskId={taskInfo.taskId}
+              taskName={taskInfo.taskName}
+              onClick={onTaskClick}
+            />
+          )}
+        </span>
+      ))}
+    </p>
+  );
 }
 
 /**
@@ -85,10 +234,10 @@ function groupProgressiveLogs(logs: LogEntry[]): Array<LogEntry | LogEntry[]> {
  */
 function ProgressiveLogBubble({
   logs,
-  onCopy
+  onTaskClick
 }: {
   logs: LogEntry[];
-  onCopy: (text: string) => void;
+  onTaskClick?: (taskId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -105,8 +254,21 @@ function ProgressiveLogBubble({
 
   const message = latestLog.message || '';
   const expandableContent = firstMeta?.expandableContent;
-  const hasExpandable = expandableContent && expandableContent.length > 0;
-  const lineCount = hasExpandable ? expandableContent.split('\n').length : 0;
+
+  // Detect if expandableContent is an array of {level, text} (startup details)
+  const isDetailsArray = Array.isArray(expandableContent) && expandableContent.every(
+    (item: any) => item && typeof item === 'object' && 'level' in item && 'text' in item
+  );
+
+  const hasExpandable = expandableContent && (isDetailsArray || expandableContent.length > 0);
+  const lineCount = hasExpandable
+    ? (isDetailsArray ? expandableContent.length : expandableContent.split('\n').length)
+    : 0;
+
+  // Extract task info from meta if available
+  const taskInfo = (latestMeta as any).taskId && (latestMeta as any).taskName
+    ? { taskId: (latestMeta as any).taskId, taskName: (latestMeta as any).taskName }
+    : null;
 
   return (
     <div className="space-y-2">
@@ -125,7 +287,11 @@ function ProgressiveLogBubble({
           ) : null}
         </div>
         <div className="flex-1">
-          <p className="m-0 text-xs font-medium leading-4 text-current sm:text-sm sm:leading-5">{message}</p>
+          <MessageWithTaskLink
+            message={message}
+            taskInfo={taskInfo}
+            onTaskClick={onTaskClick}
+          />
         </div>
       </div>
 
@@ -145,7 +311,7 @@ function ProgressiveLogBubble({
         </div>
       )}
 
-      {/* Expandable prompt */}
+      {/* Expandable details/prompt */}
       {hasExpandable && (
         <div>
           <button
@@ -155,27 +321,33 @@ function ProgressiveLogBubble({
             aria-expanded={expanded}
           >
             <Icon icon={expanded ? ChevronDown : ChevronRight} className="size-4 shrink-0" />
-            <span>Prompt</span>
+            <span>{isDetailsArray ? 'Details' : 'Prompt'}</span>
             {!expanded && lineCount > 0 ? (
               <span className="ml-1 text-[11px] font-normal text-tertiary">
-                ({lineCount} {lineCount === 1 ? 'line' : 'lines'})
+                ({lineCount} {lineCount === 1 ? (isDetailsArray ? 'configuration' : 'line') : (isDetailsArray ? 'configurations' : 'lines')})
               </span>
             ) : null}
           </button>
 
           {expanded ? (
-            <div className="relative mt-2">
-              <pre className="m-0 max-h-[400px] max-w-full overflow-auto whitespace-pre-wrap break-words rounded-sm bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3">
-                {expandableContent}
-              </pre>
-              <Button
-                size="sm"
-                color="tertiary"
-                className="absolute right-2 top-2 h-6 w-6 shrink-0 [&_svg]:!size-3"
-                aria-label="Copy prompt"
-                iconLeading={Copy01}
-                onPress={() => onCopy(expandableContent || '')}
-              />
+            <div className="mt-2">
+              {isDetailsArray ? (
+                <div className="max-h-[400px] overflow-auto rounded-sm bg-primary/50 p-2 sm:p-3">
+                  {expandableContent.map((item: any, idx: number) => {
+                    const levelMeta = logLevelMeta(item.level);
+                    return (
+                      <div key={idx} className="mb-1.5 flex items-start gap-2 text-xs leading-relaxed last:mb-0">
+                        <Icon icon={levelMeta.icon} className="mt-0.5 size-3.5 shrink-0" />
+                        <span>{item.text}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <pre className="m-0 max-h-[400px] max-w-full overflow-auto whitespace-pre-wrap break-words rounded-sm bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3">
+                  {expandableContent}
+                </pre>
+              )}
             </div>
           ) : null}
         </div>
@@ -186,12 +358,10 @@ function ProgressiveLogBubble({
 
 function ExpandablePrompt({
   title,
-  content,
-  onCopy
+  content
 }: {
   title: string;
   content: string;
-  onCopy: (text: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const lineCount = content ? content.split('\n').length : 0;
@@ -201,7 +371,7 @@ function ExpandablePrompt({
       <button
         type="button"
         className="m-0 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left text-xs font-medium leading-4 text-current hover:opacity-80 sm:text-sm sm:leading-5"
-        onClick={() => setExpanded((prev) => !prev)}
+        onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
       >
         <Icon icon={expanded ? ChevronDown : ChevronRight} className="size-4 shrink-0" />
@@ -214,30 +384,18 @@ function ExpandablePrompt({
       </button>
 
       {expanded ? (
-        <div className="relative">
-          <pre className="m-0 max-h-[400px] max-w-full overflow-auto whitespace-pre-wrap break-words rounded-sm bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3">
-            {content}
-          </pre>
-          <Button
-            size="sm"
-            color="tertiary"
-            className="absolute right-2 top-2 h-6 w-6 shrink-0 [&_svg]:!size-3"
-            aria-label="Copy prompt"
-            iconLeading={Copy01}
-            onPress={() => onCopy(content)}
-          />
-        </div>
+        <pre className="m-0 max-h-[400px] max-w-full overflow-auto whitespace-pre-wrap break-words rounded-sm bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3">
+          {content}
+        </pre>
       ) : null}
     </div>
   );
 }
 
 function ExpandableTaskResult({
-  contract,
-  onCopy
+  contract
 }: {
   contract: TaskContractData;
-  onCopy: (text: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -252,14 +410,6 @@ function ExpandableTaskResult({
   const badge = badgeParts.length > 0 ? ` \u2014 ${badgeParts.join(', ')}` : '';
 
   const hasDetails = Boolean(contract.summary || contract.notes || contract.files.length > 0 || contract.tests);
-
-  const copyText = formatClaudeTaskContract(JSON.stringify({
-    status: contract.status,
-    summary: contract.summary,
-    notes: contract.notes,
-    files: contract.files,
-    tests: contract.tests
-  })) || '';
 
   if (!hasDetails) {
     return (
@@ -287,36 +437,26 @@ function ExpandableTaskResult({
       </button>
 
       {expanded ? (
-        <div className="relative">
-          <div className="max-h-[400px] space-y-2 overflow-auto rounded-sm bg-primary/50 p-3 text-xs leading-relaxed text-current">
-            {contract.summary ? (
-              <p className="m-0">{contract.summary}</p>
-            ) : null}
-            {contract.notes ? (
-              <p className="m-0 opacity-75">Notes: {contract.notes}</p>
-            ) : null}
-            {contract.files.length > 0 ? (
-              <div>
-                <p className="m-0 font-medium">Files ({contract.files.length}):</p>
-                <ul className="m-0 list-none pl-2">
-                  {contract.files.map((file, i) => (
-                    <li key={i} className="opacity-75">{file}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            {contract.tests ? (
-              <p className="m-0 opacity-75">Tests: {contract.tests}</p>
-            ) : null}
-          </div>
-          <Button
-            size="sm"
-            color="tertiary"
-            className="absolute right-2 top-2 h-6 w-6 shrink-0 [&_svg]:!size-3"
-            aria-label="Copy result"
-            iconLeading={Copy01}
-            onPress={() => onCopy(copyText)}
-          />
+        <div className="max-h-[400px] space-y-2 overflow-auto rounded-sm bg-primary/50 p-3 text-xs leading-relaxed text-current">
+          {contract.summary ? (
+            <p className="m-0">{contract.summary}</p>
+          ) : null}
+          {contract.notes ? (
+            <p className="m-0 opacity-75">Notes: {contract.notes}</p>
+          ) : null}
+          {contract.files.length > 0 ? (
+            <div>
+              <p className="m-0 font-medium">Files ({contract.files.length}):</p>
+              <ul className="m-0 list-none pl-2">
+                {contract.files.map((file, i) => (
+                  <li key={i} className="opacity-75">{file}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {contract.tests ? (
+            <p className="m-0 opacity-75">Tests: {contract.tests}</p>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -324,11 +464,9 @@ function ExpandableTaskResult({
 }
 
 function ExpandableValidationReport({
-  report,
-  onCopy
+  report
 }: {
   report: ValidationReportData;
-  onCopy: (text: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -338,19 +476,6 @@ function ExpandableValidationReport({
     : '';
 
   const hasDetails = !report.valid && (report.errors.length > 0 || report.warnings.length > 0);
-
-  const copyText = `${statusLabel}
-
-📊 Summary:
-  - Total tasks: ${report.summary.totalTasks}
-  - Total epics: ${report.summary.totalEpics}
-
-${report.errors.length > 0 ? `🚨 Errors (${report.totalErrors}):
-${report.errors.map(e => `  - ${e.message}${e.suggestion ? `\n    💡 ${e.suggestion}` : ''}`).join('\n')}
-${report.hasMoreErrors ? `  ... and ${report.totalErrors - report.errors.length} more\n` : ''}` : ''}
-${report.warnings.length > 0 ? `⚠️  Warnings (${report.totalWarnings}):
-${report.warnings.map(w => `  - ${w.message}`).join('\n')}
-${report.hasMoreWarnings ? `  ... and ${report.totalWarnings - report.warnings.length} more` : ''}` : ''}`.trim();
 
   if (!hasDetails) {
     return (
@@ -381,7 +506,7 @@ ${report.hasMoreWarnings ? `  ... and ${report.totalWarnings - report.warnings.l
       </button>
 
       {expanded ? (
-        <div className="relative">
+        <div>
           <div className="max-h-[400px] space-y-3 overflow-auto rounded-sm bg-primary/50 p-3 text-xs leading-relaxed text-current">
             <div>
               <p className="m-0 font-medium">📊 Summary:</p>
@@ -428,14 +553,6 @@ ${report.hasMoreWarnings ? `  ... and ${report.totalWarnings - report.warnings.l
               </div>
             ) : null}
           </div>
-          <Button
-            size="sm"
-            color="tertiary"
-            className="absolute right-2 top-2 h-6 w-6 shrink-0 [&_svg]:!size-3"
-            aria-label="Copy report"
-            iconLeading={Copy01}
-            onPress={() => onCopy(copyText)}
-          />
         </div>
       ) : null}
     </div>
@@ -444,16 +561,12 @@ ${report.hasMoreWarnings ? `  ... and ${report.totalWarnings - report.warnings.l
 
 function CollapsibleLogBubble({
   mainMessage,
-  lines,
-  onCopy
+  lines
 }: {
   mainMessage: string;
   lines: CollapsibleLine[];
-  onCopy: (text: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-
-  const copyText = `${mainMessage}\n\n${lines.map((l) => `[${l.level.toUpperCase()}] ${formatLiveFeedMessage({ message: l.text } as LogEntry)}`).join('\n')}`;
 
   return (
     <div className="space-y-2">
@@ -470,28 +583,67 @@ function CollapsibleLogBubble({
       </button>
 
       {expanded ? (
-        <div className="relative">
-          <div className="max-h-[300px] space-y-1 overflow-auto rounded-sm bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3">
-            {lines.map((line, i) => {
-              const level = normalizeLogLevel(line.level);
-              const meta = logLevelMeta(level);
-              const text = formatLiveFeedMessage({ message: line.text } as LogEntry);
-              return (
-                <div key={i} className="flex items-start gap-1.5">
-                  <Icon icon={meta.icon} className="mt-0.5 size-3 shrink-0 opacity-60" />
-                  <span className="opacity-85">{text}</span>
-                </div>
-              );
-            })}
-          </div>
-          <Button
-            size="sm"
-            color="tertiary"
-            className="absolute right-2 top-2 h-6 w-6 shrink-0 [&_svg]:!size-3"
-            aria-label="Copy details"
-            iconLeading={Copy01}
-            onPress={() => onCopy(copyText)}
-          />
+        <div className="max-h-[300px] space-y-1 overflow-auto rounded-sm bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3">
+          {lines.map((line, i) => {
+            const level = normalizeLogLevel(line.level);
+            const meta = logLevelMeta(level);
+            const text = formatLiveFeedMessage({ message: line.text } as LogEntry);
+            return (
+              <div key={i} className="flex items-start gap-1.5">
+                <Icon icon={meta.icon} className="mt-0.5 size-3 shrink-0 opacity-60" />
+                <span className="opacity-85">{text}</span>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Renders all startup messages in a single bubble.
+ * Shows main "started" line and expandable details.
+ */
+function StartupBubble({
+  logs
+}: {
+  logs: LogEntry[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const detailLines = logs.map((l) => ({
+    level: normalizeLogLevel(l.level),
+    text: formatLiveFeedMessage(l)
+  }));
+
+  return (
+    <div className="space-y-1.5">
+      <p className="m-0 whitespace-pre-wrap break-words text-xs font-medium leading-4 text-current sm:text-sm sm:leading-5">
+        API started.
+      </p>
+
+      <button
+        type="button"
+        className="m-0 flex w-full cursor-pointer items-center gap-1.5 border-none bg-transparent p-0 text-left text-xs leading-4 text-current/60 hover:text-current/80 sm:text-sm sm:leading-5"
+        onClick={() => setExpanded((prev) => !prev)}
+        aria-expanded={expanded}
+      >
+        <Icon icon={expanded ? ChevronDown : ChevronRight} className="size-3.5 shrink-0" />
+        <span>{detailLines.length} detail{detailLines.length === 1 ? '' : 's'}</span>
+      </button>
+
+      {expanded ? (
+        <div className="max-h-[300px] space-y-1 overflow-auto rounded-md bg-primary/50 p-2 text-xs leading-relaxed text-current sm:p-3">
+          {detailLines.map((detail, i) => {
+            const meta = logLevelMeta(detail.level);
+            return (
+              <div key={i} className="flex items-start gap-1.5">
+                <Icon icon={meta.icon} className="mt-0.5 size-3 shrink-0 opacity-60" />
+                <span className="opacity-85">{detail.text}</span>
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </div>
@@ -509,7 +661,13 @@ export function FeedTab({
   copyLiveFeedMessage,
   busy,
   orchestratorState,
-  fixingTaskId
+  fixingTaskId,
+  apiBaseUrl,
+  showToast,
+  onShowErrorDetail,
+  refreshTrigger,
+  setupComplete,
+  onNavigateToSetup
 }: {
   logs: LogEntry[];
   logFeedRef: RefObject<HTMLDivElement | null>;
@@ -522,12 +680,49 @@ export function FeedTab({
   busy: Record<string, any>;
   orchestratorState: OrchestratorState | null;
   fixingTaskId?: string | null;
+  apiBaseUrl: string;
+  showToast: (message: string, color?: 'success' | 'warning' | 'danger' | 'neutral') => void;
+  onShowErrorDetail: (title: string, message: string) => void;
+  refreshTrigger: number;
+  setupComplete: boolean;
+  onNavigateToSetup: () => void;
 }) {
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [loadingTask, setLoadingTask] = useState(false);
+
   const claudeWorking = orchestratorState?.active && orchestratorState.currentTaskId;
   const isChatDisabled = Boolean(busy.chat) || claudeWorking || Boolean(fixingTaskId);
 
+  // Fetch task by ID
+  const fetchTaskById = useCallback(async (taskId: string) => {
+    setLoadingTask(true);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/board`);
+      if (!response.ok) {
+        showToast('Failed to load tasks', 'danger');
+        return;
+      }
+      const data = await response.json();
+      const task = data.tasks?.find((t: BoardTask) => t.id === taskId);
+      if (task) {
+        setSelectedTask(task);
+      } else {
+        showToast(`Task "${taskId}" not found`, 'warning');
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Failed to load task', 'danger');
+    } finally {
+      setLoadingTask(false);
+    }
+  }, [apiBaseUrl, showToast]);
+
+  // Handle task click
+  const handleTaskClick = useCallback((taskId: string) => {
+    fetchTaskById(taskId);
+  }, [fetchTaskById]);
+
   // Group progressive logs
-  const groupedLogs = useMemo(() => groupProgressiveLogs(logs), [logs]);
+  const groupedLogs = useMemo(() => groupFeedLogs(logs), [logs]);
 
   useLayoutEffect(() => {
     const el = logFeedRef.current;
@@ -546,6 +741,9 @@ export function FeedTab({
         </h2>
         <p className="m-0 hidden text-sm text-tertiary sm:block">Unified stream for panel, app and direct Claude chat.</p>
       </div>
+
+      {/* Setup required banner */}
+      {!setupComplete && <SetupRequiredBanner onNavigateToSetup={onNavigateToSetup} />}
 
       {/* Fix in progress banner */}
       {fixingTaskId && (
@@ -587,6 +785,17 @@ export function FeedTab({
             const isGroupContinuation = false;
             const isLastInGroup = true;
 
+            // Compute copy text from expandable content
+            const firstMeta = extractProgressiveMeta(firstLog);
+            const expandableContent = firstMeta?.expandableContent;
+            const progressiveCopyText = (() => {
+              if (!expandableContent) return latestLog.message || '';
+              if (Array.isArray(expandableContent)) {
+                return expandableContent.map((item: any) => item.text).join('\n');
+              }
+              return expandableContent;
+            })();
+
             return (
               <div
                 key={`progressive-${extractProgressiveMeta(firstLog)?.groupId || index}`}
@@ -608,11 +817,10 @@ export function FeedTab({
                     className={cx(
                       'group/msg min-w-0 max-w-[min(86%,760px)] rounded-xl px-3 py-2.5 shadow-xs sm:px-4 sm:py-3',
                       isOutgoing ? 'rounded-br-sm' : 'rounded-bl-sm',
-                      logToneClasses(level, sourceMeta.side, sourceMeta.directClaude, 'progressive-log', true),
-                      'ring-1 ring-brand/45'
+                      logToneClasses(level, sourceMeta.side, sourceMeta.directClaude, 'progressive-log', true)
                     )}
                   >
-                    <ProgressiveLogBubble logs={group} onCopy={copyLiveFeedMessage} />
+                    <ProgressiveLogBubble logs={group} onTaskClick={handleTaskClick} />
 
                     <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-current/50">
                       <div className="inline-flex items-center gap-1">
@@ -621,6 +829,10 @@ export function FeedTab({
                         <span className="mx-0.5 opacity-60">&bull;</span>
                         <span style={{ fontVariantNumeric: 'tabular-nums' }}>{timestamp}</span>
                       </div>
+                      <CopyButton
+                        text={progressiveCopyText}
+                        onCopy={copyLiveFeedMessage}
+                      />
                     </div>
                   </div>
 
@@ -629,6 +841,51 @@ export function FeedTab({
                       ? <SourceAvatar sourceMeta={sourceMeta} />
                       : <span className="size-8 shrink-0" aria-hidden="true" />
                   ) : null}
+                </div>
+              </div>
+            );
+          }
+
+          // Check if this is a startup log group
+          const isStartupGroup = Array.isArray(item) && item.length > 0 && getStartupGroupId(item[0]);
+
+          if (isStartupGroup) {
+            const group = item as LogEntry[];
+            const latestLog = group[group.length - 1];
+            const timestamp = formatFeedTimestamp(latestLog.ts);
+            const sourceMeta = logSourceMeta(latestLog);
+
+            const startupCopyText = group.map(l => formatLiveFeedMessage(l)).join('\n');
+
+            return (
+              <div
+                key={`startup-${getStartupGroupId(group[0]) || index}`}
+                className="flex justify-start"
+              >
+                <div className="flex w-full min-w-0 max-w-[min(95%,900px)] items-end gap-2 justify-start">
+                  <SourceAvatar sourceMeta={sourceMeta} />
+
+                  <div
+                    className={cx(
+                      'group/msg min-w-0 max-w-[min(86%,760px)] rounded-xl rounded-bl-sm px-3 py-2.5 shadow-xs sm:px-4 sm:py-3',
+                      'bg-utility-success-50 text-success-primary'
+                    )}
+                  >
+                    <StartupBubble logs={group} />
+
+                    <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-current/50">
+                      <div className="inline-flex items-center gap-1">
+                        <Icon icon={logLevelMeta('success').icon} className="size-3" />
+                        <span>Success</span>
+                        <span className="mx-0.5 opacity-60">&bull;</span>
+                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{timestamp}</span>
+                      </div>
+                      <CopyButton
+                        text={startupCopyText}
+                        onCopy={copyLiveFeedMessage}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             );
@@ -646,6 +903,7 @@ export function FeedTab({
           const displayMessage = formatLiveFeedMessage(line);
           const modelRaw = extractModelFromMessage(line.message);
           const modelLabel = modelRaw ? formatModelLabel(modelRaw) : null;
+          const taskInfo = extractTaskIdFromMessage(line.message);
           const isOutgoing = sourceMeta.side === 'outgoing';
           const alignment = isOutgoing ? 'justify-end' : 'justify-start';
 
@@ -660,6 +918,38 @@ export function FeedTab({
           const nextSourceKey = nextLine ? resolveLogSourceKey(nextLine.source, nextLine.message) : null;
           const isGroupContinuation = currentSourceKey === prevSourceKey;
           const isLastInGroup = currentSourceKey !== nextSourceKey;
+
+          // Compute copy text: use expandable content when available
+          const bubbleCopyText = (() => {
+            if (line.isPrompt) return displayMessage;
+            if (collapsibleLines) {
+              return collapsibleLines.map(l => formatLiveFeedMessage({ message: l.text } as LogEntry)).join('\n');
+            }
+            if (validationReport) {
+              const rpt = validationReport;
+              const sl = rpt.valid ? 'Board structure is valid' : 'Board structure has errors';
+              const parts = [sl, `Summary: ${rpt.summary.totalTasks} tasks, ${rpt.summary.totalEpics} epics`];
+              if (rpt.errors.length > 0) {
+                parts.push(`Errors (${rpt.totalErrors}):`);
+                rpt.errors.forEach(e => parts.push(`  - ${e.message}${e.suggestion ? ` (${e.suggestion})` : ''}`));
+              }
+              if (rpt.warnings.length > 0) {
+                parts.push(`Warnings (${rpt.totalWarnings}):`);
+                rpt.warnings.forEach(w => parts.push(`  - ${w.message}`));
+              }
+              return parts.join('\n');
+            }
+            if (taskContract) {
+              return formatClaudeTaskContract(JSON.stringify({
+                status: taskContract.status,
+                summary: taskContract.summary,
+                notes: taskContract.notes,
+                files: taskContract.files,
+                tests: taskContract.tests
+              })) || displayMessage;
+            }
+            return displayMessage;
+          })();
 
           return (
             <div
@@ -691,33 +981,33 @@ export function FeedTab({
                         ? 'ring-1 ring-blue-400/50'
                         : specialBubble === 'epic-done'
                           ? 'ring-1 ring-purple-400/50'
-                          : sourceMeta.directClaude ? 'ring-1 ring-brand/45' : ''
+                          : ''
                   )}
                 >
                   {line.isPrompt ? (
                     <ExpandablePrompt
                       title={line.promptTitle || 'Prompt sent to Claude Code'}
                       content={displayMessage}
-                      onCopy={copyLiveFeedMessage}
                     />
                   ) : collapsibleLines ? (
                     <CollapsibleLogBubble
                       mainMessage={displayMessage}
                       lines={collapsibleLines}
-                      onCopy={copyLiveFeedMessage}
                     />
                   ) : validationReport ? (
                     <ExpandableValidationReport
                       report={validationReport}
-                      onCopy={copyLiveFeedMessage}
                     />
                   ) : taskContract ? (
                     <ExpandableTaskResult
                       contract={taskContract}
-                      onCopy={copyLiveFeedMessage}
                     />
                   ) : (
-                    <p className="m-0 whitespace-pre-wrap break-words text-xs leading-4 text-current sm:text-sm sm:leading-5">{displayMessage}</p>
+                    <MessageWithTaskLink
+                      message={displayMessage}
+                      taskInfo={taskInfo}
+                      onTaskClick={handleTaskClick}
+                    />
                   )}
 
                   {modelLabel ? (
@@ -734,18 +1024,10 @@ export function FeedTab({
                       <span className="mx-0.5 opacity-60">&bull;</span>
                       <span style={{ fontVariantNumeric: 'tabular-nums' }}>{timestamp}</span>
                     </div>
-                    {!line.isPrompt ? (
-                      <Button
-                        size="sm"
-                        color="tertiary"
-                        className="h-5 w-5 shrink-0 opacity-0 transition-opacity group-hover/msg:opacity-100 [&_svg]:!size-3.5"
-                        aria-label="Copy message"
-                        iconLeading={Copy01}
-                        onPress={() => {
-                          copyLiveFeedMessage(displayMessage);
-                        }}
-                      />
-                    ) : null}
+                    <CopyButton
+                      text={bubbleCopyText}
+                      onCopy={copyLiveFeedMessage}
+                    />
                   </div>
                 </div>
 
@@ -761,7 +1043,7 @@ export function FeedTab({
 
         {logs.length === 0 ? (
           <div className="rounded-xl bg-primary p-3 text-sm text-tertiary shadow-xs">
-            No logs yet. Start App or click <strong>Run Queue Now</strong> to see messages here.
+            No logs yet. Start API or click <strong>Run Queue Now</strong> to see messages here.
           </div>
         ) : null}
 
@@ -772,7 +1054,11 @@ export function FeedTab({
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
             <span className="text-xs font-medium text-brand-primary sm:text-sm">
-              Claude is working on: &quot;{orchestratorState?.currentTaskName || orchestratorState?.currentTaskId}&quot;
+              Claude is working on: <TaskLink
+                taskId={orchestratorState?.currentTaskId || ''}
+                taskName={orchestratorState?.currentTaskName || orchestratorState?.currentTaskId || ''}
+                onClick={handleTaskClick}
+              />
             </span>
           </div>
         ) : null}
@@ -812,37 +1098,79 @@ export function FeedTab({
             </div>
           </div>
           <div className="flex w-full items-end gap-2">
-            <textarea
-              aria-label="Chat prompt"
-              placeholder={
-                claudeWorking
-                  ? 'Claude is working on a task...'
-                  : fixingTaskId
-                    ? 'Claude is fixing acceptance criteria...'
-                    : 'Ask Claude about this project...'
-              }
-              value={chatDraft}
-              disabled={isChatDisabled}
-              rows={1}
-              onChange={(e) => {
-                setChatDraft(e.target.value);
-                const el = e.target;
-                el.style.height = 'auto';
-                el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  if (!isChatDisabled) {
-                    sendClaudeChatMessage();
-                  }
+            {isChatDisabled ? (
+              <Tooltip
+                title="Chat unavailable"
+                description={
+                  claudeWorking
+                    ? `Claude is currently executing: ${orchestratorState?.currentTaskName || orchestratorState?.currentTaskId}`
+                    : fixingTaskId
+                      ? `Claude is fixing acceptance criteria for: ${fixingTaskId}`
+                      : 'Please wait for the current operation to complete'
                 }
-              }}
-              className={cx(
-                'min-w-0 flex-1 resize-none bg-transparent py-1 pl-2 text-sm text-primary outline-hidden placeholder:text-placeholder sm:text-md',
-                isChatDisabled && 'cursor-not-allowed text-disabled'
-              )}
-            />
+                delay={200}
+              >
+                <TooltipTrigger className="min-w-0 flex-1">
+                  <textarea
+                    aria-label="Chat prompt"
+                    placeholder={
+                      claudeWorking
+                        ? 'Claude is working on a task...'
+                        : fixingTaskId
+                          ? 'Claude is fixing acceptance criteria...'
+                          : 'Ask Claude about this project...'
+                    }
+                    value={chatDraft}
+                    disabled={isChatDisabled}
+                    rows={1}
+                    onChange={(e) => {
+                      setChatDraft(e.target.value);
+                      const el = e.target;
+                      el.style.height = 'auto';
+                      el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                        e.preventDefault();
+                        if (!isChatDisabled) {
+                          sendClaudeChatMessage();
+                        }
+                      }
+                    }}
+                    className={cx(
+                      'min-w-0 w-full flex-1 resize-none bg-transparent py-1 pl-2 text-sm text-primary outline-hidden placeholder:text-placeholder sm:text-md',
+                      isChatDisabled && 'cursor-not-allowed text-disabled'
+                    )}
+                  />
+                </TooltipTrigger>
+              </Tooltip>
+            ) : (
+              <textarea
+                aria-label="Chat prompt"
+                placeholder="Ask Claude about this project..."
+                value={chatDraft}
+                disabled={isChatDisabled}
+                rows={1}
+                onChange={(e) => {
+                  setChatDraft(e.target.value);
+                  const el = e.target;
+                  el.style.height = 'auto';
+                  el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    if (!isChatDisabled) {
+                      sendClaudeChatMessage();
+                    }
+                  }
+                }}
+                className={cx(
+                  'min-w-0 flex-1 resize-none bg-transparent py-1 pl-2 text-sm text-primary outline-hidden placeholder:text-placeholder sm:text-md',
+                  isChatDisabled && 'cursor-not-allowed text-disabled'
+                )}
+              />
+            )}
             {isChatDisabled ? (
               <Tooltip
                 title="Claude is busy"
@@ -876,6 +1204,21 @@ export function FeedTab({
           </div>
         </div>
       </div>
+
+      <TaskDetailModal
+        open={selectedTask !== null}
+        onClose={() => setSelectedTask(null)}
+        task={selectedTask}
+        apiBaseUrl={apiBaseUrl}
+        showToast={showToast}
+        onSaved={() => {
+          setSelectedTask(null);
+        }}
+        onDeleted={() => {
+          setSelectedTask(null);
+        }}
+        onShowErrorDetail={onShowErrorDetail}
+      />
     </section>
   );
 }

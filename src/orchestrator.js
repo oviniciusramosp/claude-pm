@@ -15,6 +15,21 @@ function normalize(value) {
   return String(value).trim().toLowerCase();
 }
 
+/**
+ * Compute relative path from Claude's workdir to the task file.
+ * Returns empty string if path cannot be resolved.
+ */
+function resolveTaskFilePath(task, workdir) {
+  if (!task._filePath || !workdir) {
+    return '';
+  }
+  try {
+    return path.relative(workdir, task._filePath);
+  } catch {
+    return '';
+  }
+}
+
 const OPUS_REVIEW_MODEL = 'claude-opus-4-6';
 
 function extractTaskCode(task) {
@@ -118,6 +133,18 @@ function buildContractJson(execution) {
   });
 }
 
+function formatContractForDisplay(execution) {
+  const parts = [];
+  if (execution.summary) parts.push(`Summary: ${execution.summary}`);
+  if (execution.status && execution.status !== 'done') parts.push(`Status: ${execution.status}`);
+  if (Array.isArray(execution.files) && execution.files.length > 0) {
+    parts.push(`Files: ${execution.files.length} modified`);
+  }
+  if (execution.tests) parts.push(`Tests: ${execution.tests}`);
+  if (execution.notes) parts.push(`Notes: ${execution.notes}`);
+  return parts.length > 0 ? parts.join(' • ') : 'No details available';
+}
+
 async function checkActiveFixes(port = 4100) {
   try {
     const response = await fetch(`http://localhost:${port}/api/board/has-active-fixes`, {
@@ -165,7 +192,8 @@ export class Orchestrator {
       try {
         await this.usageStore.recordUsage(task.id, task.name, execution.usage);
       } catch (err) {
-        this.logger.warn(`Failed to record token usage: ${err.message}`);
+        // Log to console only (not to Live Feed - not critical)
+        console.debug(`[orchestrator] Failed to record token usage: ${err.message}`);
       }
     }
   }
@@ -274,7 +302,15 @@ export class Orchestrator {
     }
 
     this.paused = false;
-    this.logger.info('Orchestrator resumed. Task execution can now proceed.');
+    this.logger.info('Orchestrator activated. Checking for tasks to execute...');
+
+    // Trigger immediate reconciliation instead of waiting for next poll
+    setImmediate(() => {
+      this.reconcile('unpause').catch((err) => {
+        this.logger.error(`Failed to reconcile after unpause: ${err.message}`);
+      });
+    });
+
     return true;
   }
 
@@ -313,20 +349,20 @@ export class Orchestrator {
       return;
     }
 
-    // Deduplicate reasons for cleaner logs
-    const uniqueReasons = Array.from(new Set(reason.split(', '))).join(', ');
-    this.logger.info(`Starting board reconciliation (reason: ${uniqueReasons})`);
-
     // Check for incomplete epics first — they must be finished before standalone tasks.
     const initialTasks = await this.boardClient.listTasks();
     this.observeStatuses(initialTasks);
     await this.closeCompletedEpics(initialTasks);
 
     if (hasIncompleteEpic(initialTasks, this.config)) {
-      this.logger.info('Incomplete epic detected — delegating to epic reconciliation.');
+      // Delegate to epic reconciliation (it will log its own initialization)
       await this.reconcileEpic(reason);
       return;
     }
+
+    // Only log reconciliation start for standalone tasks
+    const uniqueReasons = Array.from(new Set(reason.split(', '))).join(', ');
+    this.logger.info(`Starting board reconciliation (reason: ${uniqueReasons})`);
 
     let processed = 0;
 
@@ -337,7 +373,7 @@ export class Orchestrator {
 
       // Re-check after closing epics — a new epic may now be the next priority.
       if (hasIncompleteEpic(tasks, this.config)) {
-        this.logger.info('Incomplete epic detected mid-reconciliation — delegating to epic reconciliation.');
+        // Delegate to epic reconciliation (it will log its own initialization)
         await this.reconcileEpic(reason);
         break;
       }
@@ -351,11 +387,10 @@ export class Orchestrator {
       const source = candidate.source;
 
       if (this.claudeCompletedTaskIds.has(task.id)) {
-        this.logger.warn(`Task "${taskLabel(task)}" was already completed by Claude but is still on the board. Retrying status update.`);
+        // Silently retry status update (only log if it fails)
         try {
           await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.done);
           this.claudeCompletedTaskIds.delete(task.id);
-          this.logger.success(`Board status update recovered for: "${taskLabel(task)}"`);
         } catch (retryError) {
           this.logger.error(`Board status update retry failed for "${taskLabel(task)}": ${retryError.message}`);
           const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
@@ -369,20 +404,18 @@ export class Orchestrator {
 
       if (source === 'not_started') {
         await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.inProgress);
-        await this.runStore.markStarted(task);
-        this.logger.info(`Moved to In Progress: "${taskLabel(task)}"`);
-      } else {
-        await this.runStore.markStarted(task);
-        this.logger.info(`Resuming In Progress Task: "${taskLabel(task)}"`);
       }
+      await this.runStore.markStarted(task);
 
       const markdown = await this.boardClient.getTaskMarkdown(task.id);
+      const taskFilePath = resolveTaskFilePath(task, this.config.claude.workdir);
       const prompt = buildTaskPrompt(task, markdown, {
         extraPrompt: this.config.claude.extraPrompt,
         forceTestCreation: this.config.claude.forceTestCreation,
         forceTestRun: this.config.claude.forceTestRun,
         forceCommit: this.config.claude.forceCommit,
-        enableMultiAgents: this.config.claude.enableMultiAgents
+        enableMultiAgents: this.config.claude.enableMultiAgents,
+        taskFilePath
       });
       if (this.config.claude.logPrompt) {
         this.logger.block(`Prompt sent to Claude Code for "${taskLabel(task)}"`, prompt);
@@ -397,18 +430,19 @@ export class Orchestrator {
       const headBefore = getGitHead(this.config.claude.workdir);
 
       const onAcComplete = (acRef) => {
-        this.logger.info(`[DEBUG] onAcComplete called with: ${JSON.stringify(acRef)}`);
         if (acRef.type === 'numbered') {
           this.boardClient.updateCheckboxesByIndex(task.id, [acRef.index]).then(() => {
             this.logger.success(`AC completed: AC-${acRef.index}`);
           }).catch((err) => {
-            this.logger.warn(`Failed to update AC checkbox: ${err.message}`);
+            // Log to console only (not to Live Feed)
+            console.debug(`[orchestrator] Failed to update AC checkbox: ${err.message}`);
           });
         } else {
           this.boardClient.updateCheckboxes(task.id, [acRef.text]).then(() => {
             this.logger.success(`AC completed: "${acRef.text}"`);
           }).catch((err) => {
-            this.logger.warn(`Failed to update AC checkbox: ${err.message}`);
+            // Log to console only (not to Live Feed)
+            console.debug(`[orchestrator] Failed to update AC checkbox: ${err.message}`);
           });
         }
       };
@@ -421,8 +455,17 @@ export class Orchestrator {
         let executionElapsed = Date.now() - executionStartTime;
 
         if (normalize(execution.status) !== 'done') {
-          this.logger.info(`Claude finished: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`);
-          this.logger.info(buildContractJson(execution));
+          // Emit consolidated completion bubble for failed execution
+          const failGroupId = `task-exec-fail-${task.id}`;
+          this.logger.progressive(
+            'warn',
+            failGroupId,
+            'complete',
+            `Claude finished with issues: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`,
+            { status: execution.status || 'unknown', details: formatContractForDisplay(execution) },
+            buildContractJson(execution),
+            true // feedEnabled
+          );
 
           // Try auto-recovery before marking as failed
           if (autoRecovery.canRecover(task.id)) {
@@ -493,7 +536,9 @@ export class Orchestrator {
           this.logger.info(`Claude retry finished: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`);
 
           if (normalize(execution.status) !== 'done') {
-            this.logger.info(buildContractJson(execution));
+            // Log contract to console only (details available in task markdown)
+            console.debug('[orchestrator] Retry execution contract:', buildContractJson(execution));
+
             await this.runStore.markFailed(task, `Retry also returned status=${execution.status || 'unknown'}`);
             this.logger.warn(`Task blocked on retry: "${taskLabel(task)}" (status: ${execution.status || 'unknown'})`);
 
@@ -506,7 +551,9 @@ export class Orchestrator {
 
           const retryValidation = validateExecution(this.config.claude.workdir, retryHeadBefore, execution);
           if (!retryValidation.valid) {
-            this.logger.info(buildContractJson(execution));
+            // Log contract to console only (details available in task markdown)
+            console.debug('[orchestrator] Hallucination retry contract:', buildContractJson(execution));
+
             await this.runStore.markFailed(task, 'Hallucination persisted after retry. No artifacts produced.');
             this.logger.error(`Hallucination persisted after retry for "${taskLabel(task)}". Giving up.`);
 
@@ -518,7 +565,9 @@ export class Orchestrator {
           }
         }
 
-        this.logger.info(buildContractJson(execution));
+        // Log contract to console only (task completed successfully)
+        console.debug('[orchestrator] Task execution contract:', buildContractJson(execution));
+
         this.watchdog.recordSuccess(task.id);
         this.claudeCompletedTaskIds.set(task.id, Date.now());
 
@@ -637,7 +686,7 @@ export class Orchestrator {
         await this.runStore.markDone(task, finalExecution);
         processed += 1;
 
-        this.logger.success(`Moved to Done: "${taskLabel(task)}"`);
+        this.logger.success(`Moved to Done: "${taskLabel(task)}"`, undefined, true);
       } catch (error) {
         this.watchdog.stop();
         const executionElapsed = Date.now() - executionStartTime;
@@ -691,10 +740,6 @@ export class Orchestrator {
       return;
     }
 
-    // Deduplicate reasons for cleaner logs
-    const uniqueReasons = Array.from(new Set(reason.split(', '))).join(', ');
-    this.logger.info(`Starting epic reconciliation (reason: ${uniqueReasons})`);
-
     const tasks = await this.boardClient.listTasks();
     this.observeStatuses(tasks);
 
@@ -705,15 +750,38 @@ export class Orchestrator {
     }
 
     const epic = epicCandidate.task;
+    const groupId = `epic-init-${epic.id}`;
+
+    // Build initialization details
+    const initDetails = [];
+    const uniqueReasons = Array.from(new Set(reason.split(', '))).join(', ');
+    initDetails.push(`Reason: ${uniqueReasons}`);
 
     if (epicCandidate.source === 'not_started') {
       await this.boardClient.updateTaskStatus(epic.id, this.config.board.statuses.inProgress);
-      this.logger.info(`Epic moved to In Progress: "${taskLabel(epic)}"`);
+      initDetails.push(`Status: Moved to In Progress`);
 
-      await this.stampEpicChildrenStatuses(epic);
+      const childrenInfo = await this.stampEpicChildrenStatuses(epic);
+      if (childrenInfo) {
+        initDetails.push(`Children: Initialized ${childrenInfo.count} tasks`);
+        if (childrenInfo.firstTask) {
+          initDetails.push(`First task: "${childrenInfo.firstTask}"`);
+        }
+      }
     } else {
-      this.logger.info(`Resuming In Progress Epic: "${taskLabel(epic)}"`);
+      initDetails.push(`Status: Resuming In Progress`);
     }
+
+    // Emit consolidated bubble
+    this.logger.progressive(
+      'info',
+      groupId,
+      'complete',
+      `Epic initialized: "${taskLabel(epic)}"`,
+      { details: initDetails.join(' • ') },
+      null, // no expandableContent
+      true // feedEnabled
+    );
 
     let processed = 0;
 
@@ -731,11 +799,10 @@ export class Orchestrator {
       const source = childCandidate.source;
 
       if (this.claudeCompletedTaskIds.has(task.id)) {
-        this.logger.warn(`Task "${taskLabel(task)}" was already completed by Claude but is still on the board. Retrying status update.`);
+        // Silently retry status update (only log if it fails)
         try {
           await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.done);
           this.claudeCompletedTaskIds.delete(task.id);
-          this.logger.success(`Board status update recovered for: "${taskLabel(task)}"`);
         } catch (retryError) {
           this.logger.error(`Board status update retry failed for "${taskLabel(task)}": ${retryError.message}`);
           const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
@@ -749,20 +816,18 @@ export class Orchestrator {
 
       if (source === 'not_started') {
         await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.inProgress);
-        await this.runStore.markStarted(task);
-        this.logger.info(`Moved to In Progress: "${taskLabel(task)}"`);
-      } else {
-        await this.runStore.markStarted(task);
-        this.logger.info(`Resuming In Progress Task: "${taskLabel(task)}"`);
       }
+      await this.runStore.markStarted(task);
 
       const markdown = await this.boardClient.getTaskMarkdown(task.id);
+      const taskFilePath = resolveTaskFilePath(task, this.config.claude.workdir);
       const prompt = buildTaskPrompt(task, markdown, {
         extraPrompt: this.config.claude.extraPrompt,
         forceTestCreation: this.config.claude.forceTestCreation,
         forceTestRun: this.config.claude.forceTestRun,
         forceCommit: this.config.claude.forceCommit,
-        enableMultiAgents: this.config.claude.enableMultiAgents
+        enableMultiAgents: this.config.claude.enableMultiAgents,
+        taskFilePath
       });
       if (this.config.claude.logPrompt) {
         this.logger.block(`Prompt sent to Claude Code for "${taskLabel(task)}"`, prompt);
@@ -777,18 +842,19 @@ export class Orchestrator {
       const headBefore = getGitHead(this.config.claude.workdir);
 
       const onAcComplete = (acRef) => {
-        this.logger.info(`[DEBUG] onAcComplete called with: ${JSON.stringify(acRef)}`);
         if (acRef.type === 'numbered') {
           this.boardClient.updateCheckboxesByIndex(task.id, [acRef.index]).then(() => {
             this.logger.success(`AC completed: AC-${acRef.index}`);
           }).catch((err) => {
-            this.logger.warn(`Failed to update AC checkbox: ${err.message}`);
+            // Log to console only (not to Live Feed)
+            console.debug(`[orchestrator] Failed to update AC checkbox: ${err.message}`);
           });
         } else {
           this.boardClient.updateCheckboxes(task.id, [acRef.text]).then(() => {
             this.logger.success(`AC completed: "${acRef.text}"`);
           }).catch((err) => {
-            this.logger.warn(`Failed to update AC checkbox: ${err.message}`);
+            // Log to console only (not to Live Feed)
+            console.debug(`[orchestrator] Failed to update AC checkbox: ${err.message}`);
           });
         }
       };
@@ -801,8 +867,18 @@ export class Orchestrator {
         let executionElapsed = Date.now() - executionStartTime;
 
         if (normalize(execution.status) !== 'done') {
-          this.logger.info(`Claude finished: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`);
-          this.logger.info(buildContractJson(execution));
+          // Emit consolidated completion bubble for failed execution
+          const epicFailGroupId = `epic-task-exec-fail-${task.id}`;
+          this.logger.progressive(
+            'warn',
+            epicFailGroupId,
+            'complete',
+            `Claude finished with issues: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`,
+            { status: execution.status || 'unknown', details: formatContractForDisplay(execution) },
+            buildContractJson(execution),
+            true // feedEnabled
+          );
+
           await this.runStore.markFailed(task, `Claude retornou status=${execution.status || 'desconhecido'}`);
           this.logger.warn(`Task blocked by Claude: "${taskLabel(task)}" (status: ${execution.status || 'unknown'})`);
 
@@ -844,7 +920,9 @@ export class Orchestrator {
           this.logger.info(`Claude retry finished: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`);
 
           if (normalize(execution.status) !== 'done') {
-            this.logger.info(buildContractJson(execution));
+            // Log contract to console only (details available in task markdown)
+            console.debug('[orchestrator] Retry execution contract:', buildContractJson(execution));
+
             await this.runStore.markFailed(task, `Retry also returned status=${execution.status || 'unknown'}`);
             this.logger.warn(`Task blocked on retry: "${taskLabel(task)}" (status: ${execution.status || 'unknown'})`);
 
@@ -857,7 +935,9 @@ export class Orchestrator {
 
           const retryValidation = validateExecution(this.config.claude.workdir, retryHeadBefore, execution);
           if (!retryValidation.valid) {
-            this.logger.info(buildContractJson(execution));
+            // Log contract to console only (details available in task markdown)
+            console.debug('[orchestrator] Hallucination retry contract:', buildContractJson(execution));
+
             await this.runStore.markFailed(task, 'Hallucination persisted after retry. No artifacts produced.');
             this.logger.error(`Hallucination persisted after retry for "${taskLabel(task)}". Giving up.`);
 
@@ -988,7 +1068,7 @@ export class Orchestrator {
         await this.runStore.markDone(task, finalExecution);
         processed += 1;
 
-        this.logger.success(`Moved to Done: "${taskLabel(task)}"`);
+        this.logger.success(`Moved to Done: "${taskLabel(task)}"`, undefined, true);
       } catch (error) {
         this.watchdog.stop();
         const executionElapsed = Date.now() - executionStartTime;
@@ -1165,9 +1245,14 @@ export class Orchestrator {
       await this.boardClient.updateTaskStatus(sorted[i].id, childStatus);
     }
 
+    // Return info instead of logging (will be included in epic init bubble)
     if (sorted.length > 0) {
-      this.logger.info(`Stamped ${sorted.length} children for epic "${taskLabel(epic)}" (first: In Progress, rest: Not Started)`);
+      return {
+        count: sorted.length,
+        firstTask: sorted.length > 0 ? taskLabel(sorted[0]) : null
+      };
     }
+    return null;
   }
 
   async closeCompletedEpics(tasks) {
@@ -1235,7 +1320,8 @@ export class Orchestrator {
             'start',
             `Epic review for: "${taskLabel(task)}" (${epicResult.children.length} children)`,
             { model: OPUS_REVIEW_MODEL },
-            this.config.claude.logPrompt ? reviewPrompt : null
+            this.config.claude.logPrompt ? reviewPrompt : null,
+            true // feedEnabled
           );
 
           const epicReviewStartTime = Date.now();
@@ -1252,7 +1338,9 @@ export class Orchestrator {
             {
               model: OPUS_REVIEW_MODEL,
               duration: formatDuration(epicReviewElapsed)
-            }
+            },
+            null, // no expandableContent
+            true // feedEnabled
           );
 
           if (normalize(reviewExecution.status) !== 'done') {

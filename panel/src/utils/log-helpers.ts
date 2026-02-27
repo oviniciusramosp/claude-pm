@@ -125,6 +125,9 @@ export interface ProgressiveLogMeta {
   expandableContent?: string | null;
   model?: string;
   duration?: string;
+  taskId?: string;
+  taskName?: string;
+  error?: string;
   [key: string]: any;
 }
 
@@ -414,7 +417,7 @@ export function formatLiveFeedMessage(entry: LogEntry): string {
   }
 
   if (/^API auto-start is disabled \(PANEL_AUTO_START_API=false\)\.?$/i.test(trimmed)) {
-    return 'Automation App auto-start is disabled. Click "Start" to begin.';
+    return 'API auto-start is disabled. Click "Start" to begin.';
   }
 
   const reconciliationStartMatch = trimmed.match(/^Starting board reconciliation \(reason:\s*(.+)\)$/i);
@@ -443,6 +446,32 @@ export function extractModelFromMessage(message: unknown): string | null {
   const match = text.match(/\| model: (.+)$/i);
   if (!match) return null;
   return match[1].trim();
+}
+
+export function extractTaskIdFromMessage(message: unknown): { taskId: string; taskName: string } | null {
+  const text = normalizeText(message).trim();
+  if (!text) return null;
+
+  // Match patterns like: "Running Claude to verify and fix ACs for: "Task Name" (task-id)"
+  const acFixMatch = text.match(/^Running Claude to verify and fix ACs for: "(.+?)" \((.+?)\)$/i);
+  if (acFixMatch) {
+    return {
+      taskId: acFixMatch[2],
+      taskName: acFixMatch[1]
+    };
+  }
+
+  // Match patterns like: "Claude is working on: "S19.2 - Install and configure expo-glass-effect module""
+  // or "Opus is reviewing: "Epic-Auth""
+  const workingMatch = text.match(/^(Claude is working on|Opus is reviewing|Opus is reviewing epic): "(.+)"$/i);
+  if (workingMatch) {
+    return {
+      taskId: workingMatch[2],
+      taskName: workingMatch[2]
+    };
+  }
+
+  return null;
 }
 
 export function formatModelLabel(model: string): string {

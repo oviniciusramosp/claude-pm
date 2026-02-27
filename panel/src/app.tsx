@@ -161,7 +161,18 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
   }, [orchestratorState]);
   const isPaused = orchestratorState?.paused === true;
 
-  const disabledTabs = useMemo(() => new Set<string>(), []);
+  const disabledTabs = useMemo(() => {
+    const disabled = new Set<string>();
+
+    // Disable Feed, Board, Git if setup is incomplete
+    if (!allFieldsValidated || hasBlockingErrors) {
+      disabled.add(NAV_TAB_KEYS.feed);
+      disabled.add(NAV_TAB_KEYS.board);
+      disabled.add(NAV_TAB_KEYS.git);
+    }
+
+    return disabled;
+  }, [allFieldsValidated, hasBlockingErrors]);
 
   useEffect(() => {
     if (apiRunning) {
@@ -447,10 +458,30 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
       }
 
       try {
-        await navigator.clipboard.writeText(text);
-        showToast('Message copied');
+        // Try modern clipboard API first
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          showToast('Message copied');
+        } else {
+          // Fallback to legacy method
+          const textarea = document.createElement('textarea');
+          textarea.value = text;
+          textarea.style.position = 'fixed';
+          textarea.style.left = '-999999px';
+          textarea.style.top = '-999999px';
+          document.body.appendChild(textarea);
+          textarea.focus();
+          textarea.select();
+          const successful = document.execCommand('copy');
+          document.body.removeChild(textarea);
+          if (successful) {
+            showToast('Message copied');
+          } else {
+            throw new Error('Copy command failed');
+          }
+        }
       } catch (error) {
-        showToast(`Failed to copy message: ${error.message}`, 'danger');
+        showToast('Failed to copy message', 'danger');
       }
     },
     [showToast]
@@ -550,9 +581,9 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
             method: 'POST',
             body: '{}'
           });
-          showToast('Saved and restarted app with latest configuration.', 'success');
+          showToast('Saved and restarted API with latest configuration.', 'success');
         } else if (apiRunning) {
-          showToast('Saved. Restart app to apply changes immediately.', 'warning');
+          showToast('Saved. Restart API to apply changes immediately.', 'warning');
         } else {
           showToast('Saved successfully.', 'success');
         }
@@ -743,12 +774,16 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
               onShowErrorDetail={(title, message) => setErrorModal({ open: true, title, message })}
               onError={onBoardError}
               setFixingTaskId={setFixingTaskId}
+              setupComplete={allFieldsValidated && !hasBlockingErrors}
+              onNavigateToSetup={() => setActiveTab(NAV_TAB_KEYS.setup)}
             />
           ) : activeTab === NAV_TAB_KEYS.git ? (
             <GitTab
               apiBaseUrl={apiBaseUrl}
               showToast={showToast}
               refreshTrigger={boardRefreshTrigger}
+              setupComplete={allFieldsValidated && !hasBlockingErrors}
+              onNavigateToSetup={() => setActiveTab(NAV_TAB_KEYS.setup)}
             />
           ) : (
             <FeedTab
@@ -763,6 +798,12 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
               busy={busy}
               orchestratorState={orchestratorState}
               fixingTaskId={fixingTaskId}
+              apiBaseUrl={apiBaseUrl}
+              showToast={showToast}
+              onShowErrorDetail={(title, message) => setErrorModal({ open: true, title, message })}
+              refreshTrigger={boardRefreshTrigger}
+              setupComplete={allFieldsValidated && !hasBlockingErrors}
+              onNavigateToSetup={() => setActiveTab(NAV_TAB_KEYS.setup)}
             />
           )}
         </div>

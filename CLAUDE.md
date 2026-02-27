@@ -650,10 +650,12 @@ Setup is done through the visual panel at `http://localhost:4100`.
 
 The Setup tab guides the user through configuring:
 1. **Claude OAuth Token** - Obtained via `claude setup-token`.
-2. **Claude Working Directory** - Where Claude executes tasks (supports native folder picker).
+2. **Claude Working Directory** - **The target project folder where tasks will be executed** (NOT the Product Manager folder). This should be your app's root directory (e.g., a React/Next.js project). Supports native folder picker.
 3. **Runtime Toggles** - Full Access, Stream Output, Log Prompt.
 
 After saving, the panel can restart the API service automatically.
+
+**Important**: The Feed, Board, and Git tabs are disabled until setup is complete with valid configuration.
 
 ### Board Setup
 Create your `Board/` directory **inside the target project directory** (CLAUDE_WORKDIR):
@@ -662,6 +664,12 @@ cd <CLAUDE_WORKDIR>
 mkdir -p Board
 ```
 Then add `.md` files with YAML frontmatter (including the `status` field) to `Board/` to create tasks.
+
+**Example**:
+- Your app is at: `/Users/you/my-nextjs-app`
+- Select CLAUDE_WORKDIR: `/Users/you/my-nextjs-app` (the app folder, not Product Manager)
+- Create Board at: `/Users/you/my-nextjs-app/Board/`
+- Product Manager orchestrator reads/writes tasks from this Board directory
 
 **Why this matters**: Claude executes tasks in the project directory and updates the task `.md` files there. The orchestrator must read/write the same files to see AC completions and progress updates in real time.
 

@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import express from 'express';
 import { config } from './config.js';
 import { logger } from './logger.js';
@@ -12,10 +13,13 @@ const app = express();
 
 app.use(express.json({ limit: '2mb' }));
 
+// Collect startup info for consolidated log (array of {level, text})
+const startupInfo = [];
+
 const boardClient = new LocalBoardClient(config);
 await boardClient.initialize();
-logger.info(`Board directory: ${config.board.dir}`);
-logger.info(`Claude working directory: ${config.claude.workdir}`);
+startupInfo.push({ level: 'info', text: `Claude working directory: ${config.claude.workdir}` });
+startupInfo.push({ level: 'info', text: `Board directory: ${config.board.dir}` });
 
 // Validate Board structure on startup
 const boardValidator = new BoardValidator(config);
@@ -24,7 +28,7 @@ try {
   if (!validationResult.valid) {
     logger.warn(`[VALIDATION_REPORT] ${boardValidator.formatForFeed(validationResult)}`);
   } else {
-    logger.success('Board structure validated successfully');
+    startupInfo.push({ level: 'success', text: 'Board structure validated successfully' });
   }
 } catch (error) {
   logger.warn(`Board validation failed: ${error.message}`);
@@ -44,7 +48,16 @@ const orchestrator = new Orchestrator({
 
 if (config.claude.injectClaudeMd) {
   try {
-    await syncClaudeMd(config, logger);
+    const result = await syncClaudeMd(config, logger);
+    if (result?.action === 'unchanged') {
+      startupInfo.push({ level: 'info', text: 'CLAUDE.md managed section is already up to date' });
+    } else if (result?.action === 'updated') {
+      startupInfo.push({ level: 'success', text: 'CLAUDE.md managed section updated' });
+    } else if (result?.action === 'created') {
+      startupInfo.push({ level: 'success', text: 'CLAUDE.md managed section created' });
+    } else if (result?.action === 'appended') {
+      startupInfo.push({ level: 'success', text: 'CLAUDE.md managed section appended' });
+    }
   } catch (error) {
     logger.warn(`Failed to sync CLAUDE.md in target project: ${error.message}`);
   }
@@ -175,7 +188,7 @@ app.post('/unpause', (req, res) => {
     return;
   }
 
-  res.json({ ok: true, message: 'Orchestrator resumed. Task execution can now proceed.' });
+  res.json({ ok: true, message: 'Orchestrator activated. Checking for tasks to execute...' });
 });
 
 app.get('/settings/runtime', (req, res) => {
@@ -284,14 +297,39 @@ app.use((error, _req, res, _next) => {
 });
 
 app.listen(config.server.port, () => {
-  logger.success(`Server started on port ${config.server.port}`);
-
-  if (config.queue.runOnStartup) {
-    orchestrator.schedule('startup');
-  } else {
-    logger.info('Startup reconciliation disabled (QUEUE_RUN_ON_STARTUP=false)');
+  // Add reconciliation info to startup
+  if (config.queue.pollIntervalMs > 0) {
+    const minutes = Math.floor(config.queue.pollIntervalMs / 60000);
+    const seconds = Math.floor((config.queue.pollIntervalMs % 60000) / 1000);
+    const timeStr = minutes > 0 ? `${minutes} minute${minutes > 1 ? 's' : ''}` : `${seconds} second${seconds > 1 ? 's' : ''}`;
+    startupInfo.push({ level: 'info', text: `Automatic reconciliation enabled every ${timeStr}` });
   }
 
+  // Send consolidated startup message as progressive log
+  const summary = 'API started successfully';
+
+  // Store details as JSON array for frontend to render with icons
+  const expandableDetails = startupInfo;
+
+  // Use timestamp-based groupId to ensure each startup message is unique
+  const startupGroupId = `app-startup-${Date.now()}`;
+
+  logger.progressive(
+    'success',
+    startupGroupId,
+    'complete',
+    summary,
+    { detailsType: 'startup' }, // Flag to indicate this is startup details with levels
+    expandableDetails,
+    true // feedEnabled: show in Feed
+  );
+
+  // Trigger startup reconciliation if enabled
+  if (config.queue.runOnStartup) {
+    orchestrator.schedule('startup');
+  }
+
+  // Setup periodic reconciliation if enabled
   if (config.queue.pollIntervalMs > 0) {
     const pollTimer = setInterval(() => {
       orchestrator.schedule('poll_interval');
@@ -300,9 +338,5 @@ app.listen(config.server.port, () => {
     if (typeof pollTimer.unref === 'function') {
       pollTimer.unref();
     }
-
-    logger.info(`Periodic reconciliation enabled (QUEUE_POLL_INTERVAL_MS=${config.queue.pollIntervalMs})`);
-  } else {
-    logger.info('Periodic reconciliation disabled (QUEUE_POLL_INTERVAL_MS=0)');
   }
 });
