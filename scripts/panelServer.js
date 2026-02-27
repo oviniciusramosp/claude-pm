@@ -4138,7 +4138,8 @@ IMPORTANT RULES:
 - Summarize your understanding before asking questions
 - Since implementation is done entirely by AI, features can be built in their final versions — there is NO need for MVP or phased releases
 - Keep responses concise and conversational (not walls of text)
-- Write in the same language the user is writing in
+- Write the <reply> in the same language the user is writing in
+- The <plan> can also be in the user's language — it will be translated to English when Epics are generated
 - In early turns, focus on understanding the product vision before diving into design or technical details
 - As the conversation matures, all three agents should contribute increasingly detailed sections to the plan
 </rules>
@@ -4270,6 +4271,7 @@ IMPORTANT RULES:
 - Since implementation is done entirely by AI, features can be built in their final versions — there is NO need for MVP or phased releases
 - Keep responses concise and conversational (not walls of text)
 - Write in the same language the user is writing in
+- Epics and tasks will be generated in English later — the brainstorm conversation can be in any language
 </role>
 
 ${boardContext || ''}
@@ -4499,6 +4501,7 @@ The body MUST be COMPREHENSIVE and include ALL sections from the plan:
 See individual user story files in this Epic folder.
 
 CRITICAL: Transfer ALL detail from the plan. Every feature, every AC, every technical note, every design detail. Do not summarize.
+LANGUAGE: ALL output (name, folderName, body) MUST be written in English, regardless of the plan's language. If the plan is in another language, translate all content to English while preserving meaning and detail.
 </output_format>`;
 }
 
@@ -4597,6 +4600,7 @@ RULES:
 - NEVER include manual tests — only reference automated testing
 - ACs must NOT be generic — they must describe concrete behavior
 - Dependencies section must reference other Epics by name when applicable
+- LANGUAGE: ALL output (name, folderName, body) MUST be written in English, regardless of the plan's language. If the plan is in another language, translate all content to English while preserving meaning and detail.
 </output_format>`;
 }
 
@@ -4689,6 +4693,7 @@ RULES:
 - NEVER include manual tests — only reference automated testing
 - ACs must NOT be generic — they must describe concrete behavior
 - Dependencies section must reference other Epics by name when applicable
+- LANGUAGE: ALL output (name, folderName, body) MUST be written in English, regardless of the conversation's language. If the conversation is in another language, translate all content to English while preserving meaning and detail.
 </output_format>`;
 }
 
