@@ -397,8 +397,17 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
         <div className="flex items-center gap-2 shrink-0">
           {onFix && (
             <Tooltip
-              title={isAnyFixing ? (isFixing ? "Fixing task" : "Another task is being fixed") : "Fix ACs with Claude"}
-              description={isAnyFixing ? (isFixing ? "Claude is fixing this task's acceptance criteria" : "Wait for the current fix to complete") : "Use Claude AI to fix incomplete acceptance criteria"}
+              title={
+                isFixing ? (epic ? "Verifying epic ACs..." : "Verifying task ACs...") :
+                isAnyFixing ? "Another task is being fixed" :
+                epic ? "Verify Epic ACs" : "Verify Acceptance Criteria"
+              }
+              description={
+                isFixing ? (epic ? "Claude is scanning child tasks and checking off implemented ACs" : "Claude is scanning the codebase and checking off implemented ACs") :
+                isAnyFixing ? "Wait for the current fix to complete" :
+                epic ? "Claude scans all child tasks, checks ACs against the codebase, and marks implemented ones as done" :
+                "Claude scans the codebase, checks each AC against the actual implementation, and marks completed ones as done"
+              }
             >
               <button
                 type="button"
