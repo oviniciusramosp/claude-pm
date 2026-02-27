@@ -164,6 +164,10 @@ const fixEpicState = {
   running: false,
   type: null // 'all' | 'models' | 'agents' | 'status' | 'stories' | 'acs'
 };
+const fixTaskState = {
+  running: false,
+  type: null // 'all' | 'model' | 'agents' | 'status' | 'acs'
+};
 const ideaChatState = {
   running: false
 };
@@ -2284,11 +2288,231 @@ app.post('/api/board/fix-order', async (_req, res) => {
   }
 });
 
+// ── Task Fix Functions ──────────────────────────────────────────────
+
+/**
+ * Fix Model — Use Claude to analyze a single task and assign the best model.
+ */
+async function fixTaskModel(client, task) {
+  const markdown = await client.getTaskMarkdown(task.id);
+  if (!markdown) throw new Error(`Task not found: ${task.id}`);
+  const { frontmatter, body } = parseFrontmatter(markdown);
+
+  if (frontmatter.model && frontmatter.model.trim()) {
+    return { changes: 0, total: 1, failed: 0, message: 'Task already has a model assigned' };
+  }
+
+  const prompt = `You are assigning a Claude AI model to a development task based on its complexity.
+
+Available models (choose the most appropriate):
+- claude-opus-4-6 — Most capable. Use for: complex architecture, multi-file refactors, intricate business logic, security-critical code, tasks with many acceptance criteria, debugging hard-to-reproduce bugs, tasks requiring deep reasoning.
+- claude-sonnet-4-5-20250929 — Balanced. Use for: standard feature implementation, moderate complexity tasks, CRUD operations, UI components, API endpoints, most typical development work.
+- claude-haiku-4-5-20251001 — Fast and lightweight. Use for: simple chores, dependency installs, config changes, renaming/reformatting, documentation, small fixes, boilerplate generation.
+
+Task: "${task.name}"
+${(body || '').slice(0, 800)}
+
+Return ONLY a JSON object (no markdown, no code blocks):
+{ "model": "claude-sonnet-4-5-20250929", "reason": "brief reason" }
+
+Rules:
+- "model" must be one of the three model IDs listed above (exact string)
+- "reason" is a brief explanation (max 15 words) of why that model fits
+- Return valid JSON only, no extra text`;
+
+  const { reply } = await runClaudePromptViaApi(prompt, 'claude-sonnet-4-5-20250929', 120000);
+
+  const text = String(reply || '').trim();
+  const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  const jsonStr = codeBlockMatch ? codeBlockMatch[1].trim() : text;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    throw new Error('Claude did not return valid JSON for model assignment');
+  }
+
+  const validModels = ['claude-opus-4-6', 'claude-sonnet-4-5-20250929', 'claude-haiku-4-5-20251001'];
+  if (!parsed.model || !validModels.includes(parsed.model)) {
+    throw new Error(`Invalid model returned: ${parsed.model}`);
+  }
+
+  frontmatter.model = parsed.model;
+  await client.updateTask(task.id, frontmatter, body);
+  const shortModel = parsed.model.replace('claude-', '').replace(/-\d{8}$/, '');
+  pushLog('info', LOG_SOURCE.panel, `Set model for "${task.name}" → ${shortModel}${parsed.reason ? ` (${parsed.reason})` : ''}`);
+
+  return { changes: 1, total: 1, failed: 0, message: `Assigned model: ${shortModel}` };
+}
+
+/**
+ * Fix Agents — Use Claude to analyze a single task and assign/reassign agents.
+ */
+async function fixTaskAgents(client, task) {
+  const markdown = await client.getTaskMarkdown(task.id);
+  if (!markdown) throw new Error(`Task not found: ${task.id}`);
+  const { frontmatter, body } = parseFrontmatter(markdown);
+
+  const currentAgents = frontmatter.agents
+    ? (Array.isArray(frontmatter.agents) ? frontmatter.agents.join(', ') : String(frontmatter.agents).trim())
+    : '';
+
+  const prompt = `You are assigning developer agents to a task based on its content.
+
+Available agent types: frontend, backend, design, devops, qa, database, security, api
+
+Task: "${task.name}"${currentAgents ? ` [current agents: ${currentAgents}]` : ' [no agents assigned]'}
+${(body || '').slice(0, 800)}
+
+Return ONLY a JSON object (no markdown, no code blocks):
+{ "agents": ["frontend", "design"], "reason": "brief reason" }
+
+Rules:
+- Assign 1-3 agents from the available list
+- "reason" is a brief explanation (max 15 words) of why those agents fit
+- If current agents are already correct, return the same agents
+- Return valid JSON only, no extra text`;
+
+  const { reply } = await runClaudePromptViaApi(prompt, 'claude-sonnet-4-5-20250929', 120000);
+
+  const text = String(reply || '').trim();
+  const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  const jsonStr = codeBlockMatch ? codeBlockMatch[1].trim() : text;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    throw new Error('Claude did not return valid JSON for agents assignment');
+  }
+
+  if (!Array.isArray(parsed.agents) || parsed.agents.length === 0) {
+    throw new Error('Invalid agents returned');
+  }
+
+  const newAgents = parsed.agents.join(', ');
+  if (newAgents === currentAgents) {
+    return { changes: 0, total: 1, failed: 0, message: 'Agents are already correct' };
+  }
+
+  frontmatter.agents = newAgents;
+  await client.updateTask(task.id, frontmatter, body);
+  pushLog('info', LOG_SOURCE.panel, `Set agents for "${task.name}" → ${newAgents}${parsed.reason ? ` (${parsed.reason})` : ''}`);
+
+  return { changes: 1, total: 1, failed: 0, message: `Assigned agents: ${newAgents}` };
+}
+
+/**
+ * Fix Status — Analyze a single task's AC completion and sync status accordingly.
+ */
+async function fixTaskStatus(client, task, boardConfig) {
+  const { notStarted, inProgress, done } = boardConfig.board.statuses;
+  const markdown = await client.getTaskMarkdown(task.id);
+  if (!markdown) throw new Error(`Task not found: ${task.id}`);
+
+  const { frontmatter, body } = parseFrontmatter(markdown);
+  const unchecked = (body.match(/^\s*-\s*\[ \]\s+/gm) || []).length;
+  const checked = (body.match(/^\s*-\s*\[x\]\s+/gim) || []).length;
+  const total = unchecked + checked;
+  const currentStatus = (frontmatter.status || '').trim();
+
+  if (total === 0) {
+    return { changes: 0, total: 1, failed: 0, message: `No ACs found, status "${currentStatus}" unchanged` };
+  }
+
+  let newStatus = null;
+  if (unchecked === 0 && checked > 0 && currentStatus !== done) {
+    newStatus = done;
+  } else if (checked > 0 && unchecked > 0 && currentStatus === notStarted) {
+    newStatus = inProgress;
+  } else if (checked === 0 && unchecked > 0 && currentStatus === done) {
+    newStatus = notStarted;
+  }
+
+  if (newStatus) {
+    await client.updateTaskStatus(task.id, newStatus);
+    pushLog('info', LOG_SOURCE.panel, `"${task.name}": ${checked}/${total} ACs done — ${currentStatus} → ${newStatus}`);
+    return { changes: 1, total: 1, failed: 0, message: `Status changed: ${currentStatus} → ${newStatus}` };
+  }
+
+  return { changes: 0, total: 1, failed: 0, message: `Status "${currentStatus}" is correct (${checked}/${total} ACs done)` };
+}
+
+/**
+ * Fix All — Run all task fix types sequentially for a single task.
+ */
+async function fixTaskAll(client, task, env, boardConfig) {
+  const results = [];
+  pushLog('info', LOG_SOURCE.panel, `Running all fixes for "${task.name}"...`);
+
+  // Step 1: Fix model
+  try {
+    results.push(await fixTaskModel(client, task));
+  } catch (err) {
+    pushLog('warn', LOG_SOURCE.panel, `Fix model failed for "${task.name}": ${err.message}`);
+    results.push({ changes: 0, total: 1, failed: 1, message: err.message });
+  }
+
+  // Step 2: Fix status
+  try {
+    results.push(await fixTaskStatus(client, task, boardConfig));
+  } catch (err) {
+    pushLog('warn', LOG_SOURCE.panel, `Fix status failed for "${task.name}": ${err.message}`);
+    results.push({ changes: 0, total: 1, failed: 1, message: err.message });
+  }
+
+  // Step 3: Fix agents
+  try {
+    results.push(await fixTaskAgents(client, task));
+  } catch (err) {
+    pushLog('warn', LOG_SOURCE.panel, `Fix agents failed for "${task.name}": ${err.message}`);
+    results.push({ changes: 0, total: 1, failed: 1, message: err.message });
+  }
+
+  // Step 4: Verify ACs (use Claude API with the fix task prompt)
+  try {
+    if (task._filePath) {
+      const taskContent = await fs.readFile(task._filePath, 'utf-8');
+      const hasAcs = /^\s*-\s*\[[ xX]\]/m.test(taskContent);
+      if (hasAcs) {
+        const prompt = buildFixTaskPrompt(task.id, task.name, taskContent, task._filePath);
+        await runClaudePromptViaApi(prompt, env.CLAUDE_DEFAULT_MODEL || 'claude-sonnet-4-5-20250929', 180000);
+        results.push({ changes: 1, total: 1, failed: 0, message: 'ACs verified' });
+      } else {
+        results.push({ changes: 0, total: 1, failed: 0, message: 'No ACs to verify' });
+      }
+    }
+  } catch (err) {
+    pushLog('warn', LOG_SOURCE.panel, `AC verification failed for "${task.name}": ${err.message}`);
+    results.push({ changes: 0, total: 1, failed: 1, message: err.message });
+  }
+
+  const totalChanges = results.reduce((sum, r) => sum + r.changes, 0);
+  const totalFailed = results.reduce((sum, r) => sum + r.failed, 0);
+
+  return {
+    changes: totalChanges,
+    total: results.length,
+    failed: totalFailed,
+    message: `All fixes complete: ${totalChanges} change(s), ${totalFailed} failure(s)`
+  };
+}
+
+// ── Task Fix Endpoint ───────────────────────────────────────────────
+
 app.post('/api/board/fix-task', async (req, res) => {
-  const { taskId } = req.body;
+  const { taskId, fixType: rawFixType } = req.body;
+  const fixType = rawFixType || 'acs';
 
   if (!taskId || typeof taskId !== 'string') {
     res.status(400).json({ ok: false, message: 'taskId is required' });
+    return;
+  }
+
+  const validTaskFixTypes = ['all', 'model', 'agents', 'status', 'acs'];
+  if (!validTaskFixTypes.includes(fixType)) {
+    res.status(400).json({ ok: false, message: `fixType must be one of: ${validTaskFixTypes.join(', ')}` });
     return;
   }
 
@@ -2301,7 +2525,14 @@ app.post('/api/board/fix-task', async (req, res) => {
     }
   }
 
+  if (fixEpicState.running) {
+    res.status(409).json({ ok: false, message: 'An epic fix is already in progress.' });
+    return;
+  }
+
   // Mark task as being fixed
+  fixTaskState.running = true;
+  fixTaskState.type = fixType;
   state.fixTasks.set(taskId, {
     status: 'running',
     startedAt: new Date().toISOString()
@@ -2346,6 +2577,49 @@ app.post('/api/board/fix-task', async (req, res) => {
       return;
     }
     const taskContent = await fs.readFile(task._filePath, 'utf-8');
+
+    // Handle non-acs fix types
+    if (fixType !== 'acs') {
+      try {
+        let result;
+        switch (fixType) {
+          case 'model':
+            result = await fixTaskModel(client, task);
+            break;
+          case 'agents':
+            result = await fixTaskAgents(client, task);
+            break;
+          case 'status':
+            result = await fixTaskStatus(client, task, boardConfig);
+            break;
+          case 'all':
+            result = await fixTaskAll(client, task, env, boardConfig);
+            break;
+        }
+
+        const typeLabel = { model: 'Fix Model', agents: 'Fix Agents', status: 'Fix Status', all: 'Fix All' }[fixType];
+        pushLog('success', LOG_SOURCE.panel, `${typeLabel} completed for "${task.name}": ${result.message}`);
+
+        state.fixTasks.set(taskId, {
+          status: 'success',
+          completedAt: new Date().toISOString()
+        });
+
+        res.json({ ok: true, ...result });
+      } catch (error) {
+        pushLog('error', LOG_SOURCE.panel, `Fix "${fixType}" failed for "${task.name}": ${error.message}`);
+        state.fixTasks.set(taskId, {
+          status: 'failed',
+          error: error.message,
+          completedAt: new Date().toISOString()
+        });
+        res.status(500).json({ ok: false, message: error.message });
+      } finally {
+        fixTaskState.running = false;
+        fixTaskState.type = null;
+      }
+      return;
+    }
 
     // Build prompt for Claude to verify and fix ACs
     const prompt = isEpic
@@ -2675,6 +2949,9 @@ app.post('/api/board/fix-task', async (req, res) => {
     });
 
     res.status(500).json({ ok: false, message: msg });
+  } finally {
+    fixTaskState.running = false;
+    fixTaskState.type = null;
   }
 });
 
@@ -4553,6 +4830,11 @@ app.post('/api/board/fix-epic', async (req, res) => {
   // Also check legacy fix-epic-stories state
   if (fixEpicStoriesState.running) {
     res.status(409).json({ ok: false, message: 'A story fix is already in progress.' });
+    return;
+  }
+
+  if (fixTaskState.running) {
+    res.status(409).json({ ok: false, message: 'A task fix is already in progress.' });
     return;
   }
 

@@ -233,6 +233,14 @@ const EPIC_FIX_OPTIONS = [
   { key: 'acs', label: 'Verify ACs', description: 'Verify ACs against codebase', icon: Target02 },
 ] as const;
 
+const TASK_FIX_OPTIONS = [
+  { key: 'all', label: 'Fix All', description: 'Run all fixes sequentially', icon: Tool01 },
+  { key: 'model', label: 'Fix Model', description: 'Assign model based on complexity', icon: CpuChip01 },
+  { key: 'agents', label: 'Fix Agents', description: 'Assign agents based on task content', icon: Users01 },
+  { key: 'status', label: 'Fix Status', description: 'Sync status with AC completion', icon: CheckCircle },
+  { key: 'acs', label: 'Verify ACs', description: 'Verify ACs against codebase', icon: Target02 },
+] as const;
+
 function EpicFixDropdown({
   epicId,
   onFix,
@@ -328,13 +336,113 @@ function EpicFixDropdown({
   );
 }
 
+// ── Task Fix Dropdown ───────────────────────────────────────────────
+
+function TaskFixDropdown({
+  taskId,
+  onFix,
+  isFixing,
+  isAnyOperationRunning,
+  currentFixType,
+}: {
+  taskId: string;
+  onFix: (taskId: string, fixType: string) => void;
+  isFixing: boolean;
+  isAnyOperationRunning: boolean;
+  currentFixType: string | null;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isOpen]);
+
+  const runningLabel = TASK_FIX_OPTIONS.find((o) => o.key === currentFixType)?.label || currentFixType;
+
+  return (
+    <div className="relative" ref={dropdownRef} onClick={(e: any) => e.stopPropagation()}>
+      <Tooltip
+        title={isFixing ? `${runningLabel}...` : 'Fix task'}
+        description={isFixing ? 'Fix operation in progress' : 'Open fix options menu'}
+      >
+        <TooltipTrigger
+          onPress={() => { if (!isAnyOperationRunning) setIsOpen(!isOpen); }}
+          isDisabled={isAnyOperationRunning}
+          className={cx(
+            'transition-opacity rounded-md p-1.5 shadow-sm',
+            isAnyOperationRunning
+              ? 'bg-utility-gray-100 border border-utility-gray-200 cursor-not-allowed opacity-60'
+              : 'bg-utility-brand-50 hover:bg-utility-brand-100 border border-utility-brand-200',
+            isFixing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          )}
+        >
+          {isFixing ? (
+            <RefreshCw01 className="size-3.5 text-utility-brand-600 animate-spin" />
+          ) : (
+            <span className="flex items-center gap-0.5">
+              <Tool01 className={cx('size-3.5', isAnyOperationRunning ? 'text-utility-gray-400' : 'text-utility-brand-600')} />
+              <ChevronDown className={cx('size-2.5 transition-transform', isOpen && 'rotate-180')} />
+            </span>
+          )}
+        </TooltipTrigger>
+      </Tooltip>
+      {isOpen && (
+        <div className="absolute top-full right-0 z-50 mt-1 w-56 rounded-lg border border-secondary bg-primary shadow-lg py-1">
+          {TASK_FIX_OPTIONS.map((option) => {
+            const isRunning = isFixing && currentFixType === option.key;
+            const OptionIcon = option.icon;
+            return (
+              <button
+                key={option.key}
+                type="button"
+                onClick={(e: any) => {
+                  e.stopPropagation();
+                  onFix(taskId, option.key);
+                  setIsOpen(false);
+                }}
+                disabled={isFixing}
+                className={cx(
+                  'w-full flex items-start gap-2.5 px-3 py-2 text-left transition',
+                  isFixing && !isRunning
+                    ? 'cursor-not-allowed opacity-50'
+                    : 'hover:bg-primary_hover',
+                  isRunning && 'bg-utility-warning-50'
+                )}
+              >
+                <div className="mt-0.5 shrink-0">
+                  {isRunning
+                    ? <RefreshCw01 className="size-3.5 text-utility-warning-600 animate-spin" />
+                    : <OptionIcon className="size-3.5 text-tertiary" />}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-primary">{option.label}</div>
+                  <div className="text-[10px] text-tertiary leading-tight">{option.description}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface BoardCardProps {
   key?: React.Key;
   task: BoardTask;
   epic: boolean;
   allTasks: BoardTask[];
   onClick: () => void;
-  onFix?: (taskId: string) => void;
+  onFix?: (taskId: string, fixType: string) => void;
   fixStatus?: { status: string; startedAt?: string; completedAt?: string; error?: string };
   allFixStatuses?: Record<string, { status: string; startedAt?: string; completedAt?: string; error?: string }>;
   showAddStatus?: boolean;
@@ -343,9 +451,11 @@ interface BoardCardProps {
   onDragStart?: () => void;
   onDragEnd?: () => void;
   dragging?: boolean;
+  fixingTaskType?: string | null;
+  isGlobalOperationRunning?: boolean;
 }
 
-function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStatuses, showAddStatus, onAddStatus, addingStatus, onDragStart, onDragEnd, dragging }: BoardCardProps) {
+function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStatuses, showAddStatus, onAddStatus, addingStatus, onDragStart, onDragEnd, dragging, fixingTaskType, isGlobalOperationRunning }: BoardCardProps) {
   const priorityColor = BOARD_PRIORITY_COLORS[task.priority] as any;
   const typeColor = BOARD_TYPE_COLORS[task.type] as any;
   const taskCode = extractTaskCode(task);
@@ -355,7 +465,6 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
   const parentEpicInProgress = parentEpic && parentEpic.status.toLowerCase() === 'in progress';
 
   const isFixing = fixStatus?.status === 'running';
-  const isAnyFixing = allFixStatuses && Object.values(allFixStatuses).some((s) => s.status === 'running');
 
   // For epics, calculate progress based on child tasks with status "Done"
   const progressDone = epic
@@ -403,37 +512,13 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
         </p>
         <div className="flex items-center gap-2 shrink-0">
           {onFix && !epic && (
-            <Tooltip
-              title={
-                isFixing ? (epic ? "Verifying epic ACs..." : "Verifying task ACs...") :
-                isAnyFixing ? "Another task is being fixed" :
-                epic ? "Verify Epic ACs" : "Verify Acceptance Criteria"
-              }
-              description={
-                isFixing ? (epic ? "Claude is scanning child tasks and checking off implemented ACs" : "Claude is scanning the codebase and checking off implemented ACs") :
-                isAnyFixing ? "Wait for the current fix to complete" :
-                epic ? "Claude scans all child tasks, checks ACs against the codebase, and marks implemented ones as done" :
-                "Claude scans the codebase, checks each AC against the actual implementation, and marks completed ones as done"
-              }
-            >
-              <TooltipTrigger
-                onPress={() => { if (!isAnyFixing) onFix(task.id); }}
-                isDisabled={isAnyFixing}
-                className={cx(
-                  'transition-opacity rounded-md p-1.5 shadow-sm',
-                  isAnyFixing
-                    ? 'bg-utility-gray-100 border border-utility-gray-200 cursor-not-allowed opacity-60'
-                    : 'bg-utility-brand-50 hover:bg-utility-brand-100 border border-utility-brand-200',
-                  isFixing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                )}
-              >
-                {isFixing ? (
-                  <RefreshCw01 className="size-3.5 text-utility-brand-600 animate-spin" />
-                ) : (
-                  <Tool01 className={cx('size-3.5', isAnyFixing ? 'text-utility-gray-400' : 'text-utility-brand-600')} />
-                )}
-              </TooltipTrigger>
-            </Tooltip>
+            <TaskFixDropdown
+              taskId={task.id}
+              onFix={onFix}
+              isFixing={isFixing}
+              isAnyOperationRunning={!!isGlobalOperationRunning}
+              currentFixType={isFixing ? (fixingTaskType || null) : null}
+            />
           )}
           {progressTotal > 0 && <AcDonut done={progressDone} total={progressTotal} label={epic ? 'tasks' : 'ACs'} />}
         </div>
@@ -516,6 +601,8 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const [generatingEpicId, setGeneratingEpicId] = useState(null as string | null);
   const [fixingEpicId, setFixingEpicId] = useState(null as string | null);
   const [fixingEpicType, setFixingEpicType] = useState(null as string | null);
+  const [fixingTaskId, setFixingTaskId] = useState(null as string | null);
+  const [fixingTaskType, setFixingTaskType] = useState(null as string | null);
   const [boardExists, setBoardExists] = useState<boolean | null>(null);
   const [boardDir, setBoardDir] = useState<string | null>(null);
   const [creatingBoard, setCreatingBoard] = useState(false);
@@ -730,43 +817,48 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
     }
   }, [apiBaseUrl, showToast, fetchBoard]);
 
-  const handleFixTask = useCallback(async (taskId: string) => {
+  const handleFixTask = useCallback(async (taskId: string, fixType: string) => {
     // Update local state optimistically
     setFixStatus((prev: Record<string, { status: string; startedAt?: string; completedAt?: string; error?: string }>) => ({
       ...prev,
       [taskId]: { status: 'running', startedAt: new Date().toISOString() }
     }));
     setFixingTaskIdProp?.(taskId);
+    setFixingTaskId(taskId);
+    setFixingTaskType(fixType);
 
     try {
       const response = await fetch(`${apiBaseUrl}/api/board/fix-task`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId })
+        body: JSON.stringify({ taskId, fixType })
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         showToast(payload?.message || 'Fix task failed', 'danger');
-        // Fetch updated status from server
         await fetchFixStatus();
-        // Clear fixing state on error
         setFixingTaskIdProp?.(null);
+        setFixingTaskId(null);
+        setFixingTaskType(null);
         return;
       }
-      showToast(`Task fix completed: ${taskId}`, 'success');
-      // Clear fixing state immediately on success (before board refresh)
+      const typeLabel = TASK_FIX_OPTIONS.find((o) => o.key === fixType)?.label || fixType;
+      showToast(`${typeLabel} completed: ${taskId}`, 'success');
       setFixingTaskIdProp?.(null);
+      setFixingTaskId(null);
+      setFixingTaskType(null);
       await fetchBoard(true);
     } catch (err: any) {
       showToast(err.message || 'Fix task failed', 'danger');
-      // Fetch updated status from server
       await fetchFixStatus();
-      // Clear fixing state on exception
       setFixingTaskIdProp?.(null);
+      setFixingTaskId(null);
+      setFixingTaskType(null);
     } finally {
-      // Safety net: ensure fixing state is always cleared
       if (mountedRef.current) {
         setFixingTaskIdProp?.(null);
+        setFixingTaskId(null);
+        setFixingTaskType(null);
       }
     }
   }, [apiBaseUrl, showToast, fetchBoard, fetchFixStatus, setFixingTaskIdProp]);
@@ -1231,6 +1323,8 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                               onFix={handleFixTask}
                               fixStatus={fixStatus[task.id]}
                               allFixStatuses={fixStatus}
+                              fixingTaskType={fixingTaskId === task.id ? fixingTaskType : null}
+                              isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
                               showAddStatus={isMissingStatus}
                               onAddStatus={isMissingStatus ? handleAddStatus : undefined}
                               addingStatus={addingStatus}
@@ -1274,12 +1368,12 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   >
                                     <TooltipTrigger
                                       onPress={() => handleGenerateStories(task.id)}
-                                      isDisabled={generatingEpicId !== null || fixingEpicId !== null}
+                                      isDisabled={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
                                       className={cx(
                                         'flex h-6 items-center gap-1 rounded-sm px-2 text-xs transition',
                                         generatingEpicId === task.id
                                           ? 'text-brand-secondary bg-utility-brand-50'
-                                          : (generatingEpicId !== null || fixingEpicId !== null)
+                                          : (generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null)
                                             ? 'text-quaternary cursor-not-allowed'
                                             : 'text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50'
                                       )}
@@ -1294,7 +1388,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                     epicId={task.id}
                                     onFix={handleFixEpic}
                                     isFixing={fixingEpicId === task.id}
-                                    isAnyOperationRunning={generatingEpicId !== null || fixingEpicId !== null}
+                                    isAnyOperationRunning={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
                                     currentFixType={fixingEpicId === task.id ? fixingEpicType : null}
                                   />
                                 </div>
@@ -1398,6 +1492,8 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   onFix={handleFixTask}
                                   fixStatus={fixStatus[task.id]}
                                   allFixStatuses={fixStatus}
+                                  fixingTaskType={fixingTaskId === task.id ? fixingTaskType : null}
+                                  isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
                                   showAddStatus={isMissingStatus}
                                   onAddStatus={isMissingStatus ? handleAddStatus : undefined}
                                   addingStatus={addingStatus}
@@ -1432,12 +1528,12 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   >
                                     <TooltipTrigger
                                       onPress={() => handleGenerateStories(task.id)}
-                                      isDisabled={generatingEpicId !== null || fixingEpicId !== null}
+                                      isDisabled={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
                                       className={cx(
                                         'flex h-6 items-center gap-1 rounded-sm px-2 text-xs transition',
                                         generatingEpicId === task.id
                                           ? 'text-brand-secondary bg-utility-brand-50'
-                                          : (generatingEpicId !== null || fixingEpicId !== null)
+                                          : (generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null)
                                             ? 'text-quaternary cursor-not-allowed'
                                             : 'text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50'
                                       )}
@@ -1452,7 +1548,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                     epicId={task.id}
                                     onFix={handleFixEpic}
                                     isFixing={fixingEpicId === task.id}
-                                    isAnyOperationRunning={generatingEpicId !== null || fixingEpicId !== null}
+                                    isAnyOperationRunning={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
                                     currentFixType={fixingEpicId === task.id ? fixingEpicType : null}
                                   />
                                   </>
@@ -1470,6 +1566,8 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                         onFix={handleFixTask}
                                         fixStatus={fixStatus[child.id]}
                                         allFixStatuses={fixStatus}
+                                        fixingTaskType={fixingTaskId === child.id ? fixingTaskType : null}
+                                        isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
                                         showAddStatus={isMissingStatus}
                                         onAddStatus={isMissingStatus ? handleAddStatus : undefined}
                                         addingStatus={addingStatus}
@@ -1496,6 +1594,8 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   onFix={handleFixTask}
                                   fixStatus={fixStatus[task.id]}
                                   allFixStatuses={fixStatus}
+                                  fixingTaskType={fixingTaskId === task.id ? fixingTaskType : null}
+                                  isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
                                   showAddStatus={isMissingStatus}
                                   onAddStatus={isMissingStatus ? handleAddStatus : undefined}
                                   addingStatus={addingStatus}
@@ -1519,12 +1619,12 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   >
                                     <TooltipTrigger
                                       onPress={() => handleGenerateStories(task.id)}
-                                      isDisabled={generatingEpicId !== null || fixingEpicId !== null}
+                                      isDisabled={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
                                       className={cx(
                                         'flex h-6 items-center gap-1 rounded-sm px-2 text-xs transition',
                                         generatingEpicId === task.id
                                           ? 'text-brand-secondary bg-utility-brand-50'
-                                          : (generatingEpicId !== null || fixingEpicId !== null)
+                                          : (generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null)
                                             ? 'text-quaternary cursor-not-allowed'
                                             : 'text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50'
                                       )}
@@ -1539,7 +1639,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                     epicId={task.id}
                                     onFix={handleFixEpic}
                                     isFixing={fixingEpicId === task.id}
-                                    isAnyOperationRunning={generatingEpicId !== null || fixingEpicId !== null}
+                                    isAnyOperationRunning={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
                                     currentFixType={fixingEpicId === task.id ? fixingEpicType : null}
                                   />
                                 </div>
@@ -1556,6 +1656,8 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                               onFix={handleFixTask}
                               fixStatus={fixStatus[task.id]}
                               allFixStatuses={fixStatus}
+                              fixingTaskType={fixingTaskId === task.id ? fixingTaskType : null}
+                              isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
                               showAddStatus={isMissingStatus}
                               onAddStatus={isMissingStatus ? handleAddStatus : undefined}
                               addingStatus={addingStatus}
