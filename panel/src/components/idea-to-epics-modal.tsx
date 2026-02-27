@@ -1,7 +1,7 @@
 // panel/src/components/idea-to-epics-modal.tsx
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Lightbulb02, Send01, RefreshCw01, X, Edit05, Check, File06, ChevronRight, User01, Asterisk02 } from '@untitledui/icons';
+import { Lightbulb02, Send01, RefreshCw01, X, Edit05, Check, File06, ChevronRight, User01, Asterisk02, ClockRewind } from '@untitledui/icons';
 import { marked } from 'marked';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
@@ -22,6 +22,17 @@ interface IdeaToEpicsModalProps {
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
+}
+
+interface ArchivedSession {
+  fileName: string;
+  sessionId: string;
+  createdAt: number;
+  archivedAt: number | null;
+  epicNames: string[];
+  messageCount: number;
+  planPreview: string;
+  hasPlan: boolean;
 }
 
 const SYSTEM_WELCOME = `Describe your product ideas, features, and goals. I'll help you organize them into well-structured Epics for your board.
@@ -51,6 +62,11 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
   const [planUpdatedAt, setPlanUpdatedAt] = useState<Date | null>(null);
   const [syncingToPlan, setSyncingToPlan] = useState(false);
 
+  // Session history state
+  const [archivedSessions, setArchivedSessions] = useState<ArchivedSession[]>([]);
+  const [showArchives, setShowArchives] = useState(false);
+  const [loadingArchive, setLoadingArchive] = useState(false);
+
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -79,6 +95,9 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
     setSyncingToPlan(false);
     setSending(false);
     setGenerating(false);
+    setShowArchives(false);
+    setLoadingArchive(false);
+
     // Try to restore a saved session from disk
     (async () => {
       try {
@@ -97,15 +116,27 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
           setPlan(data.plan || '');
           setEditDraft(data.plan || '');
           if (data.plan) setPlanUpdatedAt(new Date());
-          return;
+        } else {
+          // No saved session — start fresh
+          setSessionId(null);
+          setMessages([{ role: 'system', content: SYSTEM_WELCOME }]);
+          setPlan('');
         }
       } catch {
         // Failed to load — start fresh
+        setSessionId(null);
+        setMessages([{ role: 'system', content: SYSTEM_WELCOME }]);
+        setPlan('');
       }
-      // No saved session — start fresh
-      setSessionId(null);
-      setMessages([{ role: 'system', content: SYSTEM_WELCOME }]);
-      setPlan('');
+
+      // Fetch archived sessions for history picker
+      try {
+        const archiveRes = await fetch(`${apiBaseUrl}/api/ideas/sessions/archived`);
+        const archiveData = await archiveRes.json();
+        if (archiveData.ok) {
+          setArchivedSessions(archiveData.sessions || []);
+        }
+      } catch { /* non-fatal */ }
     })();
   }, [open, apiBaseUrl]);
 
@@ -273,6 +304,44 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
     }
   }, [sessionId, sending, generating, syncingToPlan, apiBaseUrl, plan, planDirty, showToast]);
 
+  // Load an archived session
+  const handleLoadArchive = useCallback(async (fileName: string) => {
+    if (loadingArchive || sending || generating) return;
+    setLoadingArchive(true);
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/ideas/sessions/load`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName })
+      });
+      const data = await response.json();
+
+      if (data.ok) {
+        setSessionId(data.sessionId);
+        const restored: ChatMessage[] = [{ role: 'system', content: SYSTEM_WELCOME }];
+        for (const m of (data.messages || [])) {
+          if (m.role === 'user' || m.role === 'assistant') {
+            restored.push({ role: m.role, content: m.content });
+          }
+        }
+        setMessages(restored);
+        setPlan(data.plan || '');
+        setEditDraft(data.plan || '');
+        if (data.plan) setPlanUpdatedAt(new Date());
+        setPlanDirty(false);
+        setShowArchives(false);
+        showToast('Session restored', 'success');
+      } else {
+        showToast(data.message || 'Failed to load session', 'danger');
+      }
+    } catch (error: any) {
+      showToast(`Network error: ${error.message}`, 'danger');
+    } finally {
+      setLoadingArchive(false);
+    }
+  }, [loadingArchive, sending, generating, apiBaseUrl, showToast]);
+
   // Auto-resize textarea
   const handleTextareaInput = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setDraft(e.target.value);
@@ -291,6 +360,15 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
                 <div className="flex items-center gap-2">
                   <Icon icon={Lightbulb02} className="size-5 text-warning" />
                   <h3 className="text-lg font-semibold text-primary">Idea to Epics</h3>
+                  {archivedSessions.length > 0 && (
+                    <button
+                      onClick={() => setShowArchives(!showArchives)}
+                      className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-tertiary transition hover:bg-primary_hover hover:text-secondary"
+                    >
+                      <ClockRewind className="size-3.5" />
+                      <span>History ({archivedSessions.length})</span>
+                    </button>
+                  )}
                 </div>
                 <button
                   onClick={handleCloseAttempt}
@@ -300,6 +378,49 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
                   <X className="size-4" />
                 </button>
               </div>
+
+              {/* Session history panel (collapsible) */}
+              {showArchives && (
+                <div className="border-b border-secondary bg-secondary px-6 py-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-sm font-medium text-primary">Session History</span>
+                    <button
+                      onClick={() => setShowArchives(false)}
+                      className="rounded-sm p-1 text-tertiary transition hover:text-secondary"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                  <div className="max-h-48 space-y-2 overflow-y-auto">
+                    {archivedSessions.map((session: ArchivedSession) => (
+                      <button
+                        key={session.fileName}
+                        onClick={() => handleLoadArchive(session.fileName)}
+                        disabled={loadingArchive}
+                        className="w-full rounded-lg border border-secondary bg-primary p-3 text-left transition hover:bg-primary_hover disabled:opacity-50"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-primary">
+                            {session.epicNames.length > 0
+                              ? session.epicNames.slice(0, 2).join(', ') + (session.epicNames.length > 2 ? ` +${session.epicNames.length - 2}` : '')
+                              : 'Untitled session'}
+                          </span>
+                          <span className="text-xs text-quaternary">
+                            {new Date(session.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-3 text-xs text-tertiary">
+                          <span>{session.messageCount} msgs</span>
+                          {session.hasPlan && <span className="text-utility-success-500">Has plan</span>}
+                          {session.epicNames.length > 0 && (
+                            <span>{session.epicNames.length} epic{session.epicNames.length !== 1 ? 's' : ''} generated</span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Two-column body */}
               <div className="relative flex flex-1 flex-col sm:flex-row overflow-hidden">
