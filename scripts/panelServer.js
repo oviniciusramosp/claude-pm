@@ -160,6 +160,10 @@ const generateStoriesState = {
 const fixEpicStoriesState = {
   running: false
 };
+const fixEpicState = {
+  running: false,
+  type: null // 'all' | 'models' | 'agents' | 'status' | 'stories' | 'acs'
+};
 const ideaChatState = {
   running: false
 };
@@ -4096,6 +4100,451 @@ app.post('/api/board/generate-stories', async (req, res) => {
     res.status(500).json({ ok: false, message: error.message });
   } finally {
     generateStoriesState.running = false;
+  }
+});
+
+// ── Epic Fix Handlers ─────────────────────────────────────────────────
+
+/**
+ * Fix Models — Fill missing `model` fields on child tasks with default.
+ */
+async function fixEpicModels(client, children, env) {
+  const defaultModel = env.CLAUDE_DEFAULT_MODEL || 'claude-sonnet-4-5-20250929';
+  let fixed = 0;
+
+  for (const child of children) {
+    const markdown = await client.getTaskMarkdown(child.id);
+    if (!markdown) continue;
+
+    const { frontmatter, body } = parseFrontmatter(markdown);
+    if (!frontmatter.model || !frontmatter.model.trim()) {
+      frontmatter.model = defaultModel;
+      await client.updateTask(child.id, frontmatter, body);
+      fixed++;
+      pushLog('info', LOG_SOURCE.panel, `  Set model for "${child.name}" → ${defaultModel}`);
+    }
+  }
+
+  return {
+    changes: fixed,
+    total: children.length,
+    failed: 0,
+    message: fixed > 0 ? `Set model on ${fixed} task(s)` : 'All tasks already have models'
+  };
+}
+
+/**
+ * Fix Agents — Use Claude to suggest agents for child tasks missing them.
+ */
+async function fixEpicAgents(client, children) {
+  const needsFix = [];
+  for (const child of children) {
+    const markdown = await client.getTaskMarkdown(child.id);
+    if (!markdown) continue;
+    const { frontmatter, body } = parseFrontmatter(markdown);
+    const agents = frontmatter.agents;
+    const hasAgents = agents && (Array.isArray(agents) ? agents.length > 0 : String(agents).trim().length > 0);
+    if (!hasAgents) {
+      needsFix.push({ id: child.id, name: child.name, frontmatter, body });
+    }
+  }
+
+  if (needsFix.length === 0) {
+    return { changes: 0, total: children.length, failed: 0, message: 'All tasks already have agents' };
+  }
+
+  const prompt = `You are assigning developer agents to user stories.
+
+Available agent types: frontend, backend, design, devops, qa, database, security, api
+
+For each task below, analyze the description and assign 1-3 appropriate agents.
+
+Tasks:
+${needsFix.map((t, i) => `${i + 1}. "${t.name}"\n${(t.body || '').slice(0, 400)}`).join('\n\n')}
+
+Return ONLY a JSON array (no markdown, no code blocks):
+[{ "index": 1, "agents": ["frontend", "design"] }, ...]
+
+Rules:
+- "index" is 1-based, matching the task number above
+- Each task gets 1-3 agents from the available list
+- Return valid JSON only, no extra text`;
+
+  const { reply } = await runClaudePromptViaApi(prompt, 'claude-sonnet-4-5-20250929', 120000);
+
+  // Parse JSON from reply (handle code blocks)
+  const text = String(reply || '').trim();
+  const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  const jsonStr = codeBlockMatch ? codeBlockMatch[1].trim() : text;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    throw new Error('Claude did not return valid JSON for agents assignment');
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error('Expected a JSON array for agents assignment');
+  }
+
+  let fixed = 0;
+  let failed = 0;
+
+  for (const item of parsed) {
+    const idx = (item.index || 0) - 1;
+    const task = needsFix[idx];
+    if (!task || !Array.isArray(item.agents) || item.agents.length === 0) continue;
+    try {
+      task.frontmatter.agents = item.agents.join(', ');
+      await client.updateTask(task.id, task.frontmatter, task.body);
+      fixed++;
+      pushLog('info', LOG_SOURCE.panel, `  Set agents for "${task.name}" → ${item.agents.join(', ')}`);
+    } catch (err) {
+      failed++;
+      pushLog('warn', LOG_SOURCE.panel, `  Failed to set agents for "${task.name}": ${err.message}`);
+    }
+  }
+
+  return {
+    changes: fixed,
+    total: children.length,
+    failed,
+    message: fixed > 0 ? `Assigned agents to ${fixed} task(s)` : 'No agents changes made'
+  };
+}
+
+/**
+ * Fix Status — Sync task status with AC completion state.
+ */
+async function fixEpicStatus(client, children, boardConfig) {
+  const { notStarted, inProgress, done } = boardConfig.board.statuses;
+  let fixed = 0;
+
+  for (const child of children) {
+    const markdown = await client.getTaskMarkdown(child.id);
+    if (!markdown) continue;
+
+    const { frontmatter, body } = parseFrontmatter(markdown);
+    const unchecked = (body.match(/^\s*-\s*\[ \]\s+/gm) || []).length;
+    const checked = (body.match(/^\s*-\s*\[x\]\s+/gim) || []).length;
+    const total = unchecked + checked;
+    const currentStatus = (frontmatter.status || '').trim();
+
+    if (total === 0) continue;
+
+    let newStatus = null;
+    if (unchecked === 0 && checked > 0 && currentStatus !== done) {
+      newStatus = done;
+    } else if (checked > 0 && unchecked > 0 && currentStatus === notStarted) {
+      newStatus = inProgress;
+    }
+
+    if (newStatus) {
+      await client.updateTaskStatus(child.id, newStatus);
+      fixed++;
+      pushLog('info', LOG_SOURCE.panel, `  Status fix: "${child.name}" → ${newStatus}`);
+    }
+  }
+
+  return {
+    changes: fixed,
+    total: children.length,
+    failed: 0,
+    message: fixed > 0 ? `Fixed status on ${fixed} task(s)` : 'All statuses are consistent'
+  };
+}
+
+/**
+ * Fix Stories — Restructure, reorder, and complete stories (existing logic).
+ */
+async function fixEpicStoriesLogic(client, epicId, children, epicMarkdown) {
+  const { frontmatter: epicFields } = parseFrontmatter(epicMarkdown);
+  const epicName = (epicFields && epicFields.name) || epicId;
+
+  const allStories = [];
+  for (const child of children) {
+    const childMarkdown = await client.getTaskMarkdown(child.id);
+    if (!childMarkdown) continue;
+
+    const { frontmatter, body } = parseFrontmatter(childMarkdown);
+    const fileName = child.id.split('/').pop();
+
+    const hasTitle = !!(frontmatter?.name && frontmatter.name.trim());
+    const hasNumber = /^s\d+-\d+/i.test(fileName || '');
+    const hasContent = !!(body && body.trim().length >= 20);
+    const hasAcs = body ? /- \[ \]/g.test(body) : false;
+    const hasModel = !!(frontmatter?.model);
+    const hasAgents = !!(frontmatter?.agents && (Array.isArray(frontmatter.agents) ? frontmatter.agents.length > 0 : String(frontmatter.agents).trim().length > 0));
+    const hasType = !!(frontmatter?.type);
+    const hasPriority = !!(frontmatter?.priority);
+
+    allStories.push({
+      id: child.id, name: child.name, fileName, frontmatter, body,
+      hasTitle, hasNumber, hasContent, hasAcs, hasModel, hasAgents, hasType, hasPriority
+    });
+  }
+
+  if (allStories.length === 0) {
+    return { changes: 0, total: 0, failed: 0, message: 'No stories found' };
+  }
+
+  const prompt = buildFixEpicStoriesPrompt({ epicName, stories: allStories });
+  const { reply } = await runClaudePromptViaApi(prompt, 'claude-sonnet-4-5-20250929');
+  const fixedStories = parseFixEpicStoriesResponse(reply);
+
+  const matchedPairs = [];
+  let failed = 0;
+  for (let i = 0; i < fixedStories.length; i++) {
+    const story = fixedStories[i];
+    const original = allStories.find((s) => s.fileName === story.fileName)
+      || allStories.find((s) => s.name === story.name);
+    if (!original) {
+      pushLog('warn', LOG_SOURCE.panel, `Could not match fixed story "${story.name}" to an existing file`);
+      failed++;
+      continue;
+    }
+    matchedPairs.push({ original, fixed: story, newIndex: i });
+  }
+
+  for (const { original, fixed: story } of matchedPairs) {
+    try {
+      await client.updateTask(original.id, {
+        name: story.name, priority: story.priority, type: story.type,
+        status: original.frontmatter?.status || 'Not Started',
+        model: story.model, agents: story.agents
+      }, story.body);
+    } catch (err) {
+      pushLog('warn', LOG_SOURCE.panel, `Failed to update story "${story.name}": ${err.message}`);
+      failed++;
+    }
+  }
+
+  // Phase 2: Rename files to correct sequential names
+  const { generateStoryFileName } = await import('../src/local/helpers.js');
+  await client.listTasks();
+
+  const renameOps = [];
+  const fixed = [];
+  for (const { original, fixed: story, newIndex } of matchedPairs) {
+    const correctFileName = generateStoryFileName(epicId, newIndex, story.name) + '.md';
+    const currentFileName = original.fileName + '.md';
+    if (currentFileName === correctFileName) {
+      fixed.push({ id: original.id, name: story.name, fileName: correctFileName });
+      continue;
+    }
+    renameOps.push({ currentId: original.id, currentFileName, tempFileName: `_temp_fix_${newIndex}_${Date.now()}.md`, correctFileName, storyName: story.name });
+  }
+
+  for (const op of renameOps) {
+    try {
+      const result = await client.renameTask(op.currentId, op.tempFileName);
+      op.tempId = result.renamed ? result.newId : op.currentId;
+    } catch (err) {
+      pushLog('warn', LOG_SOURCE.panel, `Failed to temp-rename "${op.currentFileName}": ${err.message}`);
+      op.tempId = op.currentId;
+      op.skipFinalRename = true;
+      failed++;
+    }
+  }
+
+  if (renameOps.length > 0) await client.listTasks();
+
+  for (const op of renameOps) {
+    if (op.skipFinalRename) continue;
+    try {
+      const result = await client.renameTask(op.tempId, op.correctFileName);
+      if (result.renamed) {
+        pushLog('info', LOG_SOURCE.panel, `Renamed "${op.currentFileName}" → "${op.correctFileName}"`);
+        fixed.push({ id: result.newId, name: op.storyName, fileName: op.correctFileName });
+      }
+    } catch (err) {
+      pushLog('warn', LOG_SOURCE.panel, `Failed to rename "${op.tempFileName}" → "${op.correctFileName}": ${err.message}`);
+      failed++;
+    }
+  }
+
+  return {
+    changes: fixed.length,
+    total: allStories.length,
+    failed,
+    message: fixed.length > 0 ? `Fixed ${fixed.length} of ${allStories.length} stories` : 'All stories are complete'
+  };
+}
+
+/**
+ * Verify ACs — Use Claude to verify ACs against codebase for Done tasks.
+ */
+async function fixEpicAcs(client, children, env) {
+  const doneChildren = children.filter((c) => (c.status || '').trim() === (env.BOARD_STATUS_DONE || 'Done'));
+
+  if (doneChildren.length === 0) {
+    return { changes: 0, total: children.length, failed: 0, message: 'No Done tasks to verify' };
+  }
+
+  let verified = 0;
+  let failed = 0;
+
+  for (const child of doneChildren) {
+    if (!child._filePath) continue;
+    const taskContent = await fs.readFile(child._filePath, 'utf-8');
+
+    // Check if task has any ACs at all
+    const hasAcs = /^\s*-\s*\[[ xX]\]/m.test(taskContent);
+    if (!hasAcs) continue;
+
+    const prompt = buildFixTaskPrompt(child.id, child.name, taskContent, child._filePath);
+
+    try {
+      pushLog('info', LOG_SOURCE.panel, `  Verifying ACs for "${child.name}"...`);
+      await runClaudePromptViaApi(prompt, env.CLAUDE_DEFAULT_MODEL || 'claude-sonnet-4-5-20250929', 180000);
+      verified++;
+      pushLog('info', LOG_SOURCE.panel, `  AC verification complete for "${child.name}"`);
+    } catch (err) {
+      failed++;
+      pushLog('warn', LOG_SOURCE.panel, `  AC verification failed for "${child.name}": ${err.message}`);
+    }
+  }
+
+  return {
+    changes: verified,
+    total: doneChildren.length,
+    failed,
+    message: verified > 0 ? `Verified ACs on ${verified} Done task(s)` : 'No ACs needed verification'
+  };
+}
+
+/**
+ * Fix All — Run all fix types sequentially.
+ */
+async function fixEpicAll(client, children, epicId, epicMarkdown, env, boardConfig) {
+  const results = [];
+
+  pushLog('info', LOG_SOURCE.panel, '  Step 1/5: Fixing models...');
+  results.push(await fixEpicModels(client, children, env));
+
+  pushLog('info', LOG_SOURCE.panel, '  Step 2/5: Fixing status...');
+  results.push(await fixEpicStatus(client, children, boardConfig));
+
+  pushLog('info', LOG_SOURCE.panel, '  Step 3/5: Fixing agents...');
+  results.push(await fixEpicAgents(client, children));
+
+  pushLog('info', LOG_SOURCE.panel, '  Step 4/5: Fixing stories...');
+  results.push(await fixEpicStoriesLogic(client, epicId, children, epicMarkdown));
+
+  // Re-read children after stories fix (files may have been renamed)
+  const allTasks = await client.listTasks();
+  const updatedChildren = allTasks.filter((t) => t.parentId === epicId);
+
+  pushLog('info', LOG_SOURCE.panel, '  Step 5/5: Verifying ACs...');
+  results.push(await fixEpicAcs(client, updatedChildren, env));
+
+  const totalChanges = results.reduce((sum, r) => sum + r.changes, 0);
+  const totalFailed = results.reduce((sum, r) => sum + r.failed, 0);
+
+  return {
+    changes: totalChanges,
+    total: children.length,
+    failed: totalFailed,
+    message: `All fixes complete: ${totalChanges} change(s)${totalFailed > 0 ? `, ${totalFailed} failure(s)` : ''}`,
+    breakdown: results.map((r) => r.message)
+  };
+}
+
+// ── Epic Fix Endpoint ────────────────────────────────────────────────
+
+app.post('/api/board/fix-epic', async (req, res) => {
+  const { epicId, fixType } = req.body;
+
+  if (!epicId || typeof epicId !== 'string' || !epicId.trim()) {
+    res.status(400).json({ ok: false, message: 'epicId is required.' });
+    return;
+  }
+
+  const validTypes = ['all', 'models', 'agents', 'status', 'stories', 'acs'];
+  if (!fixType || !validTypes.includes(fixType)) {
+    res.status(400).json({ ok: false, message: `fixType must be one of: ${validTypes.join(', ')}` });
+    return;
+  }
+
+  if (fixEpicState.running) {
+    res.status(409).json({ ok: false, message: `A fix operation is already in progress (${fixEpicState.type}).` });
+    return;
+  }
+
+  // Also check legacy fix-epic-stories state
+  if (fixEpicStoriesState.running) {
+    res.status(409).json({ ok: false, message: 'A story fix is already in progress.' });
+    return;
+  }
+
+  fixEpicState.running = true;
+  fixEpicState.type = fixType;
+  pushLog('info', LOG_SOURCE.panel, `Fixing Epic "${epicId}" — type: ${fixType}`);
+
+  try {
+    const env = await readEnvPairs();
+    const boardDir = resolveBoardDir(env);
+
+    const boardConfig = {
+      board: {
+        dir: boardDir,
+        statuses: {
+          notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+          inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+          done: env.BOARD_STATUS_DONE || 'Done'
+        },
+        typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
+      }
+    };
+
+    const client = new LocalBoardClient(boardConfig);
+    await client.initialize();
+
+    const epicMarkdown = await client.getTaskMarkdown(epicId);
+    if (!epicMarkdown) {
+      res.status(404).json({ ok: false, message: `Epic not found: ${epicId}` });
+      return;
+    }
+
+    const allTasks = await client.listTasks();
+    const children = allTasks.filter((t) => t.parentId === epicId);
+
+    if (children.length === 0) {
+      res.status(400).json({ ok: false, message: 'Epic has no child tasks.' });
+      return;
+    }
+
+    let result;
+    switch (fixType) {
+      case 'models':
+        result = await fixEpicModels(client, children, env);
+        break;
+      case 'agents':
+        result = await fixEpicAgents(client, children);
+        break;
+      case 'status':
+        result = await fixEpicStatus(client, children, boardConfig);
+        break;
+      case 'stories':
+        result = await fixEpicStoriesLogic(client, epicId, children, epicMarkdown);
+        break;
+      case 'acs':
+        result = await fixEpicAcs(client, children, env);
+        break;
+      case 'all':
+        result = await fixEpicAll(client, children, epicId, epicMarkdown, env, boardConfig);
+        break;
+    }
+
+    pushLog('success', LOG_SOURCE.panel, `Fix "${fixType}" completed for "${epicId}": ${result.message}`);
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    pushLog('error', LOG_SOURCE.panel, `Fix "${fixType}" failed for "${epicId}": ${error.message}`);
+    res.status(500).json({ ok: false, message: error.message });
+  } finally {
+    fixEpicState.running = false;
+    fixEpicState.type = null;
   }
 });
 

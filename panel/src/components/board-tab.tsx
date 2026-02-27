@@ -1,7 +1,7 @@
 // panel/src/components/board-tab.tsx
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Columns03, CpuChip01, Folder, FolderPlus, Lightbulb02, Plus, RefreshCw01, Stars01, Tool01, Users01 } from '@untitledui/icons';
+import { CheckCircle, ChevronDown, Columns03, CpuChip01, Folder, FolderPlus, Lightbulb02, Plus, RefreshCw01, Stars01, Target02, Tool01, Users01 } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { Tooltip, TooltipTrigger } from './base/tooltip/tooltip';
@@ -215,6 +215,112 @@ function AddStatusDropdown({ taskId, onAddStatus, disabled }: { taskId: string; 
   );
 }
 
+// ── Epic Fix Dropdown ───────────────────────────────────────────────
+
+const EPIC_FIX_OPTIONS = [
+  { key: 'all', label: 'Fix All', description: 'Run all fixes sequentially', icon: Tool01 },
+  { key: 'models', label: 'Fix Models', description: 'Fill missing model fields', icon: CpuChip01 },
+  { key: 'agents', label: 'Fix Agents', description: 'Suggest agents via Claude AI', icon: Users01 },
+  { key: 'status', label: 'Fix Status', description: 'Sync status with AC completion', icon: CheckCircle },
+  { key: 'stories', label: 'Fix Stories', description: 'Restructure and reorder stories', icon: Stars01 },
+  { key: 'acs', label: 'Verify ACs', description: 'Verify ACs against codebase', icon: Target02 },
+] as const;
+
+function EpicFixDropdown({
+  epicId,
+  onFix,
+  isFixing,
+  isAnyOperationRunning,
+  currentFixType,
+}: {
+  epicId: string;
+  onFix: (epicId: string, fixType: string) => void;
+  isFixing: boolean;
+  isAnyOperationRunning: boolean;
+  currentFixType: string | null;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isOpen]);
+
+  const runningLabel = EPIC_FIX_OPTIONS.find((o) => o.key === currentFixType)?.label || currentFixType;
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <Tooltip
+        title={isFixing ? `${runningLabel}...` : 'Fix tasks'}
+        description={isFixing ? 'Fix operation in progress' : 'Open fix options menu'}
+      >
+        <TooltipTrigger
+          onPress={() => { if (!isAnyOperationRunning) setIsOpen(!isOpen); }}
+          isDisabled={isAnyOperationRunning}
+          className={cx(
+            'flex h-6 items-center gap-0.5 rounded-sm px-2 text-xs transition',
+            isFixing
+              ? 'text-utility-warning-600 bg-utility-warning-50'
+              : isAnyOperationRunning
+                ? 'text-quaternary cursor-not-allowed'
+                : 'text-tertiary hover:text-utility-warning-600 hover:bg-utility-warning-50'
+          )}
+        >
+          {isFixing
+            ? <RefreshCw01 className="size-3 animate-spin" />
+            : <Tool01 className="size-3" />}
+          <ChevronDown className={cx('size-2.5 transition-transform', isOpen && 'rotate-180')} />
+        </TooltipTrigger>
+      </Tooltip>
+      {isOpen && (
+        <div className="absolute top-full right-0 z-50 mt-1 w-56 rounded-lg border border-secondary bg-primary shadow-lg py-1">
+          {EPIC_FIX_OPTIONS.map((option) => {
+            const isRunning = isFixing && currentFixType === option.key;
+            const OptionIcon = option.icon;
+            return (
+              <button
+                key={option.key}
+                type="button"
+                onClick={(e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  onFix(epicId, option.key);
+                  setIsOpen(false);
+                }}
+                disabled={isFixing}
+                className={cx(
+                  'w-full flex items-start gap-2.5 px-3 py-2 text-left transition',
+                  isFixing && !isRunning
+                    ? 'cursor-not-allowed opacity-50'
+                    : 'hover:bg-primary_hover',
+                  isRunning && 'bg-utility-warning-50'
+                )}
+              >
+                <div className="mt-0.5 shrink-0">
+                  {isRunning
+                    ? <RefreshCw01 className="size-3.5 text-utility-warning-600 animate-spin" />
+                    : <OptionIcon className="size-3.5 text-tertiary" />}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-primary">{option.label}</div>
+                  <div className="text-[10px] text-tertiary leading-tight">{option.description}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface BoardCardProps {
   key?: React.Key;
   task: BoardTask;
@@ -399,6 +505,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const [ideaModalOpen, setIdeaModalOpen] = useState(false);
   const [generatingEpicId, setGeneratingEpicId] = useState(null as string | null);
   const [fixingEpicId, setFixingEpicId] = useState(null as string | null);
+  const [fixingEpicType, setFixingEpicType] = useState(null as string | null);
   const [boardExists, setBoardExists] = useState<boolean | null>(null);
   const [boardDir, setBoardDir] = useState<string | null>(null);
   const [creatingBoard, setCreatingBoard] = useState(false);
@@ -846,27 +953,29 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
     }
   }, [apiBaseUrl, showToast, fetchBoard]);
 
-  const handleFixEpicStories = useCallback(async (epicId: string) => {
+  const handleFixEpic = useCallback(async (epicId: string, fixType: string) => {
     setFixingEpicId(epicId);
+    setFixingEpicType(fixType);
     try {
-      const response = await fetch(`${apiBaseUrl}/api/board/fix-epic-stories`, {
+      const response = await fetch(`${apiBaseUrl}/api/board/fix-epic`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ epicId })
+        body: JSON.stringify({ epicId, fixType })
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        showToast(payload?.message || 'Failed to fix stories', 'danger');
+        showToast(payload?.message || `Failed to fix ${fixType}`, 'danger');
         return;
       }
-      if (payload.fixed === 0 && payload.total === 0) {
-        showToast(payload.message || 'All stories are complete', 'neutral');
+      const typeLabel = EPIC_FIX_OPTIONS.find((o) => o.key === fixType)?.label || fixType;
+      if (payload.changes === 0 && payload.total === 0) {
+        showToast(payload.message || `${typeLabel}: nothing to fix`, 'neutral');
         return;
       }
-      const msg = payload.failed > 0
-        ? `Fixed ${payload.fixed} of ${payload.total} stories (${payload.failed} failed)`
-        : `Fixed ${payload.fixed} stories`;
-      showToast(msg, payload.failed > 0 ? 'warning' : 'success');
+      showToast(
+        payload.message || `${typeLabel}: fixed ${payload.changes} of ${payload.total}`,
+        payload.failed > 0 ? 'warning' : 'success'
+      );
       setExpandedEpics((prev) => {
         const next = new Set(prev);
         next.add(epicId);
@@ -874,9 +983,10 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
       });
       await fetchBoard(true);
     } catch (err: any) {
-      showToast(err.message || 'Failed to fix stories', 'danger');
+      showToast(err.message || `Fix ${fixType} failed`, 'danger');
     } finally {
       setFixingEpicId(null);
+      setFixingEpicType(null);
     }
   }, [apiBaseUrl, showToast, fetchBoard]);
 
@@ -1170,27 +1280,13 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       <span>{generatingEpicId === task.id ? 'Generating...' : 'Generate'}</span>
                                     </TooltipTrigger>
                                   </Tooltip>
-                                  <Tooltip
-                                    title={fixingEpicId === task.id ? "Fixing tasks..." : "Fix tasks"}
-                                    description={fixingEpicId === task.id ? "Using Claude AI to complete unfinished tasks" : "Auto-fix incomplete tasks with Claude AI"}
-                                  >
-                                    <TooltipTrigger
-                                      onPress={() => handleFixEpicStories(task.id)}
-                                      isDisabled={generatingEpicId !== null || fixingEpicId !== null}
-                                      className={cx(
-                                        'flex h-6 items-center rounded-sm px-2 text-xs transition',
-                                        fixingEpicId === task.id
-                                          ? 'text-utility-warning-600 bg-utility-warning-50'
-                                          : (generatingEpicId !== null || fixingEpicId !== null)
-                                            ? 'text-quaternary cursor-not-allowed'
-                                            : 'text-tertiary hover:text-utility-warning-600 hover:bg-utility-warning-50'
-                                      )}
-                                    >
-                                      {fixingEpicId === task.id
-                                        ? <RefreshCw01 className="size-3 animate-spin" />
-                                        : <Tool01 className="size-3" />}
-                                    </TooltipTrigger>
-                                  </Tooltip>
+                                  <EpicFixDropdown
+                                    epicId={task.id}
+                                    onFix={handleFixEpic}
+                                    isFixing={fixingEpicId === task.id}
+                                    isAnyOperationRunning={generatingEpicId !== null || fixingEpicId !== null}
+                                    currentFixType={fixingEpicId === task.id ? fixingEpicType : null}
+                                  />
                                 </div>
                               </div>
                             );
@@ -1342,27 +1438,13 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       <span>{generatingEpicId === task.id ? 'Generating...' : 'Generate'}</span>
                                     </TooltipTrigger>
                                   </Tooltip>
-                                  <Tooltip
-                                    title={fixingEpicId === task.id ? "Fixing tasks..." : "Fix tasks"}
-                                    description={fixingEpicId === task.id ? "Using Claude AI to complete unfinished tasks" : "Auto-fix incomplete tasks with Claude AI"}
-                                  >
-                                    <TooltipTrigger
-                                      onPress={() => handleFixEpicStories(task.id)}
-                                      isDisabled={generatingEpicId !== null || fixingEpicId !== null}
-                                      className={cx(
-                                        'flex h-6 items-center rounded-sm px-2 text-xs transition',
-                                        fixingEpicId === task.id
-                                          ? 'text-utility-warning-600 bg-utility-warning-50'
-                                          : (generatingEpicId !== null || fixingEpicId !== null)
-                                            ? 'text-quaternary cursor-not-allowed'
-                                            : 'text-tertiary hover:text-utility-warning-600 hover:bg-utility-warning-50'
-                                      )}
-                                    >
-                                      {fixingEpicId === task.id
-                                        ? <RefreshCw01 className="size-3 animate-spin" />
-                                        : <Tool01 className="size-3" />}
-                                    </TooltipTrigger>
-                                  </Tooltip>
+                                  <EpicFixDropdown
+                                    epicId={task.id}
+                                    onFix={handleFixEpic}
+                                    isFixing={fixingEpicId === task.id}
+                                    isAnyOperationRunning={generatingEpicId !== null || fixingEpicId !== null}
+                                    currentFixType={fixingEpicId === task.id ? fixingEpicType : null}
+                                  />
                                   </>
                                 )}
                               </div>
@@ -1443,27 +1525,13 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       <span>{generatingEpicId === task.id ? 'Generating...' : 'Generate'}</span>
                                     </TooltipTrigger>
                                   </Tooltip>
-                                  <Tooltip
-                                    title={fixingEpicId === task.id ? "Fixing tasks..." : "Fix tasks"}
-                                    description={fixingEpicId === task.id ? "Using Claude AI to complete unfinished tasks" : "Auto-fix incomplete tasks with Claude AI"}
-                                  >
-                                    <TooltipTrigger
-                                      onPress={() => handleFixEpicStories(task.id)}
-                                      isDisabled={generatingEpicId !== null || fixingEpicId !== null}
-                                      className={cx(
-                                        'flex h-6 items-center rounded-sm px-2 text-xs transition',
-                                        fixingEpicId === task.id
-                                          ? 'text-utility-warning-600 bg-utility-warning-50'
-                                          : (generatingEpicId !== null || fixingEpicId !== null)
-                                            ? 'text-quaternary cursor-not-allowed'
-                                            : 'text-tertiary hover:text-utility-warning-600 hover:bg-utility-warning-50'
-                                      )}
-                                    >
-                                      {fixingEpicId === task.id
-                                        ? <RefreshCw01 className="size-3 animate-spin" />
-                                        : <Tool01 className="size-3" />}
-                                    </TooltipTrigger>
-                                  </Tooltip>
+                                  <EpicFixDropdown
+                                    epicId={task.id}
+                                    onFix={handleFixEpic}
+                                    isFixing={fixingEpicId === task.id}
+                                    isAnyOperationRunning={generatingEpicId !== null || fixingEpicId !== null}
+                                    currentFixType={fixingEpicId === task.id ? fixingEpicType : null}
+                                  />
                                 </div>
                               </div>
                             );
