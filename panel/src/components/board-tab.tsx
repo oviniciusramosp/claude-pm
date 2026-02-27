@@ -220,7 +220,7 @@ function AddStatusDropdown({ taskId, onAddStatus, disabled }: { taskId: string; 
 const EPIC_FIX_OPTIONS = [
   { key: 'all', label: 'Fix All', description: 'Run all fixes sequentially', icon: Tool01 },
   { key: 'models', label: 'Fix Models', description: 'Assign models based on complexity', icon: CpuChip01 },
-  { key: 'agents', label: 'Fix Agents', description: 'Suggest agents via Claude AI', icon: Users01 },
+  { key: 'agents', label: 'Fix Agents', description: 'Assign agents based on task content', icon: Users01 },
   { key: 'status', label: 'Fix Status', description: 'Sync status with AC completion', icon: CheckCircle },
   { key: 'stories', label: 'Fix Stories', description: 'Restructure and reorder stories', icon: Stars01 },
   { key: 'acs', label: 'Verify ACs', description: 'Verify ACs against codebase', icon: Target02 },

@@ -4190,45 +4190,45 @@ Rules:
 }
 
 /**
- * Fix Agents — Use Claude to suggest agents for child tasks missing them.
+ * Fix Agents — Use Claude to analyze ALL child tasks and assign/reassign agents.
  */
 async function fixEpicAgents(client, children) {
-  const needsFix = [];
+  const allTasks = [];
   for (const child of children) {
     const markdown = await client.getTaskMarkdown(child.id);
     if (!markdown) continue;
     const { frontmatter, body } = parseFrontmatter(markdown);
-    const agents = frontmatter.agents;
-    const hasAgents = agents && (Array.isArray(agents) ? agents.length > 0 : String(agents).trim().length > 0);
-    if (!hasAgents) {
-      needsFix.push({ id: child.id, name: child.name, frontmatter, body });
-    }
+    const currentAgents = frontmatter.agents
+      ? (Array.isArray(frontmatter.agents) ? frontmatter.agents.join(', ') : String(frontmatter.agents).trim())
+      : '';
+    allTasks.push({ id: child.id, name: child.name, frontmatter, body, currentAgents });
   }
 
-  if (needsFix.length === 0) {
-    return { changes: 0, total: children.length, failed: 0, message: 'All tasks already have agents' };
+  if (allTasks.length === 0) {
+    return { changes: 0, total: children.length, failed: 0, message: 'No tasks found' };
   }
 
-  const prompt = `You are assigning developer agents to user stories.
+  const prompt = `You are assigning developer agents to user stories based on their content.
 
 Available agent types: frontend, backend, design, devops, qa, database, security, api
 
-For each task below, analyze the description and assign 1-3 appropriate agents.
+For each task below, analyze the description, acceptance criteria, and technical tasks carefully, then assign 1-3 appropriate agents.
 
 Tasks:
-${needsFix.map((t, i) => `${i + 1}. "${t.name}"\n${(t.body || '').slice(0, 400)}`).join('\n\n')}
+${allTasks.map((t, i) => `${i + 1}. "${t.name}"${t.currentAgents ? ` [current: ${t.currentAgents}]` : ' [no agents]'}\n${(t.body || '').slice(0, 500)}`).join('\n\n')}
 
 Return ONLY a JSON array (no markdown, no code blocks):
-[{ "index": 1, "agents": ["frontend", "design"] }, ...]
+[{ "index": 1, "agents": ["frontend", "design"], "reason": "brief reason" }, ...]
 
 Rules:
 - "index" is 1-based, matching the task number above
 - Each task gets 1-3 agents from the available list
+- "reason" is a brief explanation (max 15 words) of why those agents fit
+- If a task's current agents are already correct, assign the same agents
 - Return valid JSON only, no extra text`;
 
   const { reply } = await runClaudePromptViaApi(prompt, 'claude-sonnet-4-5-20250929', 120000);
 
-  // Parse JSON from reply (handle code blocks)
   const text = String(reply || '').trim();
   const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
   const jsonStr = codeBlockMatch ? codeBlockMatch[1].trim() : text;
@@ -4249,13 +4249,17 @@ Rules:
 
   for (const item of parsed) {
     const idx = (item.index || 0) - 1;
-    const task = needsFix[idx];
+    const task = allTasks[idx];
     if (!task || !Array.isArray(item.agents) || item.agents.length === 0) continue;
+
+    const newAgents = item.agents.join(', ');
+    if (newAgents === task.currentAgents) continue; // No change needed
+
     try {
-      task.frontmatter.agents = item.agents.join(', ');
+      task.frontmatter.agents = newAgents;
       await client.updateTask(task.id, task.frontmatter, task.body);
       fixed++;
-      pushLog('info', LOG_SOURCE.panel, `  Set agents for "${task.name}" → ${item.agents.join(', ')}`);
+      pushLog('info', LOG_SOURCE.panel, `  Set agents for "${task.name}" → ${newAgents}${item.reason ? ` (${item.reason})` : ''}`);
     } catch (err) {
       failed++;
       pushLog('warn', LOG_SOURCE.panel, `  Failed to set agents for "${task.name}": ${err.message}`);
@@ -4264,18 +4268,19 @@ Rules:
 
   return {
     changes: fixed,
-    total: children.length,
+    total: allTasks.length,
     failed,
-    message: fixed > 0 ? `Assigned agents to ${fixed} task(s)` : 'No agents changes made'
+    message: fixed > 0 ? `Updated agents on ${fixed} task(s)` : 'All agents are already correct'
   };
 }
 
 /**
- * Fix Status — Sync task status with AC completion state.
+ * Fix Status — Analyze each task's AC completion and sync status accordingly.
  */
 async function fixEpicStatus(client, children, boardConfig) {
   const { notStarted, inProgress, done } = boardConfig.board.statuses;
   let fixed = 0;
+  let analyzed = 0;
 
   for (const child of children) {
     const markdown = await client.getTaskMarkdown(child.id);
@@ -4287,27 +4292,36 @@ async function fixEpicStatus(client, children, boardConfig) {
     const total = unchecked + checked;
     const currentStatus = (frontmatter.status || '').trim();
 
-    if (total === 0) continue;
+    analyzed++;
+
+    if (total === 0) {
+      pushLog('info', LOG_SOURCE.panel, `  "${child.name}": no ACs found, status "${currentStatus}" — skipped`);
+      continue;
+    }
 
     let newStatus = null;
     if (unchecked === 0 && checked > 0 && currentStatus !== done) {
       newStatus = done;
     } else if (checked > 0 && unchecked > 0 && currentStatus === notStarted) {
       newStatus = inProgress;
+    } else if (checked === 0 && unchecked > 0 && currentStatus === done) {
+      newStatus = notStarted;
     }
 
     if (newStatus) {
       await client.updateTaskStatus(child.id, newStatus);
       fixed++;
-      pushLog('info', LOG_SOURCE.panel, `  Status fix: "${child.name}" → ${newStatus}`);
+      pushLog('info', LOG_SOURCE.panel, `  "${child.name}": ${checked}/${total} ACs done — ${currentStatus} → ${newStatus}`);
+    } else {
+      pushLog('info', LOG_SOURCE.panel, `  "${child.name}": ${checked}/${total} ACs done — status "${currentStatus}" is correct`);
     }
   }
 
   return {
     changes: fixed,
-    total: children.length,
+    total: analyzed,
     failed: 0,
-    message: fixed > 0 ? `Fixed status on ${fixed} task(s)` : 'All statuses are consistent'
+    message: fixed > 0 ? `Fixed status on ${fixed} of ${analyzed} task(s)` : `Analyzed ${analyzed} task(s) — all statuses are consistent`
   };
 }
 
@@ -4429,30 +4443,38 @@ async function fixEpicStoriesLogic(client, epicId, children, epicMarkdown) {
 }
 
 /**
- * Verify ACs — Use Claude to verify ACs against codebase for Done tasks.
+ * Verify ACs — Use Claude to verify ACs against codebase for all tasks.
  */
 async function fixEpicAcs(client, children, env) {
-  const doneChildren = children.filter((c) => (c.status || '').trim() === (env.BOARD_STATUS_DONE || 'Done'));
-
-  if (doneChildren.length === 0) {
-    return { changes: 0, total: children.length, failed: 0, message: 'No Done tasks to verify' };
+  // Collect all children that have ACs
+  const tasksWithAcs = [];
+  for (const child of children) {
+    if (!child._filePath) continue;
+    const taskContent = await fs.readFile(child._filePath, 'utf-8');
+    const hasAcs = /^\s*-\s*\[[ xX]\]/m.test(taskContent);
+    if (hasAcs) {
+      tasksWithAcs.push({ child, taskContent });
+    }
   }
+
+  if (tasksWithAcs.length === 0) {
+    return { changes: 0, total: children.length, failed: 0, message: 'No tasks with ACs to verify' };
+  }
+
+  pushLog('info', LOG_SOURCE.panel, `  Found ${tasksWithAcs.length} task(s) with ACs to verify`);
 
   let verified = 0;
   let failed = 0;
 
-  for (const child of doneChildren) {
-    if (!child._filePath) continue;
-    const taskContent = await fs.readFile(child._filePath, 'utf-8');
-
-    // Check if task has any ACs at all
-    const hasAcs = /^\s*-\s*\[[ xX]\]/m.test(taskContent);
-    if (!hasAcs) continue;
+  for (const { child, taskContent } of tasksWithAcs) {
+    const unchecked = (taskContent.match(/^\s*-\s*\[ \]\s+/gm) || []).length;
+    const checked = (taskContent.match(/^\s*-\s*\[x\]\s+/gim) || []).length;
+    const status = (child.status || '').trim();
 
     const prompt = buildFixTaskPrompt(child.id, child.name, taskContent, child._filePath);
 
     try {
-      pushLog('info', LOG_SOURCE.panel, `  Verifying ACs for "${child.name}"...`);
+      pushLog('info', LOG_SOURCE.panel, `  Verifying "${child.name}" (${checked}/${checked + unchecked} ACs, status: ${status})...`);
       await runClaudePromptViaApi(prompt, env.CLAUDE_DEFAULT_MODEL || 'claude-sonnet-4-5-20250929', 180000);
       verified++;
       pushLog('info', LOG_SOURCE.panel, `  AC verification complete for "${child.name}"`);
@@ -4464,9 +4486,9 @@ async function fixEpicAcs(client, children, env) {
 
   return {
     changes: verified,
-    total: doneChildren.length,
+    total: tasksWithAcs.length,
     failed,
-    message: verified > 0 ? `Verified ACs on ${verified} Done task(s)` : 'No ACs needed verification'
+    message: verified > 0 ? `Verified ACs on ${verified} task(s)` : 'No ACs needed verification'
   };
 }
 
