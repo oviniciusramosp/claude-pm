@@ -4280,9 +4280,9 @@ function formatBrainstormLog(messages, plan, epicNames) {
   const dateStr = now.toISOString().replace('T', ' ').slice(0, 19);
 
   let md = `# Brainstorm Log\n\n`;
-  md += `**Date**: ${dateStr}\n\n`;
+  md += `**Last updated**: ${dateStr}\n\n`;
 
-  if (epicNames.length > 0) {
+  if (epicNames && epicNames.length > 0) {
     md += `**Epics generated**: ${epicNames.join(', ')}\n\n`;
   }
 
@@ -4297,18 +4297,26 @@ function formatBrainstormLog(messages, plan, epicNames) {
   }
 
   if (plan) {
-    md += `---\n\n## Final Plan\n\n${plan}\n`;
+    md += `---\n\n## Plan\n\n${plan}\n`;
   }
 
   return md;
 }
 
+const BRAINSTORM_LOG_NAME = '_brainstorm-log.md';
+
 async function saveBrainstormLog(boardDir, messages, plan, epicNames) {
-  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const fileName = `_brainstorm-log-${ts}.md`;
-  const filePath = path.join(boardDir, fileName);
+  const filePath = path.join(boardDir, BRAINSTORM_LOG_NAME);
   await fs.writeFile(filePath, formatBrainstormLog(messages, plan, epicNames), 'utf8');
-  return fileName;
+  return BRAINSTORM_LOG_NAME;
+}
+
+async function deleteBrainstormLog(boardDir) {
+  try {
+    await fs.unlink(path.join(boardDir, BRAINSTORM_LOG_NAME));
+  } catch {
+    // File may not exist
+  }
 }
 
 function buildPlanToEpicsPrompt(plan, messages, boardContext) {
@@ -4599,6 +4607,13 @@ app.post('/api/ideas/chat', async (req, res) => {
     // Persist session to disk so it survives modal close / server restart
     await saveIdeaSessionToDisk(sessionId, session);
 
+    // Update brainstorm log .md in Board/
+    try {
+      const env2 = await readEnvPairs();
+      const bDir = resolveBoardDir(env2);
+      await saveBrainstormLog(bDir, session.messages, session.plan, null);
+    } catch { /* non-fatal */ }
+
     res.json({
       ok: true,
       sessionId,
@@ -4727,6 +4742,12 @@ app.post('/api/ideas/delete-session', async (req, res) => {
     ideaSessions.delete(sessionId);
   }
   await deleteIdeaSessionFromDisk();
+  // Also remove the brainstorm log
+  try {
+    const env = await readEnvPairs();
+    const bDir = resolveBoardDir(env);
+    await deleteBrainstormLog(bDir);
+  } catch { /* non-fatal */ }
   res.json({ ok: true });
 });
 
