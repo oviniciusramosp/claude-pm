@@ -29,7 +29,7 @@ export class LocalBoardClient {
     }
 
     for (const entry of entries) {
-      if (entry.isFile() && entry.name.endsWith('.md')) {
+      if (entry.isFile() && entry.name.endsWith('.md') && !entry.name.startsWith('_')) {
         const task = await this._parseTaskFile(
           path.join(this.boardDir, entry.name),
           null
@@ -339,7 +339,7 @@ export class LocalBoardClient {
     const epicChildNext = {};
 
     for (const entry of entries) {
-      if (entry.isFile() && entry.name.endsWith('.md')) {
+      if (entry.isFile() && entry.name.endsWith('.md') && !entry.name.startsWith('_')) {
         const m = entry.name.match(/^t(\d+)-/i);
         if (m) maxStandaloneNum = Math.max(maxStandaloneNum, parseInt(m[1], 10));
       } else if (entry.isDirectory()) {
