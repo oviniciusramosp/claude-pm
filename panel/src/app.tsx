@@ -124,7 +124,7 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
   const [chatModel, setChatModel] = useState('claude-sonnet-4-5-20250929');
   const [serviceErrors, setServiceErrors] = useState({ app: null, api: null });
   const [errorModal, setErrorModal] = useState({ open: false, title: '', message: '' });
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1024);
   const [collectedErrors, setCollectedErrors] = useState([]);
   const [debugModalOpen, setDebugModalOpen] = useState(false);
   const [boardRefreshTrigger, setBoardRefreshTrigger] = useState(0);
@@ -686,7 +686,7 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
     >
       {sidebarOpen ? (
         <div
-          className="fixed inset-0 z-30 bg-black/50 transition-opacity lg:hidden"
+          className="fixed inset-0 z-30 bg-black/50 transition-opacity"
           onClick={() => setSidebarOpen(false)}
         />
       ) : null}
@@ -732,8 +732,8 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
         serverInfo={serverInfo}
       />
 
-      <main className="flex min-h-0 max-w-[100vw] flex-1 flex-col overflow-hidden lg:ml-[280px] lg:max-w-[calc(100vw-280px)]">
-        <div className="flex items-center gap-3 border-b border-secondary bg-primary/90 px-4 py-3 backdrop-blur-xl lg:hidden">
+      <main className={cx('flex min-h-0 flex-1 flex-col overflow-hidden transition-[margin,max-width] duration-200', sidebarOpen ? 'ml-[280px] max-w-[calc(100vw-280px)]' : 'max-w-[100vw]')}>
+        <div className="flex items-center gap-3 border-b border-secondary bg-primary/90 px-4 py-3 backdrop-blur-xl">
           <button
             type="button"
             className="rounded-sm p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary"
@@ -748,7 +748,7 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
         <div className={cx(
           'mx-auto flex w-full min-h-0 flex-1 flex-col px-4 sm:px-6 lg:px-8',
           activeTab === NAV_TAB_KEYS.feed ? 'overflow-hidden py-3 sm:py-4' : 'overflow-y-auto py-6',
-          activeTab === NAV_TAB_KEYS.board ? 'max-w-[1600px]' : 'max-w-[1200px]'
+          activeTab === NAV_TAB_KEYS.board ? 'max-w-full 2xl:max-w-[1800px]' : 'max-w-[1200px]'
         )}>
           {activeTab === NAV_TAB_KEYS.setup ? (
             <SetupTab

@@ -64,6 +64,7 @@ export function SidebarNav({
   const [workMenuOpen, setWorkMenuOpen] = useState(false);
   const [accessMenuOpen, setAccessMenuOpen] = useState(false);
   const workMenuRef = useRef(null);
+  const accessMenuTriggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!workMenuOpen) return;
@@ -82,13 +83,13 @@ export function SidebarNav({
     <aside
       className={cx(
         'fixed inset-y-0 left-0 z-40 flex w-[280px] flex-col border-r border-secondary bg-primary transition-transform duration-200',
-        sidebarOpen ? 'translate-x-0' : '-translate-x-full',
-        'lg:translate-x-0'
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       )}
     >
       {/* Header — clickable for access menu */}
       <div className="relative px-3 pb-4 pt-5">
         <button
+          ref={accessMenuTriggerRef}
           type="button"
           className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 transition hover:bg-primary_hover"
           onClick={() => setAccessMenuOpen((prev) => !prev)}
@@ -102,7 +103,7 @@ export function SidebarNav({
           </div>
           <Icon icon={ChevronDown} className={cx('ml-auto size-4 shrink-0 text-quaternary transition-transform', accessMenuOpen && 'rotate-180')} />
         </button>
-        <AccessMenu open={accessMenuOpen} onClose={() => setAccessMenuOpen(false)} />
+        <AccessMenu open={accessMenuOpen} onClose={() => setAccessMenuOpen(false)} triggerRef={accessMenuTriggerRef} />
       </div>
 
       {/* Navigation */}

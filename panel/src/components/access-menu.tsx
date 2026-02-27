@@ -14,7 +14,7 @@ interface ServerInfo {
   tunnelError: string | null;
 }
 
-export function AccessMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function AccessMenu({ open, onClose, triggerRef }: { open: boolean; onClose: () => void; triggerRef?: React.RefObject<Element> }) {
   const ref = useRef<HTMLDivElement>(null);
   const [info, setInfo] = useState<ServerInfo | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
@@ -52,17 +52,18 @@ export function AccessMenu({ open, onClose }: { open: boolean; onClose: () => vo
     }).then(setQrDataUrl).catch(() => setQrDataUrl(null));
   }, [info]);
 
-  // Click outside to close
+  // Click outside to close (excluding the trigger button)
   useEffect(() => {
     if (!open) return;
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (ref.current && !ref.current.contains(target) && !(triggerRef?.current && triggerRef.current.contains(target))) {
         onClose();
       }
     }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
-  }, [open, onClose]);
+  }, [open, onClose, triggerRef]);
 
   const accessUrl = info?.tunnelUrl || info?.lanUrl;
 
