@@ -88,11 +88,22 @@ Save findings to: `docs/discoveries/[topic-slug].md`
 - [ ] Commit: `docs(discovery): research [topic]`
 ```
 
+### Model Selection Guide
+
+Choose the Claude model for each task based on its complexity and nature:
+
+- **claude-opus-4-6** — Use for Discovery tasks, complex architectural work, large refactors, tasks requiring deep reasoning or multi-file coordination, and tasks explicitly marked as needing Opus.
+- **claude-sonnet-4-5-20250929** — Use for standard implementation tasks: building features, writing tests, adding endpoints, creating components, bug fixes with clear scope.
+- **claude-haiku-4-5-20251001** — Use for simple/mechanical tasks: config changes, dependency installs, renaming, boilerplate generation, documentation-only tasks, chores.
+
+When in doubt, prefer Sonnet. Only use Opus when the task genuinely requires deeper analysis.
+
 ### For implementation tasks, produce:
 
 - **type**: `UserStory`
 - **name**: Imperative form (e.g., "Implement login form", "Add JWT authentication endpoint")
 - **priority**: P0-P3
+- **model**: Choose based on task complexity (see Model Selection Guide above)
 - **body**: Complete markdown body with this structure:
 
 ```
@@ -176,6 +187,7 @@ name: [Task Name]
 priority: [P0-P3]
 type: UserStory
 status: Not Started
+model: [claude-sonnet-4-5-20250929 or claude-haiku-4-5-20251001 based on complexity]
 ---
 ```
 
@@ -188,8 +200,8 @@ status: Not Started
   - Convert task name to kebab-case slug
   - Examples: `S1-1-research-auth-strategy.md`, `S1-2-implement-login-form.md`, `S2-1-setup-database.md`
   - If Epic has no number in its name, use `S{story}-{slug}.md` (e.g., `S1-research-auth-strategy.md`)
-- Each file must have valid YAML frontmatter with `name`, `priority`, `type`, and `status` fields
-- Discovery tasks must also include `model: claude-opus-4-6` in frontmatter
+- Each file must have valid YAML frontmatter with `name`, `priority`, `type`, `status`, and `model` fields
+- Discovery tasks use `model: claude-opus-4-6`; implementation tasks use Sonnet or Haiku based on complexity (see Model Selection Guide)
 - The `status` must always be `Not Started`
 - Do not modify the `epic.md` file itself
 - After creating all files, list what was created with their filenames and types

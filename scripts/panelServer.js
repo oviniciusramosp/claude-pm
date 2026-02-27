@@ -3660,6 +3660,7 @@ ${boardContext || ''}
 
 4. **For implementation tasks** (type: "UserStory"), use this structure:
    - type: "UserStory"
+   - model: Choose based on task complexity (see <model_selection> below)
    - name: Imperative form (e.g., "Implement login form", "Add JWT authentication endpoint")
    - body structure:
 
@@ -3703,6 +3704,16 @@ ${boardContext || ''}
 12. Avoid narrative language — no "As a user...", no "motivation", no "user experience" sections. Write direct implementation instructions.
 </instructions>
 
+<model_selection>
+Choose the Claude model for each task based on its complexity and nature:
+
+- **claude-opus-4-6** — Use for Discovery tasks, complex architectural work, large refactors, tasks requiring deep reasoning or multi-file coordination, and tasks explicitly marked as needing Opus.
+- **claude-sonnet-4-5-20250929** — Use for standard implementation tasks: building features, writing tests, adding endpoints, creating components, bug fixes with clear scope.
+- **claude-haiku-4-5-20251001** — Use for simple/mechanical tasks: config changes, dependency installs, renaming, boilerplate generation, documentation-only tasks, chores.
+
+When in doubt, prefer Sonnet. Only use Opus when the task genuinely requires deeper analysis.
+</model_selection>
+
 <ac_rules>
 STRICT rules for Acceptance Criteria in every story:
 
@@ -3730,6 +3741,7 @@ Each element must have:
 - "name": string (task name, imperative form)
 - "priority": string ("P0", "P1", "P2", or "P3")
 - "type": string ("Discovery" or "UserStory") — defaults to "UserStory" if omitted
+- "model": string (Claude model ID — see <model_selection> above)
 - "body": string (complete markdown body with \\n for newlines)
 
 Example:
@@ -3738,12 +3750,14 @@ Example:
     "name": "Research authentication strategy",
     "priority": "P0",
     "type": "Discovery",
+    "model": "claude-opus-4-6",
     "body": "# Research Authentication Strategy\\n\\nResearch and document the recommended authentication approach for this project.\\n\\n## Research Questions\\n- [ ] JWT vs session-based auth trade-offs\\n- [ ] Recommended token storage strategy\\n\\n## Acceptance Criteria\\n- [ ] Research document created at \`docs/discoveries/auth-strategy.md\`\\n- [ ] Document includes comparison with pros/cons\\n- [ ] Document includes clear recommendation\\n\\n## Output\\nSave findings to: \`docs/discoveries/auth-strategy.md\`\\n\\n## Dependencies\\n- None\\n\\n## Completion\\n- [ ] Research document created\\n- [ ] Commit: \`docs(discovery): research auth strategy\`"
   },
   {
     "name": "Implement JWT authentication endpoint",
     "priority": "P1",
     "type": "UserStory",
+    "model": "claude-sonnet-4-5-20250929",
     "body": "# Implement JWT Authentication Endpoint\\n\\nCreate a POST \`/api/auth/login\` endpoint that validates credentials and returns a signed JWT token. Include refresh token rotation and httpOnly cookie storage.\\n\\n## Acceptance Criteria\\n- [ ] POST /api/auth/login accepts email and password\\n- [ ] Returns signed JWT on valid credentials\\n- [ ] Returns 401 with error message on invalid credentials\\n\\n## Implementation\\n1. Create \`src/routes/auth.ts\` with login endpoint\\n2. Add JWT signing using jsonwebtoken package\\n3. Implement credential validation against user store\\n\\n## Tests\\n- File: \`__tests__/routes/auth.test.ts\`\\n- Valid credentials return 200 with token\\n- Invalid credentials return 401\\n\\n## Dependencies\\n- See \`docs/discoveries/auth-strategy.md\`\\n\\n## Completion\\n- [ ] Tests pass\\n- [ ] Build passes\\n- [ ] Commit: \`feat(auth): implement JWT login endpoint\`"
   }
 ]
@@ -4052,8 +4066,11 @@ app.post('/api/board/generate-stories', async (req, res) => {
       try {
         const fileName = generateStoryFileName(epicId, i, story.name);
         const taskFields = { name: story.name, priority: story.priority, type: story.type || 'UserStory', status: 'Not Started' };
-        // Discovery tasks use Opus for deeper research analysis
-        if (story.type === 'Discovery') {
+        // Apply model from Claude's response (all tasks should have a model defined)
+        if (story.model) {
+          taskFields.model = story.model;
+        } else if (story.type === 'Discovery') {
+          // Fallback: Discovery tasks default to Opus if model not specified
           taskFields.model = 'claude-opus-4-6';
         }
         await client.createTask(
