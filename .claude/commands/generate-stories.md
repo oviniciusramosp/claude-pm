@@ -1,6 +1,6 @@
 # Generate Tasks from Epic
 
-Analyze an Epic description and automatically create **Discovery tasks and User Story** `.md` files inside the Epic folder, following agile methodology.
+Analyze an Epic description and automatically create **Discovery tasks and implementation task** `.md` files inside the Epic folder. Tasks are optimized for autonomous execution by Claude Code — not for human consumption.
 
 ## Usage
 
@@ -20,7 +20,7 @@ Provide the path to an Epic folder (e.g., `Epic-Auth`) or the `epic.md` file ins
    - Read its `epic.md` file and extract the Epic name, status, and first ~500 characters of its goal/scope description.
    - List its child story file names and their status (from YAML frontmatter).
    Use this information to avoid generating tasks that overlap with work in other epics. If you identify dependencies between the current Epic and another Epic, note them in the generated tasks' Dependencies sections.
-5. Analyze the Epic description and generate tasks using the agile methodology and criteria below.
+5. Analyze the Epic description and generate tasks using the methodology and criteria below.
 6. **Show the user a summary** of all tasks to be created (type, name, priority, 1-line description) and **ask for confirmation** before writing files.
 7. If confirmed, create each task as a `.md` file inside the Epic folder with proper YAML frontmatter and markdown body.
 8. Use the numbered filename pattern `S{epic}-{story}-{slug}.md` where:
@@ -30,28 +30,28 @@ Provide the path to an Epic folder (e.g., `Epic-Auth`) or the `epic.md` file ins
    - Example: For Epic-1, first task "Research Auth Strategy" → `S1-1-research-auth-strategy.md`
    - If Epic has no number, use pattern `S{story}-{slug}.md` (e.g., `S1-research-auth-strategy.md`)
 
-## Agile Methodology
+## Methodology
 
-Follow these agile principles when generating tasks:
+Each task will be executed autonomously by Claude Code in a single session. Write instructions as direct orders — not agile ceremonies.
 
 ### Discovery-First Approach
-- For complex features where the implementation approach is unclear (choice of library, architecture pattern, API design, etc.), create a **Discovery task BEFORE the implementation story**.
+- For complex features where the implementation approach is unclear (choice of library, architecture pattern, API design, etc.), create a **Discovery task BEFORE the implementation task**.
 - Discovery tasks (type: `Discovery`) research and document the recommended approach. They use `model: claude-opus-4-6` for deeper analysis.
-- The Discovery task output MUST be saved to a markdown file inside the project (e.g., `docs/discoveries/auth-strategy.md`). This file becomes the reference for subsequent User Stories.
-- The User Story that follows a Discovery task MUST reference the Discovery output file in its Dependencies section.
+- The Discovery task output MUST be saved to a markdown file inside the project (e.g., `docs/discoveries/auth-strategy.md`). This file becomes the reference for subsequent tasks.
+- Tasks that follow a Discovery MUST reference the Discovery output file in their Dependencies section.
 
 ### When to Use Discovery vs Inline Research
 - **Use a Discovery task** for complex decisions: choosing frameworks/libraries, defining API contracts, architectural patterns, database schema design, integration strategies.
-- **Use inline ACs** (within a UserStory) for simpler research: checking if a package exists, reading existing code to understand a pattern, minor technology choices.
+- **Use inline ACs** (within a task) for simpler research: checking if a package exists, reading existing code to understand a pattern, minor technology choices.
 
 ### Incremental Delivery
 - Order tasks so each builds on the previous one — never assume something exists that hasn't been built yet.
-- Each task should produce a working, testable increment of the product.
+- Each task should produce a working, testable increment.
 - Earlier tasks lay foundations; later tasks add features on top.
 
 ## Task Generation Criteria
 
-You are a senior product manager and prompt engineering expert following agile methodology. Analyze the Epic and break it down into an incremental sequence of Discovery tasks and User Stories.
+You are a technical architect breaking down an Epic into executable tasks for Claude Code. Analyze the Epic and produce an incremental sequence of Discovery tasks and implementation tasks.
 
 ### For Discovery tasks, produce:
 
@@ -64,7 +64,7 @@ You are a senior product manager and prompt engineering expert following agile m
 ```
 # [Discovery Name]
 
-**Goal**: Research and document the recommended approach for [topic].
+Research and document the recommended approach for [topic].
 
 ## Research Questions
 - [ ] What are the available options for [topic]?
@@ -83,63 +83,62 @@ Save findings to: `docs/discoveries/[topic-slug].md`
 ## Dependencies
 - None (or list if depends on another Discovery)
 
-## Standard Completion Criteria
+## Completion
 - [ ] Research document created and complete
 - [ ] Commit: `docs(discovery): research [topic]`
 ```
 
-### For User Stories, produce:
+### For implementation tasks, produce:
 
 - **type**: `UserStory`
-- **name**: Imperative form (e.g., "Implement login form")
+- **name**: Imperative form (e.g., "Implement login form", "Add JWT authentication endpoint")
 - **priority**: P0-P3
 - **body**: Complete markdown body with this structure:
 
 ```
-# [Story Name]
+# [Task Name]
 
-**User Story**: As a [role], I want [goal] so that [benefit].
+[1-3 sentences: imperative description of what to build. Be specific about scope and expected outcome. No "As a user..." format.]
 
 ## Acceptance Criteria
-- [ ] First acceptance criterion (specific, testable, checkbox format)
-- [ ] Second acceptance criterion
-(... typically 3-8 per story)
+- [ ] [Technically verifiable condition — checkable by tests, build, or code inspection]
+(3-8 ACs per task. Each must be specific, verifiable, and actionable.)
 
-## Technical Tasks
-1. First implementation step with specific file paths when possible
-2. Second implementation step
-(... numbered, sequential steps)
+## Implementation
+1. [Step with specific file path] (e.g., "Create `src/components/LoginForm.tsx`")
+2. [Step with specific change] (e.g., "Add form validation using zod schema")
+(Numbered, sequential. Each step is a concrete action Claude Code executes.)
 
 ## Tests
-- Describe automated tests to write (unit, integration, e2e)
-- Mention specific test file paths if applicable
-- Or "N/A — infrastructure task" if no tests needed
+- File: `[specific test file path]`
+- [Specific test case 1]
+- [Specific test case 2]
+- Or "N/A — infrastructure/research task"
 - NEVER include manual testing steps
 
 ## Dependencies
-- Reference Discovery output files if applicable (e.g., "See `docs/discoveries/auth-strategy.md` for implementation approach")
-- List any other prerequisites or blocking tasks
+- Reference Discovery output files if applicable (e.g., "See `docs/discoveries/auth-strategy.md`")
+- List other prerequisites or blocking tasks
 - Or "None" if standalone
 
-## Standard Completion Criteria
-- [ ] Automated tests written and passing (or N/A)
-- [ ] TypeScript compiles without errors
-- [ ] Linter passes
-- [ ] Commit message follows conventional commits format
+## Completion
+- [ ] Tests pass (or N/A)
+- [ ] Build passes
+- [ ] Commit: `type(scope): description`
 ```
 
 ### Rules
 
 1. **DO NOT duplicate** tasks that already exist as children of the Epic.
 2. **Cross-epic awareness**: Review other epics' scope and stories on the board. Do NOT generate tasks that duplicate work in other epics. Note cross-epic dependencies in the Dependencies section.
-3. Each task should be small enough for a single developer to complete in one session.
-4. **Order tasks incrementally**: Discoveries first, then foundational stories, then features that build on them.
+3. Each task should be completable by Claude Code in a single session.
+4. **Order tasks incrementally**: Discoveries first, then foundational tasks, then features that build on them.
 5. Generate between 2 and 15 tasks. Do not generate more than 15.
 6. Use imperative language: "Research X", "Implement Y", "Add Z", "Create W".
-7. Each acceptance criterion must be specific and testable — avoid vague ACs like "works correctly".
-8. Include UI behavior, data validation, error handling, and edge cases in ACs.
-9. Reference specific file paths in technical tasks when possible.
-10. **NEVER include manual tests** — only automated tests (unit, integration, e2e).
+7. Each acceptance criterion must be technically verifiable — avoid vague ACs like "works correctly".
+8. Reference specific file paths in implementation steps when possible.
+9. **NEVER include manual tests** — only automated tests (unit, integration, e2e).
+10. No "As a user..." or "User Story" format — write direct implementation instructions.
 
 ### YAML Frontmatter for Discovery tasks
 
@@ -153,11 +152,11 @@ model: claude-opus-4-6
 ---
 ```
 
-### YAML Frontmatter for User Story tasks
+### YAML Frontmatter for implementation tasks
 
 ```yaml
 ---
-name: [Story Name]
+name: [Task Name]
 priority: [P0-P3]
 type: UserStory
 status: Not Started

@@ -1,6 +1,6 @@
 # Review Task with Claude
 
-Review and optimize a task file for the Product Manager automation system.
+Review and optimize a task file for the Product Manager automation system. Tasks are executed by Claude Code — the output must be optimized for automated execution, not human consumption.
 
 ## Usage
 
@@ -21,66 +21,78 @@ Provide the path to a `.md` task file (relative to the Board directory or absolu
 
 ## Review Criteria
 
-You are an expert prompt engineer and product manager reviewing a task for a Claude Code automation system. This task will be executed by Claude Code — the quality of the task file directly determines execution success.
+You are a technical architect reviewing a task for a Claude Code automation system. This task will be executed autonomously by Claude Code — write instructions as direct orders, not agile ceremonies. The quality of the task file directly determines execution success.
 
 ### 1. Acceptance Criteria Quality (type-specific)
 
-Each AC must be a markdown checkbox: `- [ ] Description`. Each AC must be testable, specific, and unambiguous. Avoid vague ACs like "works correctly" — specify exact behavior.
+Each AC must be a markdown checkbox: `- [ ] Description`. Each AC must be technically verifiable and unambiguous. Avoid vague ACs like "works correctly" — specify exact verifiable behavior.
 
 **By task type:**
 
-- **Epic**: Focus on **specific, observable product behaviors** — not technical implementation details. Each AC should map clearly to one or more child tasks (Discovery or UserStory). Be thorough and cover edge cases and error scenarios. Typically 5-10 ACs for an Epic. Flag items that need Discovery with "(needs Discovery)" in the Scope or Technical Approach sections.
-- **UserStory**: Focus on specific, testable behaviors and technical requirements. Include UI behavior, data validation, error handling, and edge cases. Reference specific elements when applicable. Typically 4-10 ACs.
-- **Bug**: First AC: reproduction steps that currently fail. Second AC: expected behavior after fix. Additional ACs: edge cases and regression test requirements. Typically 3-6 ACs.
-- **Chore**: Focus on operational outcomes and verification steps. Include verification (e.g., "Build passes without warnings"). Typically 2-5 ACs.
-- **Discovery**: Focus on research outcomes and documentation deliverables. Each AC describes a specific question answered or artifact produced. Output must be saved to a `.md` file (e.g., `docs/discoveries/[topic].md`). Typically 3-6 ACs.
+- **Epic**: Focus on **technically verifiable conditions** — checkable by automated tests, build commands, or code inspection. Each AC should map to one or more child tasks. Be thorough and cover error handling, edge cases, data validation. Typically 5-10 ACs. Flag items needing Discovery with "(needs Discovery)" in Scope or Technical Approach.
+- **UserStory**: Focus on technically verifiable conditions. Include data validation, error handling, edge cases. Reference specific endpoints, components, or behaviors. Typically 3-8 ACs.
+- **Bug**: First AC: expected behavior after fix. Additional ACs: edge cases and regression tests. Typically 3-6 ACs.
+- **Chore**: Operational outcomes and verification commands (e.g., "Build passes without warnings"). Typically 2-5 ACs.
+- **Discovery**: Research outcomes and documentation deliverables. Output saved to `docs/discoveries/[topic].md`. Typically 3-6 ACs.
 
 ### 2. Task Description Clarity
 
-- **UserStory**: Use "As a [role], I want [goal] so that [benefit]"
-- **Epic**: Describe the high-level business goal with **specific product behaviors**. Be detailed enough that each scope item can be directly mapped to child tasks. Flag areas needing Discovery.
-- **Bug**: Include actual behavior, expected behavior, and reproduction steps
-- **Chore**: Describe the operational goal clearly
-- **Discovery**: Frame the research question, list alternatives to evaluate, and specify the output file path
+- **UserStory**: Start with 1-3 imperative sentences describing what to build. Be specific about scope and expected outcome. Do NOT use "As a [role], I want..." format — write direct implementation instructions.
+- **Epic**: Start with "**Goal**:" — concise technical description of what the epic delivers. No narrative.
+- **Bug**: Include actual behavior, expected behavior, and reproduction steps.
+- **Chore**: Describe the operational goal with direct imperative instructions.
+- **Discovery**: State the research goal directly, list alternatives to evaluate, specify output file path.
 
-### 3. Technical Tasks Section
+### 3. Implementation Section (non-Epic)
 
-- For **Epics**: List high-level Technical Approach with architectural decisions. Flag items that need Discovery with "(needs Discovery)" suffix.
-- For **Discovery**: List research questions and evaluation criteria.
-- For **other types**: Break implementation into numbered, sequential steps. Reference specific file paths when possible. Each step should be actionable by Claude Code.
+- Break implementation into numbered, sequential steps
+- Reference specific file paths when possible
+- Each step should be a concrete action Claude Code executes
+- Include commands when relevant (e.g., "Run `npm install react-hook-form`")
 
 ### 4. Tests Section
 
 - **CRITICAL**: NEVER include manual tests or manual QA steps. Only automated tests.
-- For **Epics**: Do NOT include a Tests section. Testing is handled at the child task level.
+- For **Epics**: Do NOT include a Tests section. Testing is handled at child task level.
 - For **Discovery**: "N/A — research task, no automated tests"
-- For **other types**: Specify test file path, list specific automated test cases (unit, integration, e2e), include edge case tests. For infrastructure/chore tasks, state "N/A — no business logic to test"
+- For **other types**: Specify test file path, list specific automated test cases, include edge case tests. For infrastructure/chore tasks: "N/A — no business logic to test"
 
 ### 5. Dependencies Section
 
-- List prerequisites, blocking tasks, or required packages
-- For tasks following a Discovery: reference the Discovery output file (e.g., "See `docs/discoveries/auth-strategy.md` for implementation approach")
+- List prerequisites, blocking tasks, required packages
+- For tasks following a Discovery: reference the Discovery output file (e.g., "See `docs/discoveries/auth-strategy.md`")
 - Include dependencies on other epics when applicable (check board context)
-- State "None" if there are no dependencies
+- State "None" if no dependencies
 
-### 6. Standard Completion Criteria
+### 6. Completion Section (non-Epic)
 
-Include checkboxes for: automated tests passing, TypeScript compilation, linting. Include a commit message suggestion following conventional commits: `feat|fix|chore|docs(scope): description`.
+Include checkboxes for: tests passing, build passing. Include a commit message following conventional commits: `type(scope): description`.
 
-### 7. Prompt Optimization for Claude Code
+### 7. Claude Code Optimization
 
 - Instructions must be explicit — Claude Code executes literally
 - Avoid ambiguous language ("consider", "maybe", "if possible")
 - Use imperative language ("Create", "Add", "Implement", "Run", "Research")
+- No "As a user..." or "User Story" format — write direct instructions
+- Use section header "## Implementation" (not "## Technical Tasks")
+- Use section header "## Completion" (not "## Standard Completion Criteria")
 - Structure content with clear markdown headers (##)
-- If the task involves modifying existing files, specify which files and what changes
 
-### 8. Cross-Epic Consistency (Epic type only)
+### 8. Epic-Specific Format
+
+**Required sections for Epics** (in order): `# [Name] Epic`, `**Goal**: ...`, `## Scope`, `## Acceptance Criteria`, `## Technical Approach`, `## Dependencies`, `## Child Tasks`.
+
+**Sections to NEVER include in an Epic:**
+- "Motivation & Objectives", "User Experience & Design", "Open Questions & Risks"
+- "User Story" / "As a [role], I want..."
+- "Implementation" with numbered steps, "Tests", "Completion"
+- Manual testing references
+
+### 9. Cross-Epic Consistency (Epic type only)
 
 - Compare scope and ACs against other epics on the board
 - Flag scope overlaps or redundant acceptance criteria
 - Suggest dependencies where the Epic interacts with other epics
-- Ensure naming and abstraction level are consistent with the backlog
 
 ## Output Rules
 
