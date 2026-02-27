@@ -1,12 +1,14 @@
 // panel/src/components/idea-to-epics-modal.tsx
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Lightbulb02, Send01, RefreshCw01, X, Edit05, Check, File06, ChevronRight } from '@untitledui/icons';
+import { Lightbulb02, Send01, RefreshCw01, X, Edit05, Check, File06, ChevronRight, User01, Asterisk02 } from '@untitledui/icons';
 import { marked } from 'marked';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Tooltip, TooltipTrigger } from '@/components/base/tooltip/tooltip';
+import { SourceAvatar } from './source-avatar';
 import { Icon } from './icon';
+import type { LogSourceMeta } from '../types';
 
 interface IdeaToEpicsModalProps {
   open: boolean;
@@ -496,6 +498,23 @@ function parseMarkdownSafe(content: string): string {
   }
 }
 
+const USER_AVATAR_META: LogSourceMeta = {
+  label: 'You',
+  icon: User01,
+  side: 'outgoing',
+  avatarInitials: 'YO',
+  directClaude: false
+};
+
+const ASSISTANT_AVATAR_META: LogSourceMeta = {
+  label: 'Claude',
+  icon: Asterisk02,
+  side: 'incoming',
+  avatarInitials: 'CL',
+  avatarColor: '#d97757',
+  directClaude: true
+};
+
 function MessageBubble({ message }: { message: ChatMessage }): React.JSX.Element {
   if (message.role === 'system') {
     return (
@@ -512,18 +531,20 @@ function MessageBubble({ message }: { message: ChatMessage }): React.JSX.Element
 
   if (message.role === 'user') {
     return (
-      <div className="flex justify-end">
-        <div className="max-w-[80%] rounded-lg rounded-tr-sm bg-brand-600 px-4 py-3 text-sm text-white">
+      <div className="flex items-end justify-end gap-2">
+        <div className="max-w-[75%] rounded-lg rounded-br-sm bg-brand-600 px-4 py-3 text-sm text-white">
           <p className="whitespace-pre-wrap">{message.content}</p>
         </div>
+        <SourceAvatar sourceMeta={USER_AVATAR_META} />
       </div>
     );
   }
 
   // Assistant message
   return (
-    <div className="flex justify-start">
-      <div className="max-w-[80%] rounded-lg rounded-tl-sm bg-secondary px-4 py-3 text-sm text-primary">
+    <div className="flex items-end justify-start gap-2">
+      <SourceAvatar sourceMeta={ASSISTANT_AVATAR_META} />
+      <div className="max-w-[75%] rounded-lg rounded-bl-sm bg-secondary px-4 py-3 text-sm text-primary">
         <div
           className="[&_p]:my-1 [&_ul]:my-1 [&_li]:my-0 [&_ul]:list-disc [&_ul]:pl-4 [&_strong]:font-semibold [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold"
           dangerouslySetInnerHTML={{ __html: parseMarkdownSafe(message.content) }}
