@@ -192,9 +192,9 @@ async function loadIdeaSessionFromDisk() {
 const IDEA_SESSION_ARCHIVE_DIR = path.join(cwd, '.data', 'idea-sessions');
 
 /**
- * Archive the active session file by renaming it with a timestamp.
- * The archived file is moved to .data/idea-sessions/ so the modal
- * no longer loads it, but the history is preserved.
+ * Archive the active session file with enriched metadata.
+ * The archived file is saved to .data/idea-sessions/ with archivedAt
+ * and epicNames fields so the history picker can display useful info.
  */
 async function archiveIdeaSession(epicNames) {
   try {
@@ -205,6 +205,13 @@ async function archiveIdeaSession(epicNames) {
 
   try {
     await fs.mkdir(IDEA_SESSION_ARCHIVE_DIR, { recursive: true });
+
+    // Read and enrich with archive metadata
+    const content = await fs.readFile(IDEA_SESSION_FILE, 'utf8');
+    const session = JSON.parse(content);
+    session.archivedAt = Date.now();
+    session.epicNames = epicNames || [];
+
     const now = new Date();
     const ts = now.toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
     const slug = (epicNames && epicNames.length > 0)
@@ -212,10 +219,13 @@ async function archiveIdeaSession(epicNames) {
       : '';
     const archiveName = `session_${ts}${slug}.json`;
     const archivePath = path.join(IDEA_SESSION_ARCHIVE_DIR, archiveName);
-    await fs.rename(IDEA_SESSION_FILE, archivePath);
+
+    // Write enriched archive (instead of just renaming)
+    await fs.writeFile(archivePath, JSON.stringify(session, null, 2), 'utf8');
+    try { await fs.unlink(IDEA_SESSION_FILE); } catch { /* ignore */ }
     return archiveName;
-  } catch (err) {
-    // Fallback: delete if rename fails
+  } catch {
+    // Fallback: delete active file if archiving fails
     try { await fs.unlink(IDEA_SESSION_FILE); } catch { /* ignore */ }
     return null;
   }
@@ -5086,6 +5096,79 @@ app.get('/api/ideas/session', async (_req, res) => {
     messages: saved.messages || [],
     plan: saved.plan || ''
   });
+});
+
+// List archived brainstorm sessions for the history picker
+app.get('/api/ideas/sessions/archived', async (_req, res) => {
+  try {
+    await fs.mkdir(IDEA_SESSION_ARCHIVE_DIR, { recursive: true });
+    const files = await fs.readdir(IDEA_SESSION_ARCHIVE_DIR);
+    const sessions = [];
+
+    for (const file of files) {
+      if (!file.endsWith('.json')) continue;
+      try {
+        const content = await fs.readFile(path.join(IDEA_SESSION_ARCHIVE_DIR, file), 'utf8');
+        const data = JSON.parse(content);
+        sessions.push({
+          fileName: file,
+          sessionId: data.sessionId,
+          createdAt: data.createdAt,
+          archivedAt: data.archivedAt || null,
+          epicNames: data.epicNames || [],
+          messageCount: (data.messages || []).length,
+          planPreview: (data.plan || '').slice(0, 200),
+          hasPlan: !!(data.plan && data.plan.trim())
+        });
+      } catch { /* skip corrupt files */ }
+    }
+
+    sessions.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    res.json({ ok: true, sessions });
+  } catch (error) {
+    res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+// Load an archived session as a new active session (archive file stays intact)
+app.post('/api/ideas/sessions/load', async (req, res) => {
+  const { fileName } = req.body;
+  if (!fileName || typeof fileName !== 'string') {
+    res.status(400).json({ ok: false, message: 'fileName is required.' });
+    return;
+  }
+
+  // Sanitize to prevent path traversal
+  const sanitized = path.basename(fileName);
+  const archivePath = path.join(IDEA_SESSION_ARCHIVE_DIR, sanitized);
+
+  try {
+    const content = await fs.readFile(archivePath, 'utf8');
+    const archived = JSON.parse(content);
+
+    const newSessionId = crypto.randomUUID();
+    const session = {
+      messages: archived.messages || [],
+      plan: archived.plan || '',
+      createdAt: Date.now()
+    };
+
+    ideaSessions.set(newSessionId, session);
+    await saveIdeaSessionToDisk(newSessionId, session);
+
+    pushLog('info', LOG_SOURCE.panel, `Loaded archived session: ${sanitized}`);
+
+    res.json({
+      ok: true,
+      sessionId: newSessionId,
+      messages: session.messages,
+      plan: session.plan
+    });
+  } catch (error) {
+    const status = error.code === 'ENOENT' ? 404 : 500;
+    const msg = error.code === 'ENOENT' ? 'Archived session not found.' : error.message;
+    res.status(status).json({ ok: false, message: msg });
+  }
 });
 
 app.post('/api/ideas/chat', async (req, res) => {
