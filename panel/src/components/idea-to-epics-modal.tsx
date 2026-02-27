@@ -1,12 +1,11 @@
 // panel/src/components/idea-to-epics-modal.tsx
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Lightbulb02, Send01, RefreshCw01, X, Edit05, Check, File06 } from '@untitledui/icons';
 import { marked } from 'marked';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
-import { DiscardConfirmOverlay } from './discard-confirm-overlay';
 
 interface IdeaToEpicsModalProps {
   open: boolean;
@@ -40,7 +39,6 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
 
   // Plan state
   const [plan, setPlan] = useState('');
@@ -50,7 +48,6 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const messageCountAtLoad = useRef(1); // Track initial message count to detect new changes
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -75,8 +72,6 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
     setPlanDirty(false);
     setSending(false);
     setGenerating(false);
-    setConfirmCloseOpen(false);
-
     // Try to restore a saved session from disk
     (async () => {
       try {
@@ -92,7 +87,6 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
             }
           }
           setMessages(restored);
-          messageCountAtLoad.current = restored.length;
           setPlan(data.plan || '');
           setEditDraft(data.plan || '');
           return;
@@ -103,38 +97,16 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
       // No saved session — start fresh
       setSessionId(null);
       setMessages([{ role: 'system', content: SYSTEM_WELCOME }]);
-      messageCountAtLoad.current = 1;
       setPlan('');
     })();
   }, [open, apiBaseUrl]);
 
-  const isDirty = useMemo(() => messages.length > messageCountAtLoad.current || planDirty, [messages, planDirty]);
-  const hasConversation = useMemo(() => messages.some(m => m.role === 'assistant'), [messages]);
+  const hasConversation = messages.some(m => m.role === 'assistant');
 
   const handleCloseAttempt = useCallback(() => {
-    if (sending || generating || isDirty) {
-      setConfirmCloseOpen(true);
-    } else {
-      onClose();
-    }
-  }, [sending, generating, isDirty, onClose]);
-
-  const handleConfirmDiscard = useCallback(async () => {
-    // Clean up session on server
-    if (sessionId) {
-      try {
-        await fetch(`${apiBaseUrl}/api/ideas/delete-session`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId })
-        });
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
-    setConfirmCloseOpen(false);
+    if (sending || generating) return; // Block close while in-flight
     onClose();
-  }, [sessionId, apiBaseUrl, onClose]);
+  }, [sending, generating, onClose]);
 
   const handleSend = useCallback(async () => {
     const msg = draft.trim();
@@ -262,7 +234,6 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
   }, []);
 
   return (
-    <>
       <ModalOverlay isOpen={open} onOpenChange={(nextOpen) => { if (!nextOpen) handleCloseAttempt(); }} isDismissable={!sending && !generating}>
         <Modal className="sm:max-w-6xl">
           <Dialog>
@@ -441,14 +412,6 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
           </Dialog>
         </Modal>
       </ModalOverlay>
-
-      <DiscardConfirmOverlay
-        open={confirmCloseOpen}
-        reviewing={sending || generating}
-        onKeepEditing={() => setConfirmCloseOpen(false)}
-        onDiscard={handleConfirmDiscard}
-      />
-    </>
   );
 }
 
