@@ -949,32 +949,26 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
         <div className="flex items-center gap-2 min-w-0">
           <Icon icon={Columns03} className="size-5 shrink-0 text-tertiary" />
           <h2 className="truncate text-lg font-semibold text-primary">Board</h2>
-          {totalCount > 0 && (
-            <Badge size="sm" color="gray">{totalCount}</Badge>
-          )}
         </div>
-        <div className="flex items-center gap-1 shrink-0 sm:gap-3">
-          {lastRefreshed && (
-            <span className="hidden text-xs text-quaternary sm:inline">
-              Updated {lastRefreshed.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-            </span>
-          )}
+        <div className="flex items-center gap-1 shrink-0 sm:gap-2">
           <Tooltip title="Idea to Epics" description="Brainstorm product ideas with Claude and generate Epics">
             <TooltipTrigger
               onPress={() => setIdeaModalOpen(true)}
               aria-label="Idea to Epics"
-              className="rounded-sm p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary"
+              className="flex h-7 items-center gap-1.5 rounded-sm px-2 text-xs text-tertiary transition hover:bg-primary_hover hover:text-secondary"
             >
-              <Lightbulb02 className="size-4" />
+              <Lightbulb02 className="size-3.5" />
+              <span>Plan</span>
             </TooltipTrigger>
           </Tooltip>
           <Tooltip title="Create task" description="Create a new task or epic">
             <TooltipTrigger
               onPress={() => { setCreateDefaultEpicId(undefined); setCreateModalOpen(true); }}
               aria-label="Create new task"
-              className="rounded-sm p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary"
+              className="flex h-7 items-center gap-1.5 rounded-sm px-2 text-xs text-tertiary transition hover:bg-primary_hover hover:text-secondary"
             >
-              <Plus className="size-4" />
+              <Plus className="size-3.5" />
+              <span>Task</span>
             </TooltipTrigger>
           </Tooltip>
           <Tooltip title="Fix board order" description="Fix epic and story numbering to ensure sequential ordering">
@@ -987,7 +981,10 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
               <Tool01 className={cx('size-4', fixing && 'animate-spin')} />
             </TooltipTrigger>
           </Tooltip>
-          <Tooltip title="Refresh board" description="Refresh the board to see the latest task updates">
+          <Tooltip
+            title="Refresh board"
+            description={lastRefreshed ? `Updated at ${lastRefreshed.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : 'Refresh the board to see the latest task updates'}
+          >
             <TooltipTrigger
               onPress={() => fetchBoard()}
               isDisabled={refreshing}
