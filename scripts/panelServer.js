@@ -4275,6 +4275,42 @@ async function writeProjectContextToClaudeMd(projectContext, workdir) {
   return 'appended';
 }
 
+function formatBrainstormLog(messages, plan, epicNames) {
+  const now = new Date();
+  const dateStr = now.toISOString().replace('T', ' ').slice(0, 19);
+
+  let md = `# Brainstorm Log\n\n`;
+  md += `**Date**: ${dateStr}\n\n`;
+
+  if (epicNames.length > 0) {
+    md += `**Epics generated**: ${epicNames.join(', ')}\n\n`;
+  }
+
+  md += `---\n\n## Conversation\n\n`;
+
+  for (const m of messages) {
+    if (m.role === 'user') {
+      md += `### User\n\n${m.content}\n\n`;
+    } else if (m.role === 'assistant') {
+      md += `### Claude\n\n${m.content}\n\n`;
+    }
+  }
+
+  if (plan) {
+    md += `---\n\n## Final Plan\n\n${plan}\n`;
+  }
+
+  return md;
+}
+
+async function saveBrainstormLog(boardDir, messages, plan, epicNames) {
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const fileName = `_brainstorm-log-${ts}.md`;
+  const filePath = path.join(boardDir, fileName);
+  await fs.writeFile(filePath, formatBrainstormLog(messages, plan, epicNames), 'utf8');
+  return fileName;
+}
+
 function buildPlanToEpicsPrompt(plan, messages, boardContext) {
   const conversationBlock = messages
     .map((m) => `[${m.role === 'user' ? 'User' : 'Assistant'}]\n${m.content}`)
@@ -4646,6 +4682,15 @@ app.post('/api/ideas/generate-epics', async (req, res) => {
 
     const summary = `Generated ${created.length} Epics from brainstorm${failed > 0 ? ` (${failed} failed)` : ''}`;
     pushLog('success', LOG_SOURCE.claude, summary);
+
+    // Save brainstorm conversation log as a permanent .md file in Board/
+    try {
+      const epicNames = created.map((e) => e.name);
+      const logFileName = await saveBrainstormLog(boardDir, session.messages, plan, epicNames);
+      pushLog('info', LOG_SOURCE.panel, `Brainstorm log saved: ${logFileName}`);
+    } catch (err) {
+      pushLog('warn', LOG_SOURCE.panel, `Failed to save brainstorm log: ${err.message}`);
+    }
 
     // Update CLAUDE.md with project context
     let claudeMdAction = '';
