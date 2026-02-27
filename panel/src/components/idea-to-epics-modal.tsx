@@ -394,26 +394,18 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
                 </div>
               </div>
 
-              {/* Generate Epics button (full width footer) */}
-              <div className="border-t border-secondary px-6 py-4">
+              {/* Generate Epics button */}
+              <div className="flex justify-end border-t border-secondary px-6 py-4">
                 <Button
                   size="md"
                   color="primary"
+                  iconLeading={generating ? RefreshCw01 : Lightbulb02}
                   onPress={handleGenerateEpics}
                   isDisabled={!plan.trim() || sending || generating}
-                  className="w-full"
+                  isLoading={generating}
+                  showTextWhileLoading
                 >
-                  {generating ? (
-                    <>
-                      <RefreshCw01 className="size-4 animate-spin" />
-                      <span className="ml-2">Generating Epics...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Lightbulb02 className="size-4" />
-                      <span className="ml-2">Generate Epics from Plan</span>
-                    </>
-                  )}
+                  {generating ? 'Generating Epics...' : 'Generate Epics from Plan'}
                 </Button>
               </div>
             </div>
@@ -446,7 +438,7 @@ function MessageBubble({ message }: { message: ChatMessage }): React.JSX.Element
   if (message.role === 'system') {
     return (
       <div className="flex justify-center">
-        <div className="max-w-md rounded-lg bg-tertiary px-4 py-3 text-center text-sm text-secondary">
+        <div className="max-w-md rounded-lg bg-tertiary px-4 py-3 text-left text-sm text-secondary">
           <div
             className="[&_p]:my-1 [&_ul]:my-1 [&_li]:my-0 [&_ul]:list-disc [&_ul]:pl-4"
             dangerouslySetInnerHTML={{ __html: parseMarkdownSafe(message.content) }}

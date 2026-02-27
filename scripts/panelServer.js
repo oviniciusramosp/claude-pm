@@ -4171,6 +4171,80 @@ ${conversationBlock}
 Continue the brainstorming conversation. Respond to the user's latest message, summarize what you understand so far, and ask 2-3 clarifying questions to refine the product vision.`;
 }
 
+const PROJECT_CONTEXT_START = '<!-- PROJECT-CONTEXT:START -->';
+const PROJECT_CONTEXT_END = '<!-- PROJECT-CONTEXT:END -->';
+
+function buildProjectContextPrompt(plan, messages) {
+  const conversationBlock = messages
+    .map((m) => `[${m.role === 'user' ? 'User' : 'Assistant'}]\n${m.content}`)
+    .join('\n\n');
+
+  return `You are a technical writer creating a concise project context section for a CLAUDE.md file. This context will help Claude Code (an AI coding assistant) understand the project it is working on.
+
+<plan>
+${plan}
+</plan>
+
+<conversation>
+${conversationBlock}
+</conversation>
+
+Write a concise markdown section with:
+1. **Project name and one-line description**
+2. **Target users** (who this is for)
+3. **Core features** (bullet list of key capabilities, derived from the epics)
+4. **Technical decisions** mentioned in the plan (frameworks, architecture, etc.)
+5. **Key constraints or requirements** (if any were discussed)
+
+Rules:
+- Be concise — this is reference context, not documentation
+- Write in the same language the user used in the conversation
+- Use markdown formatting (headers, bullets)
+- Do NOT include implementation details or code
+- Do NOT wrap in code blocks — return raw markdown only
+- Start with a level-2 heading: ## Project Context`;
+}
+
+function escapeRegexPanelServer(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function writeProjectContextToClaudeMd(projectContext, workdir) {
+  const claudeMdPath = path.join(workdir, 'CLAUDE.md');
+  const fullSection = `${PROJECT_CONTEXT_START}\n${projectContext}\n${PROJECT_CONTEXT_END}`;
+
+  let existingContent = '';
+  let fileExists = false;
+
+  try {
+    existingContent = await fs.readFile(claudeMdPath, 'utf8');
+    fileExists = true;
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+
+  if (!fileExists) {
+    await fs.writeFile(claudeMdPath, fullSection + '\n', 'utf8');
+    return 'created';
+  }
+
+  const markerRegex = new RegExp(
+    `${escapeRegexPanelServer(PROJECT_CONTEXT_START)}[\\s\\S]*?${escapeRegexPanelServer(PROJECT_CONTEXT_END)}`,
+    'm'
+  );
+  const match = existingContent.match(markerRegex);
+
+  if (match) {
+    const updated = existingContent.replace(markerRegex, fullSection);
+    await fs.writeFile(claudeMdPath, updated, 'utf8');
+    return 'updated';
+  }
+
+  const separator = existingContent.endsWith('\n') ? '\n' : '\n\n';
+  await fs.writeFile(claudeMdPath, existingContent + separator + fullSection + '\n', 'utf8');
+  return 'appended';
+}
+
 function buildPlanToEpicsPrompt(plan, messages, boardContext) {
   const conversationBlock = messages
     .map((m) => `[${m.role === 'user' ? 'User' : 'Assistant'}]\n${m.content}`)
@@ -4515,6 +4589,22 @@ app.post('/api/ideas/generate-epics', async (req, res) => {
 
     const summary = `Generated ${created.length} Epics from brainstorm${failed > 0 ? ` (${failed} failed)` : ''}`;
     pushLog('success', LOG_SOURCE.claude, summary);
+
+    // Update CLAUDE.md with project context
+    let claudeMdAction = '';
+    try {
+      const workdir = path.resolve(cwd, env.CLAUDE_WORKDIR || '.');
+      const contextPrompt = buildProjectContextPrompt(plan || '', session.messages);
+      const { reply: contextReply } = await runClaudePromptViaApi(contextPrompt, 'claude-opus-4-6', 120000);
+      const projectContext = String(contextReply || '').trim();
+      if (projectContext) {
+        claudeMdAction = await writeProjectContextToClaudeMd(projectContext, workdir);
+        pushLog('success', LOG_SOURCE.panel, `CLAUDE.md project context ${claudeMdAction}`);
+      }
+    } catch (err) {
+      pushLog('warn', LOG_SOURCE.panel, `Failed to update CLAUDE.md project context: ${err.message}`);
+      // Non-fatal: epics were already created
+    }
 
     // Clean up session
     ideaSessions.delete(sessionId);
