@@ -113,22 +113,21 @@ Acceptance Criteria MUST be defined as markdown checkboxes in the task body.
 2. Each AC must be on its own line
 3. The text after `- [ ] ` is the AC text that Claude will reference
 4. When Claude completes an AC, the checkbox becomes `- [x]`
-5. ACs can appear in multiple sections (e.g., "Acceptance Criteria", "Standard Completion Criteria")
+5. ACs can appear in multiple sections (e.g., "Acceptance Criteria", "Completion")
 
 **Example**:
 ```markdown
 ## Acceptance Criteria
 - [ ] Login form renders with email and password fields
-- [ ] Form validates email format
-- [ ] Form validates password strength
-- [ ] Submit button is disabled when form is invalid
-- [ ] Error messages are displayed below each field
+- [ ] Form validates email format before submission
+- [ ] POST /api/auth/login returns 401 on invalid credentials
+- [ ] Successful login sets httpOnly JWT cookie and redirects to /dashboard
+- [ ] Error messages render below invalid fields
 
-## Standard Completion Criteria
-- [ ] Tests written with 5+ test cases
-- [ ] `npm test` runs with zero failures
-- [ ] `npx tsc --noEmit` compiles without errors
-- [ ] Commit: `feat(auth): implement login page [US-001]`
+## Completion
+- [ ] Tests pass
+- [ ] Build passes
+- [ ] Commit: `feat(auth): implement login page`
 ```
 
 ### Standalone Task Format
@@ -145,48 +144,43 @@ priority: P1
 type: UserStory
 status: Not Started
 model: claude-sonnet-4-5-20250929
-agents: frontend, design
 ---
 
 # Implement Login Page
 
-**User Story**: As a user, I want to log in with my email and password so that I can access my account.
+Create a login page with email/password form, client-side validation, and authentication via POST /api/auth/login. On success, store JWT in httpOnly cookie and redirect to /dashboard.
 
 ## Acceptance Criteria
 - [ ] Login form renders with email and password fields
 - [ ] Form validates email format before submission
 - [ ] Form validates password is not empty
 - [ ] Submit button is disabled when form is invalid
-- [ ] Error messages are displayed below each field when validation fails
-- [ ] Successful login redirects to dashboard
+- [ ] Error messages render below invalid fields
+- [ ] Successful login redirects to /dashboard
 
-## Technical Tasks
-1. Create `src/pages/Login.tsx` component
-2. Add form validation using React Hook Form
-3. Create `useAuth` hook for authentication logic
-4. Add error message display component
-5. Implement redirect logic after successful login
+## Implementation
+1. Create `src/pages/Login.tsx` component with email and password inputs
+2. Add form validation using React Hook Form with zod schema
+3. Create `useAuth` hook in `src/hooks/useAuth.ts` for login API call
+4. Implement error message display below each field
+5. Add redirect to /dashboard on successful authentication
 
 ## Tests
-Component tests (React Testing Library):
-- **File**: `__tests__/pages/Login.test.tsx`
-- Login form renders correctly
-- Email validation works
-- Password validation works
-- Submit button disabled state
-- Error messages display correctly
-- Successful login redirects to dashboard
-- 10+ test cases
+- File: `__tests__/pages/Login.test.tsx`
+- Login form renders with email and password fields
+- Email validation rejects invalid format
+- Password validation rejects empty input
+- Submit button disabled when form is invalid
+- Error messages display on validation failure
+- Successful login triggers redirect
 
 ## Dependencies
 - None
 
-## Standard Completion Criteria
-- [ ] Tests written as described above
-- [ ] `npm test` runs with zero failures
-- [ ] `npx tsc --noEmit` compiles without errors
-- [ ] `npm run lint` passes
-- [ ] Commit: `feat(auth): implement login page [US-001]`
+## Completion
+- [ ] Tests pass: `npm test`
+- [ ] Build passes: `npx tsc --noEmit`
+- [ ] Commit: `feat(auth): implement login page`
 ```
 
 ### Epic Format
@@ -209,32 +203,33 @@ name: Authentication System
 priority: P0
 type: Epic
 status: Not Started
-agents: frontend, backend
 ---
 
 # Authentication System Epic
 
-**Epic Goal**: Build a complete authentication system with login, signup, and logout functionality.
+**Goal**: Implement a complete authentication system with JWT-based login, signup, logout, session persistence, and password recovery via email.
 
 ## Scope
-This Epic includes:
-- User login with email/password
-- New user signup with validation
-- User logout with session cleanup
-- Persistent authentication state
+- JWT-based login with email/password, returning httpOnly cookie (needs Discovery: auth strategy)
+- User signup with email validation and password strength requirements
+- Logout endpoint that clears session cookie
+- Session persistence via refresh token rotation
+- Password recovery flow via email with time-limited tokens (needs Discovery: email service)
 
 ## Acceptance Criteria
-- [ ] Users can log in with valid credentials
-- [ ] Users can create new accounts
-- [ ] Users can log out
-- [ ] Authentication state persists across page refreshes
-- [ ] All auth flows have proper error handling
+- [ ] POST /api/auth/login returns signed JWT on valid credentials and 401 on invalid
+- [ ] POST /api/auth/signup creates user and returns JWT
+- [ ] POST /api/auth/logout clears session cookie
+- [ ] JWT refresh token rotation works transparently
+- [ ] Account locks after 5 failed login attempts for 15 minutes
+- [ ] Password recovery email sends with time-limited token
 
 ## Technical Approach
-- Use JWT tokens for authentication
-- Store tokens in httpOnly cookies
-- Implement refresh token rotation
-- Use React Context for auth state
+- Authentication strategy: JWT vs sessions (needs Discovery)
+- Email service for password recovery (needs Discovery)
+- Store tokens in httpOnly cookies with sameSite=strict
+- Use React Context for client-side auth state
+- Rate limiting on auth endpoints
 
 ## Dependencies
 - None
@@ -243,47 +238,48 @@ This Epic includes:
 See individual user story files in this Epic folder.
 ```
 
-**Epic child task example** (`us-001-login.md`):
+**Epic child task example** (`S1-1-implement-login.md`):
 ```markdown
 ---
 name: Implement Login Page
 priority: P1
 type: UserStory
 model: claude-sonnet-4-5-20250929
-agents: frontend
 status: Not Started
 ---
 
 # Implement Login Page
 
-**User Story**: As a user, I want to log in with my email and password so that I can access my account.
+Create a login page with email/password form that authenticates via POST /api/auth/login. On success, the JWT is stored in an httpOnly cookie and the user is redirected to /dashboard.
 
 ## Acceptance Criteria
 - [ ] Login form renders with email and password fields
 - [ ] Form validates email format before submission
-- [ ] Successful login redirects to dashboard
-- [ ] Failed login shows error message
+- [ ] POST /api/auth/login called on submit with email and password
+- [ ] Successful login redirects to /dashboard
+- [ ] Failed login shows error message from API response
 
-## Technical Tasks
-1. Create login page component
-2. Implement form validation
-3. Connect to authentication API
-4. Handle success/error states
+## Implementation
+1. Create `src/pages/Login.tsx` with email and password inputs
+2. Add form validation using React Hook Form
+3. Connect form submit to POST /api/auth/login
+4. Handle 200 response: redirect to /dashboard
+5. Handle 401 response: display error message below form
 
 ## Tests
-- Login form renders correctly
-- Form validation works
-- API integration works
-- Error handling works
+- File: `__tests__/pages/Login.test.tsx`
+- Login form renders with email and password fields
+- Email validation rejects invalid format
+- Successful login triggers redirect
+- Failed login shows error message
 
 ## Dependencies
-- API authentication endpoint must exist
+- See `docs/discoveries/auth-strategy.md` for auth approach
 
-## Standard Completion Criteria
-- [ ] Tests written and passing
-- [ ] TypeScript compiles without errors
-- [ ] Linter passes
-- [ ] Commit: `feat(auth): implement login page [US-001]`
+## Completion
+- [ ] Tests pass
+- [ ] Build passes: `npx tsc --noEmit`
+- [ ] Commit: `feat(auth): implement login page`
 ```
 
 **Important Epic Rules**:
@@ -345,29 +341,31 @@ The Task ID is used in logs, run history, and Execution Notes.
 name: Install Dependencies
 priority: P0
 type: Chore
-agents: devops
+status: Not Started
 ---
 
 # Install Dependencies
 
-Install all required npm packages for the project.
+Run `npm install` and verify all dependencies resolve cleanly with no peer dependency warnings.
 
 ## Acceptance Criteria
 - [ ] All dependencies installed via `npm install`
-- [ ] No peer dependency warnings
+- [ ] No peer dependency warnings in output
 - [ ] `package.json` and `package-lock.json` are in sync
 
-## Technical Tasks
+## Implementation
 1. Run `npm install`
-2. Verify no warnings or errors
-3. Commit lockfile changes
+2. Verify no warnings or errors in output
+3. Stage `package-lock.json` changes
 
 ## Tests
 N/A — infrastructure task, no business logic to test
 
-## Standard Completion Criteria
-- [ ] Tests: N/A
-- [ ] `npx tsc --noEmit` compiles without errors
+## Dependencies
+- None
+
+## Completion
+- [ ] Build passes: `npx tsc --noEmit`
 - [ ] Commit: `chore(deps): install project dependencies`
 ```
 
@@ -377,33 +375,36 @@ N/A — infrastructure task, no business logic to test
 name: Fix login redirect loop
 priority: P0
 type: Bug
+status: Not Started
 model: claude-opus-4-6
-agents: frontend, debugging
 ---
 
 # Fix Login Redirect Loop
 
-**Bug**: Users are stuck in an infinite redirect loop after logging in.
+**Bug**: After successful login, the app enters an infinite redirect loop between /login and /dashboard. Expected: single redirect to /dashboard after authentication.
 
 ## Acceptance Criteria
-- [ ] Users can log in without redirect loop
-- [ ] Redirect logic only triggers once
-- [ ] Unit test added to prevent regression
+- [ ] Login completes with single redirect to /dashboard (no loop)
+- [ ] Redirect guard checks auth state before redirecting
+- [ ] Regression test added for redirect loop scenario
 
-## Technical Tasks
-1. Identify root cause of redirect loop
-2. Fix the redirect logic in authentication flow
-3. Add unit test to prevent regression
-4. Verify fix in development environment
+## Implementation
+1. Identify redirect logic in auth flow (check `src/hooks/useAuth.ts` and route guards)
+2. Fix the condition that causes repeated redirects
+3. Add unit test verifying redirect fires exactly once
 
 ## Tests
-- Add test case: "login redirect should only happen once"
-- Verify existing login tests still pass
+- File: `__tests__/hooks/useAuth.test.ts`
+- Login redirect fires exactly once on successful auth
+- Existing login tests still pass
 
-## Standard Completion Criteria
-- [ ] Tests written and passing
-- [ ] Bug verified fixed in development
-- [ ] Commit: `fix(auth): resolve login redirect loop [BUG-042]`
+## Dependencies
+- None
+
+## Completion
+- [ ] Tests pass
+- [ ] Build passes
+- [ ] Commit: `fix(auth): resolve login redirect loop`
 ```
 
 ### Validation Checklist
