@@ -174,6 +174,12 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
     return disabled;
   }, [allFieldsValidated, hasBlockingErrors]);
 
+  // Persist active tab so it survives page refreshes
+  useEffect(() => {
+    if (!didResolveInitialTabRef.current) return;
+    try { localStorage.setItem('pm_active_tab', activeTab); } catch { /* ignore */ }
+  }, [activeTab]);
+
   useEffect(() => {
     if (apiRunning) {
       setServiceErrors((prev) => (prev.app ? { ...prev, app: null } : prev));
@@ -294,7 +300,8 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
     setConfig(nextConfig);
     setSavedConfig(nextConfig);
     if (!didResolveInitialTabRef.current) {
-      setActiveTab(isSetupConfigurationComplete(nextConfig) ? NAV_TAB_KEYS.feed : NAV_TAB_KEYS.setup);
+      const storedTab = (() => { try { const t = localStorage.getItem('pm_active_tab'); return (t === 'feed' || t === 'board' || t === 'git') ? t : null; } catch { return null; } })();
+      setActiveTab(isSetupConfigurationComplete(nextConfig) ? (storedTab ?? NAV_TAB_KEYS.board) : NAV_TAB_KEYS.setup);
       didResolveInitialTabRef.current = true;
     }
   }, [callApi]);
