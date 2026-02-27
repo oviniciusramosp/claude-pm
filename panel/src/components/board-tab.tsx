@@ -409,15 +409,9 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
                 "Claude scans the codebase, checks each AC against the actual implementation, and marks completed ones as done"
               }
             >
-              <button
-                type="button"
-                onClick={(e: any) => {
-                  e.stopPropagation();
-                  if (!isAnyFixing) {
-                    onFix(task.id);
-                  }
-                }}
-                disabled={isAnyFixing}
+              <TooltipTrigger
+                onPress={() => { if (!isAnyFixing) onFix(task.id); }}
+                isDisabled={isAnyFixing}
                 className={cx(
                   'transition-opacity rounded-md p-1.5 shadow-sm',
                   isAnyFixing
@@ -431,7 +425,7 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
                 ) : (
                   <Tool01 className={cx('size-3.5', isAnyFixing ? 'text-utility-gray-400' : 'text-utility-brand-600')} />
                 )}
-              </button>
+              </TooltipTrigger>
             </Tooltip>
           )}
           {progressTotal > 0 && <AcDonut done={progressDone} total={progressTotal} label={epic ? 'tasks' : 'ACs'} />}
@@ -449,12 +443,12 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
       {(task.type || task.priority) && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {task.type && (
-            <Badge size="sm" color={typeColor || 'gray'}>
+            <Badge size="sm" color={typeColor || 'gray'} className="ring-0">
               {task.type}
             </Badge>
           )}
           {task.priority && (
-            <Badge size="sm" color={priorityColor || 'gray'}>
+            <Badge size="sm" color={priorityColor || 'gray'} className="ring-0">
               {task.priority}
             </Badge>
           )}
