@@ -521,17 +521,17 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                 {!editing && task && (task.priority || task.type || task.status) && (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     {task.priority && (
-                      <Badge size="sm" color={(priorityColor || 'gray') as any}>
+                      <Badge size="sm" color={(priorityColor || 'gray') as any} className="ring-0 font-mono text-[10px]">
                         {task.priority}
                       </Badge>
                     )}
                     {task.type && (
-                      <Badge size="sm" color={(typeColor || 'gray') as any}>
+                      <Badge size="sm" color={(typeColor || 'gray') as any} className="ring-0 font-mono text-[10px]">
                         {task.type}
                       </Badge>
                     )}
                     {task.status && (
-                      <Badge size="sm" color="gray">
+                      <Badge size="sm" color="gray" className="ring-0 font-mono text-[10px]">
                         {task.status}
                       </Badge>
                     )}

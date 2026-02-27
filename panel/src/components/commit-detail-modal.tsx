@@ -98,16 +98,16 @@ export function CommitDetailModal({ open, onClose, commit, apiBaseUrl, showToast
                 {commit && (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     {commit.conventional && (
-                      <Badge size="sm" color={(typeColor || 'gray') as any}>
+                      <Badge size="sm" color={(typeColor || 'gray') as any} className="ring-0 font-mono text-[10px]">
                         {commit.conventional.type}
                         {commit.conventional.scope ? `(${commit.conventional.scope})` : ''}
                       </Badge>
                     )}
                     {commit.isAutomation && (
-                      <Badge size="sm" color="brand">Automation</Badge>
+                      <Badge size="sm" color="brand" className="ring-0 font-mono text-[10px]">Automation</Badge>
                     )}
                     {commit.taskId && (
-                      <Badge size="sm" color="gray">{commit.taskId}</Badge>
+                      <Badge size="sm" color="gray" className="ring-0 font-mono text-[10px]">{commit.taskId}</Badge>
                     )}
                   </div>
                 )}
@@ -154,7 +154,7 @@ export function CommitDetailModal({ open, onClose, commit, apiBaseUrl, showToast
                   {commit.refs.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                       {commit.refs.map((ref, i) => (
-                        <Badge key={i} size="sm" color={ref.startsWith('tag:') ? 'orange' : 'indigo'}>
+                        <Badge key={i} size="sm" color={ref.startsWith('tag:') ? 'orange' : 'indigo'} className="ring-0 font-mono text-[10px]">
                           {ref}
                         </Badge>
                       ))}
