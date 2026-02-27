@@ -3087,19 +3087,19 @@ IMPORTANT:
 
   // ── Epic-specific prompt ──────────────────────────────────────────────
   if (taskType === 'Epic') {
-    return `You are an expert product manager reviewing an **Epic** definition for a Claude Code automation system. Your goal is to produce an Epic description that is **product-oriented** and detailed enough to generate **specific, non-generic User Stories and Discovery tasks** following agile methodology.
+    return `You are a technical architect reviewing an **Epic** definition for a Claude Code automation system. Your goal is to produce an Epic optimized for generating **concrete, executable child tasks** (Discovery tasks and implementation tasks) for an AI coding assistant.
 
 <context>
-This Epic will NOT be executed directly by Claude. Instead, it serves as a **parent container** that defines a high-level business goal. After review, child tasks (Discovery tasks and User Stories) will be generated from this Epic and executed individually by Claude Code.
+This Epic will NOT be executed directly by Claude Code. It serves as a **parent container** from which child tasks are generated and executed individually.
 
 **How child tasks work:**
-- **Discovery tasks** (type: Discovery, model: claude-opus-4-6): Research tasks that investigate how a feature should be implemented — defining tools, frameworks, libraries, architecture patterns, and approaches. Their output is saved to a \`.md\` file inside the project that subsequent User Stories reference.
-- **User Stories** (type: UserStory, model: claude-sonnet-4-5-20250929): Implementation tasks that execute based on concrete specifications, often referencing the output of a preceding Discovery task.
+- **Discovery tasks** (type: Discovery, model: claude-opus-4-6): Research tasks that investigate implementation approaches. Output saved to a \`.md\` file that subsequent tasks reference.
+- **Implementation tasks** (type: UserStory): Tasks executed by Claude Code based on concrete specifications, often referencing Discovery output.
 
 The Epic must be written at the RIGHT level of abstraction:
-- HIGH ENOUGH to describe business outcomes, not implementation details
-- DETAILED ENOUGH that each scope item can be directly mapped to one or more child tasks (Discovery + UserStory pairs for complex features, or just UserStories for straightforward ones)
-- SPECIFIC ENOUGH about the desired end-user experience and product behavior to avoid generic stories
+- DETAILED ENOUGH that each scope item maps directly to 1+ executable child tasks
+- SPECIFIC ENOUGH with technical details (frameworks, APIs, patterns) to avoid generic tasks
+- FOCUSED on actionable implementation detail — no narrative, motivation, or UX prose
 </context>
 
 ${metadataBlock}
@@ -3107,77 +3107,62 @@ ${metadataBlock}
 ${boardContext || ''}
 
 <review_instructions>
-Review this Epic and produce an improved version. The output MUST follow the **Epic format** (NOT a User Story format).
+Review this Epic and produce an improved version optimized for Claude Code task generation.
 
-**YOUR PRIMARY GOAL**: Make this Epic specific enough that the story generation step can produce **concrete, actionable tasks** — not vague stories like "Implement authentication" but specific ones like "Research JWT vs session-based auth and recommend approach" followed by "Implement JWT token generation endpoint".
+**YOUR PRIMARY GOAL**: Make this Epic specific enough that the task generation step can produce **concrete, executable tasks** — not vague ones like "Implement authentication" but specific ones like "Research JWT vs session-based auth" followed by "Implement JWT token generation endpoint".
 
 **REQUIRED SECTIONS** (in this exact order):
 
 1. **# [Epic Name] Epic** (h1 header)
-   - Use the format: "# [Name] Epic"
 
-2. **Epic Goal** (bold paragraph, NOT a section header)
-   - One paragraph starting with "**Epic Goal**:" that describes the high-level business objective
-   - Focus on WHAT will be delivered and WHY, not HOW
-   - Be specific about the end-user experience and product behavior
-   - Bad: "**Epic Goal**: Build an authentication system."
-   - Good: "**Epic Goal**: Build a complete authentication system that allows users to create accounts with email/password, log in with persistent sessions, and recover forgotten passwords via email — all with proper error feedback and rate limiting."
+2. **Goal** (bold paragraph, NOT a section header)
+   - One line starting with "**Goal**:" — concise, technical description of what this epic delivers
+   - Focus on WHAT will be built, not WHY
+   - Bad: "**Goal**: Build an authentication system."
+   - Good: "**Goal**: Implement a complete authentication system with email/password login, signup, logout, session persistence via JWT, and password recovery via email with rate limiting."
 
 3. **## Scope**
-   - Bullet list of what this Epic includes
-   - Each bullet is a **specific capability or feature area** — not a vague category
-   - For complex items, add a sub-bullet hinting that a Discovery task is needed
+   - Bullet list of capabilities/features to implement
+   - Each bullet = a **specific feature area** that maps to 1+ child tasks
+   - Include technical specifics (frameworks, patterns, APIs) where known
+   - Flag complex items with "(needs Discovery)" suffix
    - Bad: "- Authentication" / "- User management"
-   - Good: "- User login with email/password (needs research: auth strategy — JWT vs sessions)"
-   - Good: "- Password recovery flow via email with time-limited tokens"
-   - Good: "- Rate limiting on auth endpoints (needs research: rate limiting library and strategy)"
+   - Good: "- JWT-based login with email/password, returning httpOnly cookie (needs Discovery: auth strategy)"
+   - Good: "- Password recovery flow via email with time-limited tokens using nodemailer"
 
 4. **## Acceptance Criteria**
    - Each AC must be a markdown checkbox: \`- [ ] Description\`
-   - **CRITICAL**: ACs must describe **specific, observable product behaviors**
-   - Each AC should map clearly to one or more child stories
-   - Good: "- [ ] Users can log in with email and password and are redirected to the dashboard"
-   - Good: "- [ ] Failed login attempts show specific error messages (wrong password vs. account not found)"
-   - Good: "- [ ] After 5 failed login attempts, the account is locked for 15 minutes"
+   - ACs must be **technically verifiable** — checkable by automated tests, build commands, or code inspection
+   - Each AC should map to one or more child tasks
+   - Good: "- [ ] POST /api/auth/login returns JWT on valid credentials and 401 on invalid"
+   - Good: "- [ ] Account locks after 5 failed login attempts for 15 minutes"
    - Bad: "- [ ] Authentication works correctly"
-   - Bad: "- [ ] Login form component renders with email and password fields"
-   - Typically 5-10 ACs for an Epic (be thorough, cover edge cases and error scenarios)
+   - Typically 5-10 ACs (cover error handling, edge cases, data validation)
 
 5. **## Technical Approach**
-   - Bullet list of high-level architectural decisions and technology choices
-   - **Flag areas that need Discovery/research** with "(needs Discovery)" suffix
-   - Example: "- Authentication strategy: JWT vs sessions (needs Discovery)"
-   - Example: "- Email service for password recovery (needs Discovery)"
-   - Example: "- Use React Hook Form for form handling"
-   - NO file paths, NO function signatures, NO code snippets
+   - Architecture decisions, libraries, frameworks, patterns
+   - Flag areas needing Discovery with "(needs Discovery)" suffix
+   - Include data flow, API design, state management guidance
+   - This section directly informs child task generation
 
 6. **## Dependencies**
-   - List prerequisites, external services, or blocking items
-   - Include dependencies on other epics (check <board_context> if available)
-   - Or "- None" if standalone
+   - Prerequisites, external services, other epics, or "- None"
 
 7. **## Child Tasks**
-   - Always end with: "See individual user story files in this Epic folder."
-   - This section is a placeholder — child stories are generated separately
+   - Always: "See individual user story files in this Epic folder."
 
-**TESTING RULES:**
-- ❌ NEVER mention manual testing, manual QA, or manual verification
-- ✅ Only reference automated tests (unit tests, integration tests, e2e tests)
-- If testing strategy is mentioned in Technical Approach, focus on automated testing frameworks and patterns
-
-**SECTIONS TO NEVER INCLUDE IN AN EPIC:**
-- ❌ "User Story" / "As a [role], I want..." (that's for child stories)
-- ❌ "Technical Tasks" with numbered implementation steps
-- ❌ "Tests" with specific test files or test cases
-- ❌ "Standard Completion Criteria" with build/lint/commit checks
-- ❌ File paths, component names, or code references in ACs
+**SECTIONS TO NEVER INCLUDE:**
+- ❌ "Motivation & Objectives" — Claude Code doesn't need motivation
+- ❌ "User Experience & Design" — UX details go into individual child tasks
+- ❌ "Open Questions & Risks" — Claude Code executes, it doesn't deliberate
+- ❌ "User Story" / "As a [role], I want..."
+- ❌ "Technical Tasks" / "Implementation" with numbered steps
+- ❌ "Tests" with specific test files
+- ❌ "Completion" / "Standard Completion Criteria"
 - ❌ Manual testing or manual QA references
 
 **CROSS-EPIC AWARENESS:**
-- If <board_context> is provided, review this Epic's scope against other epics to ensure:
-  - No significant overlap in scope or acceptance criteria with other epics
-  - Dependencies on other epics are mentioned in the Dependencies section
-  - Naming and abstraction level are consistent with the rest of the backlog
+- If <board_context> is provided, check for scope overlap and note dependencies on other epics
 </review_instructions>
 
 ${outputFormatBlock}`;
@@ -3185,19 +3170,18 @@ ${outputFormatBlock}`;
 
   // ── Non-Epic prompt (UserStory, Bug, Chore, Discovery) ────────────────
   const descriptionGuidance = {
-    UserStory: '- Start with: "**User Story**: As a [role], I want [goal] so that [benefit]"',
-    Bug: '- Start with "**Bug**:" followed by a description of what happens\n   - Include: actual behavior, expected behavior, and reproduction steps',
-    Chore: '- Describe the operational goal clearly and concisely',
-    Discovery: '- Frame the research question or investigation goal\n   - Describe what decisions depend on the outcome'
+    UserStory: '- Start with 1-3 imperative sentences describing what to build. Be specific about scope and expected outcome.\n   - Do NOT use "As a [role], I want..." format — write direct implementation instructions.',
+    Bug: '- Start with "**Bug**:" followed by actual behavior, expected behavior, and reproduction steps',
+    Chore: '- Describe the operational goal with direct imperative instructions',
+    Discovery: '- State the research goal directly and list what decisions depend on the outcome'
   };
 
   const acGuidance = {
-    UserStory: `   - Focus on specific, testable behaviors and technical requirements
-   - Each AC must be concrete and verifiable through code, tests, or manual inspection
-   - Include UI behavior, data validation, error handling, and edge cases
-   - Reference specific elements when applicable (e.g., "Submit button is disabled when form is invalid")
-   - ACs should guide implementation directly
-   - Typically 4-10 ACs for a UserStory`,
+    UserStory: `   - Each AC must be technically verifiable — checkable by automated tests, build commands, or code inspection
+   - Include data validation, error handling, and edge cases
+   - Reference specific endpoints, components, or behaviors
+   - ACs should directly guide Claude Code's implementation
+   - Typically 3-8 ACs for a task`,
 
     Bug: `   - First AC: describe the expected behavior after the fix
    - Additional ACs: edge cases, related scenarios that must still work
@@ -3206,64 +3190,65 @@ ${outputFormatBlock}`;
 
     Chore: `   - Focus on operational outcomes and verification steps
    - Each AC describes a successful completion criterion
-   - Include verification steps (e.g., "Build passes without warnings")
+   - Include verification commands (e.g., "Build passes without warnings")
    - Typically 2-5 ACs for a Chore`,
 
     Discovery: `   - Focus on research outcomes and documentation deliverables
    - Each AC describes a specific question answered or artifact produced
-   - Include documentation requirements (e.g., "Decision document created with findings")
+   - Include documentation requirements (e.g., "Research document created at docs/discoveries/topic.md")
    - Typically 3-6 ACs for a Discovery task`
   };
 
-  return `You are an expert prompt engineer and product manager reviewing a ${taskType} for a Claude Code automation system.
+  return `You are a technical architect reviewing a ${taskType} for a Claude Code automation system.
 
 <context>
-This task will be executed by Claude Code (an AI coding assistant). Claude reads the task file, follows the instructions, implements the acceptance criteria, and reports completion via JSON. The quality of the task file directly determines execution success.
+This task will be executed autonomously by Claude Code (an AI coding assistant). Claude reads the task file, follows the instructions literally, implements the acceptance criteria, and reports completion. The quality of the task file directly determines execution success. Write instructions as direct orders — no narrative or agile ceremony format.
 </context>
 
 ${metadataBlock}
 
 <review_instructions>
-Review this ${taskType} and produce an improved version. Follow these quality criteria:
+Review this ${taskType} and produce an improved version optimized for Claude Code execution. Follow these criteria:
 
 1. **Task Description**:
    ${descriptionGuidance[taskType] || descriptionGuidance.UserStory}
 
 2. **Acceptance Criteria Quality**:
    - Each AC must be a markdown checkbox: \`- [ ] Description\`
-   - Each AC must be testable, specific, and unambiguous
-   - Avoid vague ACs like "works correctly" — specify exact behavior
+   - Each AC must be technically verifiable and unambiguous
+   - Avoid vague ACs like "works correctly" — specify exact verifiable behavior
 ${acGuidance[taskType] || acGuidance.UserStory}
 
-3. **Technical Tasks Section**:
+3. **Implementation Section**:
    - Break implementation into numbered, sequential steps
-   - Reference specific file paths when possible (e.g., "Create \`src/components/LoginForm.tsx\`")
-   - Each step should be actionable by Claude Code
-   - Include command-line steps when relevant (e.g., "Run \`npm install react-hook-form\`")
+   - Reference specific file paths (e.g., "Create \`src/components/LoginForm.tsx\`")
+   - Each step should be a concrete action Claude Code executes
+   - Include commands when relevant (e.g., "Run \`npm install react-hook-form\`")
 
 4. **Tests Section**:
    - Specify test file path (e.g., "\`__tests__/LoginForm.test.tsx\`")
-   - List specific automated test cases to write (unit, integration, e2e)
+   - List specific automated test cases (unit, integration, e2e)
    - Include edge case tests
    - For infrastructure/chore tasks, state "N/A — no business logic to test"
    - For Discovery tasks, state "N/A — research task, no automated tests"
-   - NEVER include manual testing or manual QA steps — only automated tests
+   - NEVER include manual testing or manual QA steps
 
 5. **Dependencies Section**:
-   - List any prerequisites or blocking tasks
-   - Mention required APIs, packages, or configuration
-   - State "None" if there are no dependencies
+   - List prerequisites, blocking tasks, required packages
+   - Reference Discovery output files when applicable
+   - State "None" if no dependencies
 
-6. **Standard Completion Criteria**:
-   - Include checkboxes for: tests passing, TypeScript compilation, linting
-   - Include a commit message suggestion following conventional commits: \`feat|fix|chore(scope): description\`
+6. **Completion Section**:
+   - Include checkboxes for: tests passing, build passing
+   - Include a commit message following conventional commits: \`type(scope): description\`
 
-7. **Prompt Optimization for Claude Code**:
+7. **Claude Code Optimization**:
    - Instructions must be explicit — Claude Code executes literally
    - Avoid ambiguous language ("consider", "maybe", "if possible")
    - Use imperative language ("Create", "Add", "Implement", "Run")
-   - Structure content with clear markdown headers (##)
-   - If the task involves modifying existing files, specify which files and what changes
+   - No "As a user..." or "User Story" format — write direct instructions
+   - Use section header "## Implementation" (not "## Technical Tasks")
+   - Use section header "## Completion" (not "## Standard Completion Criteria")
 </review_instructions>
 
 ${outputFormatBlock}`;
@@ -3430,7 +3415,7 @@ function buildGenerateStoriesPrompt({ epicName, epicBody, existingChildren, boar
     ? existingChildren.map((c) => `- ${c.name}`).join('\n')
     : '(none)';
 
-  return `You are a senior product manager and prompt engineering expert following **agile methodology**. Your job is to analyze an Epic description and break it down into an **incremental sequence of Discovery tasks and User Stories**.
+  return `You are a technical architect breaking down an Epic into executable tasks for an AI coding assistant (Claude Code). Each task will be executed autonomously in a single session — write instructions as direct orders, not as agile ceremonies.
 
 <epic>
 <name>${epicName}</name>
@@ -3445,32 +3430,30 @@ ${childList}
 
 ${boardContext || ''}
 
-<agile_methodology>
-Follow these agile principles when generating tasks:
-
+<methodology>
 **DISCOVERY-FIRST APPROACH:**
-- For complex features where the implementation approach is unclear (choice of library, architecture pattern, API design, etc.), create a **Discovery task BEFORE the implementation story**.
+- For complex features where the implementation approach is unclear (choice of library, architecture pattern, API design, etc.), create a **Discovery task BEFORE the implementation task**.
 - Discovery tasks (type: "Discovery") research and document the recommended approach. They use \`model: claude-opus-4-6\` for deeper analysis.
-- The Discovery task output MUST be saved to a markdown file inside the project (e.g., \`docs/discoveries/auth-strategy.md\`). This file becomes the reference for subsequent User Stories.
-- The User Story that follows a Discovery task MUST reference the Discovery output file in its Dependencies section.
+- The Discovery task output MUST be saved to a markdown file inside the project (e.g., \`docs/discoveries/auth-strategy.md\`). This file becomes the reference for subsequent tasks.
+- Tasks that follow a Discovery MUST reference the Discovery output file in their Dependencies section.
 
 **WHEN TO USE DISCOVERY vs INLINE RESEARCH:**
 - **Use a Discovery task** for complex decisions: choosing frameworks/libraries, defining API contracts, architectural patterns, database schema design, integration strategies.
-- **Use inline ACs** (within a UserStory) for simpler research: checking if a package exists, reading existing code to understand a pattern, minor technology choices.
+- **Use inline ACs** (within a task) for simpler research: checking if a package exists, reading existing code to understand a pattern, minor technology choices.
 
 **INCREMENTAL DELIVERY:**
 - Order tasks so each builds on the previous one — never assume something exists that hasn't been built yet.
-- Each task should produce a working, testable increment of the product.
+- Each task should produce a working, testable increment.
 - Earlier tasks lay foundations; later tasks add features on top.
-</agile_methodology>
+</methodology>
 
 <instructions>
-1. Analyze the Epic description and identify all distinct features, behaviors, or capabilities.
+1. Analyze the Epic and identify all distinct features or capabilities that need implementation.
 
 2. For each feature, decide if it needs a Discovery task:
    - If the Epic mentions "(needs Discovery)" in its Technical Approach or Scope, create a Discovery task first.
-   - If the implementation approach involves choosing between alternatives (libraries, patterns, strategies), create a Discovery task.
-   - If the feature is straightforward with a clear implementation path, create just a UserStory.
+   - If the implementation involves choosing between alternatives, create a Discovery task.
+   - If straightforward with a clear implementation path, create a task directly.
 
 3. **For Discovery tasks**, use this structure:
    - type: "Discovery"
@@ -3479,7 +3462,7 @@ Follow these agile principles when generating tasks:
 
      # [Discovery Name]
 
-     **Goal**: Research and document the recommended approach for [topic].
+     Research and document the recommended approach for [topic].
 
      ## Research Questions
      - [ ] What are the available options for [topic]?
@@ -3498,60 +3481,60 @@ Follow these agile principles when generating tasks:
      ## Dependencies
      - None (or list if depends on another Discovery)
 
-     ## Standard Completion Criteria
+     ## Completion
      - [ ] Research document created and complete
      - [ ] Commit: \`docs(discovery): research [topic]\`
 
-4. **For User Stories**, use this structure:
+4. **For implementation tasks** (type: "UserStory"), use this structure:
    - type: "UserStory"
-   - name: Imperative form (e.g., "Implement login form")
+   - name: Imperative form (e.g., "Implement login form", "Add JWT authentication endpoint")
    - body structure:
 
-     # [Story Name]
+     # [Task Name]
 
-     **User Story**: As a [role], I want [goal] so that [benefit].
+     [1-3 sentences: imperative description of what to build. Be specific about scope and expected outcome. No "As a user..." format.]
 
      ## Acceptance Criteria
-     - [ ] First acceptance criterion (specific, testable, checkbox format)
-     - [ ] Second acceptance criterion
-     (... typically 3-8 per story)
+     - [ ] [Technically verifiable condition — checkable by tests, build, or code inspection]
+     (3-8 ACs per task. Each must be specific, verifiable, and actionable.)
 
-     ## Technical Tasks
-     1. First implementation step with specific file paths when possible
-     2. Second implementation step
-     (... numbered, sequential steps)
+     ## Implementation
+     1. [Step with specific file path] (e.g., "Create \`src/components/LoginForm.tsx\`")
+     2. [Step with specific change] (e.g., "Add form validation using zod schema")
+     (Numbered, sequential. Each step is a concrete action Claude Code executes.)
 
      ## Tests
-     - Describe automated tests to write (unit, integration, e2e)
-     - Mention specific test file paths if applicable
-     - Or "N/A — infrastructure task" if no tests needed
+     - File: \`[specific test file path]\`
+     - [Specific test case 1]
+     - [Specific test case 2]
+     - Or "N/A — infrastructure/research task"
      - NEVER include manual testing steps
 
      ## Dependencies
-     - Reference Discovery output files if applicable (e.g., "See \`docs/discoveries/auth-strategy.md\` for implementation approach")
-     - List any other prerequisites or blocking tasks
+     - Reference Discovery output files if applicable (e.g., "See \`docs/discoveries/auth-strategy.md\`")
+     - List other prerequisites or blocking tasks
      - Or "None" if standalone
 
-     ## Standard Completion Criteria
-     - [ ] Automated tests written and passing (or N/A)
-     - [ ] TypeScript compiles without errors
-     - [ ] Linter passes
-     - [ ] Commit message follows conventional commits format
+     ## Completion
+     - [ ] Tests pass (or N/A)
+     - [ ] Build passes
+     - [ ] Commit: \`type(scope): description\`
 
-5. DO NOT duplicate stories that already exist (see existing_children above).
-6. Review the <board_context> section (if present). DO NOT generate stories that overlap with work described in other epics. If there are cross-epic dependencies, mention them in the story's Dependencies section.
-7. Each task should be small enough for a single developer to complete in one session.
-8. **Order tasks incrementally**: Discoveries first, then foundational stories, then features that build on them.
-9. Generate between 2 and 15 tasks. Do not generate more than 15.
+5. DO NOT duplicate tasks that already exist (see existing_children above).
+6. Review the <board_context> section (if present). DO NOT generate tasks that overlap with work in other epics. Note cross-epic dependencies.
+7. Each task should be completable by Claude Code in a single session.
+8. **Order tasks incrementally**: Discoveries first, then foundational tasks, then features that build on them.
+9. Generate between 2 and 15 tasks. Do not exceed 15.
 10. Use imperative language: "Research X", "Implement Y", "Add Z", "Create W".
 11. **NEVER include manual tests** — only automated tests (unit, integration, e2e).
+12. Avoid narrative language — no "As a user...", no "motivation", no "user experience" sections. Write direct implementation instructions.
 </instructions>
 
 <output_format>
 Return ONLY a valid JSON array. No markdown code blocks, no explanation text — just the raw JSON.
 
 Each element must have:
-- "name": string (task name)
+- "name": string (task name, imperative form)
 - "priority": string ("P0", "P1", "P2", or "P3")
 - "type": string ("Discovery" or "UserStory") — defaults to "UserStory" if omitted
 - "body": string (complete markdown body with \\n for newlines)
@@ -3562,13 +3545,13 @@ Example:
     "name": "Research authentication strategy",
     "priority": "P0",
     "type": "Discovery",
-    "body": "# Research Authentication Strategy\\n\\n**Goal**: Research and document the recommended authentication approach...\\n\\n## Research Questions\\n- [ ] JWT vs session-based auth...\\n\\n## Acceptance Criteria\\n- [ ] Research document created at \`docs/discoveries/auth-strategy.md\`...\\n\\n## Output\\nSave findings to: \`docs/discoveries/auth-strategy.md\`\\n..."
+    "body": "# Research Authentication Strategy\\n\\nResearch and document the recommended authentication approach for this project.\\n\\n## Research Questions\\n- [ ] JWT vs session-based auth trade-offs\\n- [ ] Recommended token storage strategy\\n\\n## Acceptance Criteria\\n- [ ] Research document created at \`docs/discoveries/auth-strategy.md\`\\n- [ ] Document includes comparison with pros/cons\\n- [ ] Document includes clear recommendation\\n\\n## Output\\nSave findings to: \`docs/discoveries/auth-strategy.md\`\\n\\n## Dependencies\\n- None\\n\\n## Completion\\n- [ ] Research document created\\n- [ ] Commit: \`docs(discovery): research auth strategy\`"
   },
   {
     "name": "Implement JWT authentication endpoint",
     "priority": "P1",
     "type": "UserStory",
-    "body": "# Implement JWT Authentication Endpoint\\n\\n**User Story**: As a user, I want to authenticate via JWT...\\n\\n## Dependencies\\n- See \`docs/discoveries/auth-strategy.md\` for implementation approach\\n..."
+    "body": "# Implement JWT Authentication Endpoint\\n\\nCreate a POST \`/api/auth/login\` endpoint that validates credentials and returns a signed JWT token. Include refresh token rotation and httpOnly cookie storage.\\n\\n## Acceptance Criteria\\n- [ ] POST /api/auth/login accepts email and password\\n- [ ] Returns signed JWT on valid credentials\\n- [ ] Returns 401 with error message on invalid credentials\\n\\n## Implementation\\n1. Create \`src/routes/auth.ts\` with login endpoint\\n2. Add JWT signing using jsonwebtoken package\\n3. Implement credential validation against user store\\n\\n## Tests\\n- File: \`__tests__/routes/auth.test.ts\`\\n- Valid credentials return 200 with token\\n- Invalid credentials return 401\\n\\n## Dependencies\\n- See \`docs/discoveries/auth-strategy.md\`\\n\\n## Completion\\n- [ ] Tests pass\\n- [ ] Build passes\\n- [ ] Commit: \`feat(auth): implement JWT login endpoint\`"
   }
 ]
 </output_format>`;
@@ -4613,17 +4596,19 @@ function splitPlanIntoEpicSections(plan) {
  * Used for parallel epic generation.
  */
 function buildSingleEpicPrompt(epicSection, epicIndex, totalEpics, fullPlan, boardContext) {
-  return `You are a senior product manager converting ONE section of a plan document into a structured Epic for a Kanban board. The Epic will be implemented by an AI coding assistant (Claude Code).
+  return `You are a technical architect preparing work packages for an AI coding assistant (Claude Code). Convert ONE section of a plan document into a structured Epic optimized for automated execution.
 
 <role>
-Convert the specific Epic section below into a structured JSON object.
+Convert the specific Epic section below into a structured Epic.
 The full plan is provided as context, but you MUST ONLY generate the single Epic described in the <epic_section>.
 
 PRINCIPLES:
-- Transfer ALL detail from the plan section — do NOT summarize or lose information
+- Focus on actionable implementation detail — omit narrative, motivation, and UX prose
 - Since AI implements the code, features are built in their FINAL versions (no MVP or phased releases)
 - Only automated tests are used (NEVER manual testing or manual QA)
 - Flag areas that need research with "(needs Discovery)" suffix
+- Each scope item must map directly to 1+ executable child tasks
+- Include specific technical details (file types, frameworks, APIs) so task generation can reference them
 </role>
 
 ${boardContext || ''}
@@ -4648,7 +4633,9 @@ EXAMPLE FORMAT:
 ---BODY---
 # Authentication System Epic
 
-## Motivation & Objectives
+**Goal**: Implement a complete authentication system with login, signup, logout, and session persistence using JWT tokens.
+
+## Scope
 ...rest of markdown...
 
 RULES:
@@ -4659,37 +4646,43 @@ RULES:
 2. The SECOND line must be exactly: ---BODY---
 3. Everything after "---BODY---" is the Epic's markdown body (plain text, no JSON escaping needed).
 
-The body MUST be COMPREHENSIVE and include ALL sections from the plan:
+Body template (use EXACTLY these sections — no others):
 
 # [Epic Name] Epic
 
-## Motivation & Objectives
-[2-3 paragraphs — copy/expand all motivation content from the plan section]
+**Goal**: [1-2 sentences — WHAT this epic delivers. Concise, technical, no narrative.]
 
-## Scope & Features
-- [Feature 1]: [Detailed description from plan]
-(Transfer every feature listed in the plan)
-
-## User Experience & Design
-[All UX detail from the plan — layout, states, animations, transitions, responsive, accessibility]
+## Scope
+- [Feature/capability 1]: [Concise technical description — what it does, key behaviors]
+- [Feature/capability 2]: [Description] (needs Discovery)
+[Each bullet = one feature area that maps to 1+ executable child tasks. Include technical specifics.]
 
 ## Acceptance Criteria
-- [ ] [Specific observable behavior]
-(8-15 ACs, all transferred from the plan)
+- [ ] [Technically verifiable condition — checkable by tests, build, or code inspection]
+(5-10 ACs. Each must be specific and verifiable. Include error handling, edge cases, data validation.)
 
-## Technical Approach & Pseudo-Logic
-[All technical detail — architecture, data flow, pseudo-code, APIs, error handling, performance]
+## Technical Approach
+- [Architecture decisions and patterns to follow]
+- [Key libraries, frameworks, tools to use]
+- [Data flow, state management, API design]
+- [Items needing research] (needs Discovery)
+[Implementation guidance that helps generate concrete child tasks]
 
 ## Dependencies
-[From the plan section]
-
-## Open Questions & Risks
-[From the plan section]
+- [Other Epics by name, external services, packages, or "None"]
 
 ## Child Tasks
 See individual user story files in this Epic folder.
 
-CRITICAL: Transfer ALL detail from the plan. Every feature, every AC, every technical note, every design detail. Do not summarize.
+SECTIONS TO NEVER INCLUDE:
+- ❌ "Motivation & Objectives" — Claude Code doesn't need motivation
+- ❌ "User Experience & Design" — UX details go into individual child tasks
+- ❌ "Open Questions & Risks" — Claude Code executes, it doesn't deliberate
+- ❌ "User Story" / "As a [role], I want..."
+- ❌ "Technical Tasks" with numbered steps
+- ❌ "Tests" with specific test files
+- ❌ "Standard Completion Criteria"
+
 LANGUAGE: ALL output (name, folderName, body) MUST be written in English, regardless of the plan's language. If the plan is in another language, translate all content to English while preserving meaning and detail.
 </output_format>`;
 }
@@ -4715,20 +4708,22 @@ function buildPlanToEpicsPrompt(plan, messages, boardContext) {
     .map((m) => `[${m.role === 'user' ? 'User' : 'Assistant'}]\n${m.content}`)
     .join('\n\n');
 
-  return `You are a senior product manager converting a finalized plan document into structured Epics for a Kanban board. The Epics will be implemented by an AI coding assistant (Claude Code).
+  return `You are a technical architect converting a finalized plan document into structured Epics optimized for automated execution by an AI coding assistant (Claude Code).
 
 <role>
-Parse the plan document below and convert each Epic section into a structured JSON object.
+Parse the plan document below and convert each Epic section into a structured Epic.
 The plan document is the PRIMARY source of truth. The conversation is provided as secondary context only.
 
 PRINCIPLES:
+- Focus on actionable implementation detail — omit narrative, motivation, and UX prose
 - Each Epic = a cohesive feature area that can be developed independently
 - Epics should be ordered for linear, incremental implementation (foundations first)
 - Since AI implements the code, features are built in their FINAL versions (no MVP or phased releases)
 - Only automated tests are used (NEVER manual testing or manual QA)
 - Flag areas that need research with "(needs Discovery)" in Scope or Technical Approach sections
 - Do NOT create user stories or tasks — ONLY the Epic structure
-- Each Epic should be specific enough to generate concrete child tasks later
+- Each scope item must map directly to 1+ executable child tasks
+- Include specific technical details (file types, frameworks, APIs) so task generation can reference them
 </role>
 
 ${boardContext || ''}
@@ -4751,16 +4746,20 @@ EXAMPLE FORMAT:
 ---BODY---
 # Project Foundation Epic
 
-## Motivation & Objectives
-...full markdown...
+**Goal**: Set up the project skeleton with build tooling, linting, CI pipeline, and base configuration.
+
+## Scope
+...
 
 ---EPIC---
 {"name": "Authentication System", "folderName": "E02-Authentication-System", "priority": "P1"}
 ---BODY---
 # Authentication System Epic
 
-## Motivation & Objectives
-...full markdown...
+**Goal**: Implement a complete authentication system with login, signup, logout, and session persistence using JWT tokens.
+
+## Scope
+...
 
 RULES FOR FORMAT:
 1. Start each Epic with the line: ---EPIC---
@@ -4768,62 +4767,50 @@ RULES FOR FORMAT:
 3. Next line: ---BODY---
 4. Everything after "---BODY---" until the next "---EPIC---" (or end of output) is the markdown body
 
-The body for each Epic MUST be COMPREHENSIVE and DETAILED — transfer ALL information from the plan. It is the primary input for generating User Stories later.
-
-Body template for each Epic:
+Body template for each Epic (use EXACTLY these sections — no others):
 
 # [Epic Name] Epic
 
-## Motivation & Objectives
-[2-3 paragraphs explaining WHY this Epic exists, WHO benefits, WHAT success looks like, and HOW it fits the larger product vision. Copy/expand from the plan.]
+**Goal**: [1-2 sentences — WHAT this epic delivers. Concise, technical, no narrative.]
 
-## Scope & Features
-- [Feature 1]: [Detailed 2-3 sentence description of what it does, user interaction, expected outcome]
-- [Feature 2]: [Detailed description]
-- [Feature needing research]: [Description] (needs Discovery)
-
-## User Experience & Design
-[Detailed UX description:]
-- Layout, structure, visual hierarchy
-- Key UI states (empty, loading, error, success, edge cases)
-- Navigation flow and user journey
-- Style guidelines (colors, typography, spacing)
-- Animations and transitions (triggers, duration, easing, feel)
-- Responsive behavior
-- Accessibility considerations
+## Scope
+- [Feature/capability 1]: [Concise technical description — what it does, key behaviors]
+- [Feature/capability 2]: [Description] (needs Discovery)
+[Each bullet = one feature area that maps to 1+ executable child tasks. Include technical specifics.]
 
 ## Acceptance Criteria
-- [ ] [Specific observable product behavior 1]
-- [ ] [Specific observable product behavior 2]
-(8-15 ACs per Epic, each concrete and testable)
+- [ ] [Technically verifiable condition — checkable by tests, build, or code inspection]
+(5-10 ACs per Epic. Each must be specific and verifiable. Include error handling, edge cases, data validation.)
 
-## Technical Approach & Pseudo-Logic
-- [Architecture and implementation guidance]
-- [Data flow, API endpoints, state management]
-- [Pseudo-code for key business logic or flows]
-- [Error handling strategy]
-- [Performance considerations]
+## Technical Approach
+- [Architecture decisions and patterns to follow]
+- [Key libraries, frameworks, tools to use]
+- [Data flow, state management, API design]
+- [Pseudo-code for key business logic when non-trivial]
+- [Items needing research] (needs Discovery)
+[Implementation guidance that helps generate concrete child tasks]
 
 ## Dependencies
-- [Other Epics by name, external services, or "None"]
-
-## Open Questions & Risks
-- [Unresolved items needing Discovery or decisions]
-- [Technical risks or unknowns]
+- [Other Epics by name, external services, packages, or "None"]
 
 ## Child Tasks
 See individual user story files in this Epic folder.
 
+SECTIONS TO NEVER INCLUDE:
+- ❌ "Motivation & Objectives" — Claude Code doesn't need motivation
+- ❌ "User Experience & Design" — UX details go into individual child tasks
+- ❌ "Open Questions & Risks" — Claude Code executes, it doesn't deliberate
+- ❌ "User Story" / "As a [role], I want..."
+- ❌ "Technical Tasks" with numbered steps
+- ❌ "Tests" with specific test files
+- ❌ "Standard Completion Criteria"
+
 ADDITIONAL RULES:
 - Order Epics by implementation priority (E01 = most foundational)
 - Use E{NN} prefix in folderName, numbered sequentially (E01, E02, E03...)
-- Write 8-15 ACs per Epic describing specific, observable, testable product behaviors
-- Transfer ALL detail from the plan — do NOT summarize or lose information
-- Include pseudo-logic for non-trivial flows
-- Include UX/design details so stories can be generated without a designer
+- ACs must NOT be generic — they must describe concrete, verifiable behavior
 - Flag complex areas with "(needs Discovery)" suffix
 - NEVER include manual tests — only reference automated testing
-- ACs must NOT be generic — they must describe concrete behavior
 - Dependencies section must reference other Epics by name when applicable
 - LANGUAGE: ALL output (name, folderName, body) MUST be written in English, regardless of the plan's language. If the plan is in another language, translate all content to English while preserving meaning and detail.
 </output_format>`;
@@ -4850,19 +4837,21 @@ function buildIdeasToEpicsPrompt(messages, boardContext) {
     .map((m) => `[${m.role === 'user' ? 'User' : 'Assistant'}]\n${m.content}`)
     .join('\n\n');
 
-  return `You are a senior product manager converting a brainstorming session into structured Epics for a Kanban board. The Epics will be implemented by an AI coding assistant (Claude Code).
+  return `You are a technical architect converting a brainstorming session into structured Epics optimized for automated execution by an AI coding assistant (Claude Code).
 
 <role>
 Analyze the COMPLETE brainstorming conversation below and extract all agreed-upon features, organizing them into Epics.
 
 PRINCIPLES:
+- Focus on actionable implementation detail — omit narrative, motivation, and UX prose
 - Each Epic = a cohesive feature area that can be developed independently
 - Epics should be ordered for linear, incremental implementation (foundations first)
 - Since AI implements the code, features are built in their FINAL versions (no MVP or phased releases)
 - Only automated tests are used (NEVER manual testing or manual QA)
 - Flag areas that need research with "(needs Discovery)" in Scope or Technical Approach sections
 - Do NOT create user stories or tasks — ONLY the Epic structure
-- Each Epic should be specific enough to generate concrete child tasks later
+- Each scope item must map directly to 1+ executable child tasks
+- Include specific technical details (file types, frameworks, APIs) so task generation can reference them
 </role>
 
 ${boardContext || ''}
@@ -4881,16 +4870,20 @@ EXAMPLE FORMAT:
 ---BODY---
 # Project Foundation Epic
 
-## Motivation & Objectives
-...full markdown...
+**Goal**: Set up the project skeleton with build tooling, linting, CI pipeline, and base configuration.
+
+## Scope
+...
 
 ---EPIC---
 {"name": "Authentication System", "folderName": "E02-Authentication-System", "priority": "P1"}
 ---BODY---
 # Authentication System Epic
 
-## Motivation & Objectives
-...full markdown...
+**Goal**: Implement a complete authentication system with login, signup, logout, and session persistence using JWT tokens.
+
+## Scope
+...
 
 RULES FOR FORMAT:
 1. Start each Epic with the line: ---EPIC---
@@ -4898,61 +4891,50 @@ RULES FOR FORMAT:
 3. Next line: ---BODY---
 4. Everything after "---BODY---" until the next "---EPIC---" (or end of output) is the markdown body
 
-The body for each Epic MUST be COMPREHENSIVE and DETAILED. It is the primary input for generating User Stories later. Extract ALL relevant detail from the conversation.
-
-Body template for each Epic:
+Body template for each Epic (use EXACTLY these sections — no others):
 
 # [Epic Name] Epic
 
-## Motivation & Objectives
-[2-3 paragraphs explaining WHY this Epic exists, WHO benefits, WHAT success looks like, and HOW it fits the larger product vision.]
+**Goal**: [1-2 sentences — WHAT this epic delivers. Concise, technical, no narrative.]
 
-## Scope & Features
-- [Feature 1]: [Detailed 2-3 sentence description of what it does, user interaction, expected outcome]
-- [Feature 2]: [Detailed description]
-- [Feature needing research]: [Description] (needs Discovery)
-
-## User Experience & Design
-[Detailed UX description:]
-- Layout, structure, visual hierarchy
-- Key UI states (empty, loading, error, success, edge cases)
-- Navigation flow and user journey
-- Style guidelines (colors, typography, spacing)
-- Animations and transitions (triggers, duration, easing, feel)
-- Responsive behavior
-- Accessibility considerations
+## Scope
+- [Feature/capability 1]: [Concise technical description — what it does, key behaviors]
+- [Feature/capability 2]: [Description] (needs Discovery)
+[Each bullet = one feature area that maps to 1+ executable child tasks. Include technical specifics.]
 
 ## Acceptance Criteria
-- [ ] [Specific observable product behavior 1]
-- [ ] [Specific observable product behavior 2]
-(8-15 ACs per Epic, each concrete and testable)
+- [ ] [Technically verifiable condition — checkable by tests, build, or code inspection]
+(5-10 ACs per Epic. Each must be specific and verifiable. Include error handling, edge cases, data validation.)
 
-## Technical Approach & Pseudo-Logic
-- [Architecture and implementation guidance]
-- [Data flow, API endpoints, state management]
-- [Pseudo-code for key business logic or flows]
-- [Error handling strategy]
-- [Performance considerations]
+## Technical Approach
+- [Architecture decisions and patterns to follow]
+- [Key libraries, frameworks, tools to use]
+- [Data flow, state management, API design]
+- [Pseudo-code for key business logic when non-trivial]
+- [Items needing research] (needs Discovery)
+[Implementation guidance that helps generate concrete child tasks]
 
 ## Dependencies
-- [Other Epics by name, external services, or "None"]
-
-## Open Questions & Risks
-- [Unresolved items needing Discovery or decisions]
-- [Technical risks or unknowns]
+- [Other Epics by name, external services, packages, or "None"]
 
 ## Child Tasks
 See individual user story files in this Epic folder.
 
+SECTIONS TO NEVER INCLUDE:
+- ❌ "Motivation & Objectives" — Claude Code doesn't need motivation
+- ❌ "User Experience & Design" — UX details go into individual child tasks
+- ❌ "Open Questions & Risks" — Claude Code executes, it doesn't deliberate
+- ❌ "User Story" / "As a [role], I want..."
+- ❌ "Technical Tasks" with numbered steps
+- ❌ "Tests" with specific test files
+- ❌ "Standard Completion Criteria"
+
 ADDITIONAL RULES:
 - Order Epics by implementation priority (E01 = most foundational)
 - Use E{NN} prefix in folderName, numbered sequentially (E01, E02, E03...)
-- Write 8-15 ACs per Epic describing specific, observable, testable product behaviors
-- Include pseudo-logic for non-trivial flows
-- Include UX/design details so stories can be generated without a designer
+- ACs must NOT be generic — they must describe concrete, verifiable behavior
 - Flag complex areas with "(needs Discovery)" suffix
 - NEVER include manual tests — only reference automated testing
-- ACs must NOT be generic — they must describe concrete behavior
 - Dependencies section must reference other Epics by name when applicable
 - LANGUAGE: ALL output (name, folderName, body) MUST be written in English, regardless of the conversation's language. If the conversation is in another language, translate all content to English while preserving meaning and detail.
 </output_format>`;
