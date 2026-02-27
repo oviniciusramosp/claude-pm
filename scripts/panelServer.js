@@ -4685,7 +4685,23 @@ LANGUAGE: ALL output (name, folderName, body) MUST be written in English, regard
 }
 
 function buildPlanToEpicsPrompt(plan, messages, boardContext) {
-  const conversationBlock = messages
+  // Budget: conversation is secondary context — keep only recent messages within ~4000 tokens
+  const MAX_CONV_TOKENS = 4000;
+  let messagesToInclude = messages;
+  const totalTokens = estimateTokens(messages.map(m => m.content).join('\n'));
+
+  if (totalTokens > MAX_CONV_TOKENS) {
+    messagesToInclude = [];
+    let budget = MAX_CONV_TOKENS;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msgTokens = estimateTokens(messages[i].content);
+      if (budget - msgTokens < 0 && messagesToInclude.length > 0) break;
+      messagesToInclude.unshift(messages[i]);
+      budget -= msgTokens;
+    }
+  }
+
+  const conversationBlock = messagesToInclude
     .map((m) => `[${m.role === 'user' ? 'User' : 'Assistant'}]\n${m.content}`)
     .join('\n\n');
 
@@ -4804,7 +4820,23 @@ ADDITIONAL RULES:
 }
 
 function buildIdeasToEpicsPrompt(messages, boardContext) {
-  const conversationBlock = messages
+  // Budget: conversation is the only source here — keep within ~6000 tokens
+  const MAX_CONV_TOKENS = 6000;
+  let messagesToInclude = messages;
+  const totalTokens = estimateTokens(messages.map(m => m.content).join('\n'));
+
+  if (totalTokens > MAX_CONV_TOKENS) {
+    messagesToInclude = [];
+    let budget = MAX_CONV_TOKENS;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msgTokens = estimateTokens(messages[i].content);
+      if (budget - msgTokens < 0 && messagesToInclude.length > 0) break;
+      messagesToInclude.unshift(messages[i]);
+      budget -= msgTokens;
+    }
+  }
+
+  const conversationBlock = messagesToInclude
     .map((m) => `[${m.role === 'user' ? 'User' : 'Assistant'}]\n${m.content}`)
     .join('\n\n');
 
@@ -5187,6 +5219,14 @@ app.post('/api/ideas/generate-epics', async (req, res) => {
     // Resolve plan: prefer client-sent plan, then session plan
     const plan = clientPlan || session.plan || '';
 
+    // Auto-compact conversation before generating epics to prevent timeout
+    const compactLogger = {
+      info: (msg) => pushLog('info', LOG_SOURCE.panel, msg),
+      warn: (msg) => pushLog('warn', LOG_SOURCE.panel, msg),
+      success: (msg) => pushLog('success', LOG_SOURCE.panel, msg),
+    };
+    await autoCompactMessages(session, compactLogger);
+
     // Gather board context
     const env = await readEnvPairs();
     const boardDir = resolveBoardDir(env);
@@ -5310,8 +5350,12 @@ app.post('/api/ideas/generate-epics', async (req, res) => {
 
     res.json({ ok: true, created, total: epics.length, failed });
   } catch (error) {
+    const isTimeout = error.message && error.message.includes('timed out');
+    const userMessage = isTimeout
+      ? 'Epic generation timed out. Try using the "To Plan" button to consolidate the conversation, then edit the plan to be more concise before generating again.'
+      : error.message;
     pushLog('error', LOG_SOURCE.claude, `Epic generation from ideas failed: ${error.message}`);
-    res.status(500).json({ ok: false, message: error.message });
+    res.status(500).json({ ok: false, message: userMessage });
   } finally {
     ideaChatState.running = false;
   }
