@@ -50,6 +50,7 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const messageCountAtLoad = useRef(1); // Track initial message count to detect new changes
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -63,23 +64,51 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
     }
   }, [open]);
 
-  // Reset state when modal opens
+  // Load saved session or reset state when modal opens
   useEffect(() => {
-    if (open) {
+    if (!open) return;
+
+    // Reset to clean defaults first
+    setDraft('');
+    setIsEditing(false);
+    setEditDraft('');
+    setPlanDirty(false);
+    setSending(false);
+    setGenerating(false);
+    setConfirmCloseOpen(false);
+
+    // Try to restore a saved session from disk
+    (async () => {
+      try {
+        const res = await fetch(`${apiBaseUrl}/api/ideas/session`);
+        const data = await res.json();
+        if (data.ok && data.exists && data.sessionId) {
+          setSessionId(data.sessionId);
+          // Rebuild messages: system welcome + saved conversation
+          const restored: ChatMessage[] = [{ role: 'system', content: SYSTEM_WELCOME }];
+          for (const m of (data.messages || [])) {
+            if (m.role === 'user' || m.role === 'assistant') {
+              restored.push({ role: m.role, content: m.content });
+            }
+          }
+          setMessages(restored);
+          messageCountAtLoad.current = restored.length;
+          setPlan(data.plan || '');
+          setEditDraft(data.plan || '');
+          return;
+        }
+      } catch {
+        // Failed to load — start fresh
+      }
+      // No saved session — start fresh
       setSessionId(null);
       setMessages([{ role: 'system', content: SYSTEM_WELCOME }]);
-      setDraft('');
+      messageCountAtLoad.current = 1;
       setPlan('');
-      setIsEditing(false);
-      setEditDraft('');
-      setPlanDirty(false);
-      setSending(false);
-      setGenerating(false);
-      setConfirmCloseOpen(false);
-    }
-  }, [open]);
+    })();
+  }, [open, apiBaseUrl]);
 
-  const isDirty = useMemo(() => messages.length > 1 || planDirty, [messages, planDirty]);
+  const isDirty = useMemo(() => messages.length > messageCountAtLoad.current || planDirty, [messages, planDirty]);
   const hasConversation = useMemo(() => messages.some(m => m.role === 'assistant'), [messages]);
 
   const handleCloseAttempt = useCallback(() => {

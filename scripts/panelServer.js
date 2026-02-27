@@ -165,7 +165,37 @@ const ideaChatState = {
 };
 
 // In-memory session store for Idea to Epics brainstorming
-const ideaSessions = new Map(); // sessionId -> { messages: [], createdAt: number }
+const ideaSessions = new Map(); // sessionId -> { messages: [], plan: '', createdAt: number }
+const IDEA_SESSION_FILE = path.join(cwd, '.data', 'idea-session.json');
+
+async function saveIdeaSessionToDisk(sessionId, session) {
+  try {
+    await fs.mkdir(path.dirname(IDEA_SESSION_FILE), { recursive: true });
+    const data = { sessionId, messages: session.messages, plan: session.plan || '', createdAt: session.createdAt };
+    const tempPath = `${IDEA_SESSION_FILE}.tmp`;
+    await fs.writeFile(tempPath, JSON.stringify(data, null, 2), 'utf8');
+    await fs.rename(tempPath, IDEA_SESSION_FILE);
+  } catch {
+    // Non-fatal: session just won't survive restart
+  }
+}
+
+async function loadIdeaSessionFromDisk() {
+  try {
+    const content = await fs.readFile(IDEA_SESSION_FILE, 'utf8');
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
+
+async function deleteIdeaSessionFromDisk() {
+  try {
+    await fs.unlink(IDEA_SESSION_FILE);
+  } catch {
+    // File may not exist
+  }
+}
 
 // Cleanup stale sessions every 30 minutes (sessions older than 2 hours)
 setInterval(() => {
@@ -4431,6 +4461,30 @@ function parseIdeasToEpicsResponse(reply) {
   return normalized;
 }
 
+// Return the saved idea session from disk (if any) so the frontend can resume
+app.get('/api/ideas/session', async (_req, res) => {
+  const saved = await loadIdeaSessionFromDisk();
+  if (!saved || !saved.sessionId) {
+    res.json({ ok: true, exists: false });
+    return;
+  }
+  // Re-hydrate into memory if not already there
+  if (!ideaSessions.has(saved.sessionId)) {
+    ideaSessions.set(saved.sessionId, {
+      messages: saved.messages || [],
+      plan: saved.plan || '',
+      createdAt: saved.createdAt || Date.now()
+    });
+  }
+  res.json({
+    ok: true,
+    exists: true,
+    sessionId: saved.sessionId,
+    messages: saved.messages || [],
+    plan: saved.plan || ''
+  });
+});
+
 app.post('/api/ideas/chat', async (req, res) => {
   const { sessionId: reqSessionId, message, plan: clientPlan } = req.body;
 
@@ -4505,6 +4559,9 @@ app.post('/api/ideas/chat', async (req, res) => {
     if (parsedPlan) {
       session.plan = parsedPlan;
     }
+
+    // Persist session to disk so it survives modal close / server restart
+    await saveIdeaSessionToDisk(sessionId, session);
 
     res.json({
       ok: true,
@@ -4606,8 +4663,9 @@ app.post('/api/ideas/generate-epics', async (req, res) => {
       // Non-fatal: epics were already created
     }
 
-    // Clean up session
+    // Clean up session (memory + disk)
     ideaSessions.delete(sessionId);
+    await deleteIdeaSessionFromDisk();
 
     res.json({ ok: true, created, total: epics.length, failed });
   } catch (error) {
@@ -4618,11 +4676,12 @@ app.post('/api/ideas/generate-epics', async (req, res) => {
   }
 });
 
-app.post('/api/ideas/delete-session', (req, res) => {
+app.post('/api/ideas/delete-session', async (req, res) => {
   const { sessionId } = req.body;
   if (sessionId) {
     ideaSessions.delete(sessionId);
   }
+  await deleteIdeaSessionFromDisk();
   res.json({ ok: true });
 });
 
