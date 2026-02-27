@@ -35,6 +35,7 @@ import { ErrorDetailModal } from './components/error-detail-modal';
 import { DebugErrorsModal } from './components/debug-errors-modal';
 import { AuthProvider, useAuth } from './contexts/auth-context';
 import { LoginPage } from './components/login-page';
+import { useIsDesktop } from './hooks/use-is-desktop';
 
 // ── Error Boundary ──────────────────────────────────────────────────
 // Catches uncaught errors in the React tree and renders a fallback UI
@@ -124,7 +125,16 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
   const [chatModel, setChatModel] = useState('claude-sonnet-4-5-20250929');
   const [serviceErrors, setServiceErrors] = useState({ app: null, api: null });
   const [errorModal, setErrorModal] = useState({ open: false, title: '', message: '' });
-  const [sidebarOpen, setSidebarOpen] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1024);
+  const isDesktop = useIsDesktop();
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const stored = localStorage.getItem('pm-sidebar-open');
+      if (stored === 'true') return true;
+      if (stored === 'false') return false;
+    } catch { /* ignore */ }
+    return window.innerWidth >= 1024;
+  });
   const [collectedErrors, setCollectedErrors] = useState([]);
   const [debugModalOpen, setDebugModalOpen] = useState(false);
   const [boardRefreshTrigger, setBoardRefreshTrigger] = useState(0);
@@ -179,6 +189,23 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
     if (!didResolveInitialTabRef.current) return;
     try { localStorage.setItem('pm_active_tab', activeTab); } catch { /* ignore */ }
   }, [activeTab]);
+
+  // Persist sidebar open/closed preference
+  useEffect(() => {
+    try { localStorage.setItem('pm-sidebar-open', String(sidebarOpen)); } catch { /* ignore */ }
+  }, [sidebarOpen]);
+
+  // Sync sidebar state on desktop/mobile breakpoint transitions
+  useEffect(() => {
+    if (isDesktop) {
+      try {
+        const stored = localStorage.getItem('pm-sidebar-open');
+        if (stored !== null) setSidebarOpen(stored === 'true');
+      } catch { /* ignore */ }
+    } else {
+      setSidebarOpen(false);
+    }
+  }, [isDesktop]);
 
   useEffect(() => {
     if (apiRunning) {
@@ -691,7 +718,7 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
         isDark ? 'bg-linear-to-b from-gray-950 via-gray-900 to-gray-950' : 'bg-linear-to-b from-gray-100 via-gray-50 to-white'
       )}
     >
-      {sidebarOpen ? (
+      {sidebarOpen && !isDesktop ? (
         <div
           className="fixed inset-0 z-30 bg-black/50 transition-opacity"
           onClick={() => setSidebarOpen(false)}
@@ -702,7 +729,8 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
         activeTab={activeTab}
         setActiveTab={(tab) => {
           setActiveTab(tab);
-          setSidebarOpen(false);
+          // Only auto-close sidebar on mobile — desktop users chose to keep it open
+          if (!isDesktop) setSidebarOpen(false);
           // Clear unread count when switching to feed tab
           if (tab === NAV_TAB_KEYS.feed) {
             setUnreadFeedCount(0);
@@ -739,13 +767,13 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
         serverInfo={serverInfo}
       />
 
-      <main className={cx('flex min-h-0 flex-1 flex-col overflow-hidden transition-[margin,max-width] duration-200', sidebarOpen ? 'ml-[280px] max-w-[calc(100vw-280px)]' : 'max-w-[100vw]')}>
+      <main className={cx('flex min-h-0 flex-1 flex-col overflow-hidden transition-[margin,max-width] duration-200', sidebarOpen && isDesktop ? 'ml-[280px] max-w-[calc(100vw-280px)]' : 'max-w-[100vw]')}>
         <div className="flex items-center gap-3 border-b border-secondary bg-primary/90 px-4 py-3 backdrop-blur-xl">
           <button
             type="button"
             className="rounded-sm p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary"
-            onClick={() => setSidebarOpen(true)}
-            aria-label="Open navigation"
+            onClick={() => setSidebarOpen((prev) => !prev)}
+            aria-label={sidebarOpen ? 'Close navigation' : 'Open navigation'}
           >
             <Menu01 className="size-5" />
           </button>
