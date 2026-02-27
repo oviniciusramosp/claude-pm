@@ -4106,30 +4106,86 @@ app.post('/api/board/generate-stories', async (req, res) => {
 // ── Epic Fix Handlers ─────────────────────────────────────────────────
 
 /**
- * Fix Models — Fill missing `model` fields on child tasks with default.
+ * Fix Models — Use Claude to analyze task complexity and assign the best model.
  */
-async function fixEpicModels(client, children, env) {
-  const defaultModel = env.CLAUDE_DEFAULT_MODEL || 'claude-sonnet-4-5-20250929';
-  let fixed = 0;
-
+async function fixEpicModels(client, children) {
+  const needsFix = [];
   for (const child of children) {
     const markdown = await client.getTaskMarkdown(child.id);
     if (!markdown) continue;
-
     const { frontmatter, body } = parseFrontmatter(markdown);
     if (!frontmatter.model || !frontmatter.model.trim()) {
-      frontmatter.model = defaultModel;
-      await client.updateTask(child.id, frontmatter, body);
+      needsFix.push({ id: child.id, name: child.name, frontmatter, body });
+    }
+  }
+
+  if (needsFix.length === 0) {
+    return { changes: 0, total: children.length, failed: 0, message: 'All tasks already have models' };
+  }
+
+  const prompt = `You are assigning Claude AI models to development tasks based on their complexity.
+
+Available models (choose the most appropriate for each task):
+- claude-opus-4-6 — Most capable. Use for: complex architecture, multi-file refactors, intricate business logic, security-critical code, tasks with many acceptance criteria, debugging hard-to-reproduce bugs, tasks requiring deep reasoning.
+- claude-sonnet-4-5-20250929 — Balanced. Use for: standard feature implementation, moderate complexity tasks, CRUD operations, UI components, API endpoints, most typical development work.
+- claude-haiku-4-5-20251001 — Fast and lightweight. Use for: simple chores, dependency installs, config changes, renaming/reformatting, documentation, small fixes, boilerplate generation.
+
+For each task below, read the description and acceptance criteria carefully, then assign the best model.
+
+Tasks:
+${needsFix.map((t, i) => `${i + 1}. "${t.name}"\n${(t.body || '').slice(0, 500)}`).join('\n\n')}
+
+Return ONLY a JSON array (no markdown, no code blocks):
+[{ "index": 1, "model": "claude-sonnet-4-5-20250929", "reason": "brief reason" }, ...]
+
+Rules:
+- "index" is 1-based, matching the task number above
+- "model" must be one of the three model IDs listed above (exact string)
+- "reason" is a brief explanation (max 15 words) of why that model fits
+- Return valid JSON only, no extra text`;
+
+  const { reply } = await runClaudePromptViaApi(prompt, 'claude-sonnet-4-5-20250929', 120000);
+
+  const text = String(reply || '').trim();
+  const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  const jsonStr = codeBlockMatch ? codeBlockMatch[1].trim() : text;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    throw new Error('Claude did not return valid JSON for model assignment');
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error('Expected a JSON array for model assignment');
+  }
+
+  const validModels = ['claude-opus-4-6', 'claude-sonnet-4-5-20250929', 'claude-haiku-4-5-20251001'];
+  let fixed = 0;
+  let failed = 0;
+
+  for (const item of parsed) {
+    const idx = (item.index || 0) - 1;
+    const task = needsFix[idx];
+    if (!task || !item.model || !validModels.includes(item.model)) continue;
+    try {
+      task.frontmatter.model = item.model;
+      await client.updateTask(task.id, task.frontmatter, task.body);
       fixed++;
-      pushLog('info', LOG_SOURCE.panel, `  Set model for "${child.name}" → ${defaultModel}`);
+      const shortModel = item.model.replace('claude-', '').replace(/-\d{8}$/, '');
+      pushLog('info', LOG_SOURCE.panel, `  Set model for "${task.name}" → ${shortModel}${item.reason ? ` (${item.reason})` : ''}`);
+    } catch (err) {
+      failed++;
+      pushLog('warn', LOG_SOURCE.panel, `  Failed to set model for "${task.name}": ${err.message}`);
     }
   }
 
   return {
     changes: fixed,
     total: children.length,
-    failed: 0,
-    message: fixed > 0 ? `Set model on ${fixed} task(s)` : 'All tasks already have models'
+    failed,
+    message: fixed > 0 ? `Assigned models to ${fixed} task(s)` : 'No model changes made'
   };
 }
 
@@ -4421,7 +4477,7 @@ async function fixEpicAll(client, children, epicId, epicMarkdown, env, boardConf
   const results = [];
 
   pushLog('info', LOG_SOURCE.panel, '  Step 1/5: Fixing models...');
-  results.push(await fixEpicModels(client, children, env));
+  results.push(await fixEpicModels(client, children));
 
   pushLog('info', LOG_SOURCE.panel, '  Step 2/5: Fixing status...');
   results.push(await fixEpicStatus(client, children, boardConfig));
@@ -4518,7 +4574,7 @@ app.post('/api/board/fix-epic', async (req, res) => {
     let result;
     switch (fixType) {
       case 'models':
-        result = await fixEpicModels(client, children, env);
+        result = await fixEpicModels(client, children);
         break;
       case 'agents':
         result = await fixEpicAgents(client, children);
