@@ -4131,28 +4131,82 @@ BOTH tags are REQUIRED in every response. Rules:
 - The plan must ALWAYS contain the FULL document (not just changes) — it replaces the previous version entirely
 - If the user has manually edited the plan (shown in <current_plan>), respect their changes and build on them
 
-Plan document format — once you have enough information, structure the plan like this:
+Plan document format — once you have enough information, structure the plan like this.
+The plan must be COMPREHENSIVE and DETAILED — it is the primary input for generating Epic files and User Stories later. Think of it as a near-final product spec, not a rough outline.
+
 # Plan
 
 ## Epic 1: [Name]
 **Priority**: P0/P1/P2/P3
-**Epic Goal**: [1 paragraph — WHAT and WHY]
-### Scope
-- [Capability 1]
-- [Capability needing research (needs Discovery)]
+
+### Motivation & Objectives
+[2-3 paragraphs explaining:]
+- WHY this Epic exists — the problem it solves or the value it delivers
+- WHO benefits (target users, personas, stakeholders)
+- WHAT success looks like — measurable outcomes or observable behaviors
+- HOW this fits into the larger product vision
+
+### Scope & Features
+[Detailed breakdown of every capability included in this Epic:]
+- [Feature 1]: [2-3 sentence description of what it does, how the user interacts with it, and what the expected outcome is]
+- [Feature 2]: [Detailed description]
+- [Feature needing research]: [Description] (needs Discovery)
+[Be specific — vague scope leads to vague stories. If a feature has sub-features, list them.]
+
+### User Experience & Design
+[Describe the user-facing experience in detail:]
+- Layout, structure, and visual hierarchy
+- Key UI states (empty, loading, error, success, edge cases)
+- Navigation flow and user journey
+- Style guidelines (colors, typography, spacing patterns to follow or match)
+- Animations and transitions (what triggers them, duration, easing, feel)
+- Responsive behavior (mobile, tablet, desktop)
+- Accessibility considerations
+
 ### Acceptance Criteria
-- [ ] [Specific observable behavior 1]
-- [ ] [Specific observable behavior 2]
-### Technical Approach
-- [High-level decision]
+- [ ] [Specific observable behavior — be precise enough that a developer can verify pass/fail]
+- [ ] [Another specific behavior]
+(Write 8-15 ACs per Epic. Each AC must be concrete and testable, not vague.)
+
+### Technical Approach & Pseudo-Logic
+[High-level architecture and implementation guidance:]
+- Technology choices and patterns to use
+- Data flow: where data comes from, how it's transformed, where it's stored
+- Key algorithms or business logic described as pseudo-code or step-by-step:
+  \`\`\`
+  1. User triggers action X
+  2. System validates Y (check Z condition)
+  3. If valid → perform A, update state B, show feedback C
+  4. If invalid → show error D with message E
+  \`\`\`
+- API endpoints needed (method, path, request/response shape)
+- State management approach (what state, where it lives, how it updates)
+- Error handling strategy (what errors are possible, how each is handled)
+- Performance considerations (lazy loading, caching, debouncing, etc.)
+
 ### Dependencies
-- [Other epics or None]
+- [Other Epics this depends on, with specific reason]
+- [External services, APIs, or libraries needed]
+- Or "None"
+
+### Open Questions & Risks
+- [Anything unresolved that needs Discovery or a decision]
+- [Technical risks or unknowns]
+- [Areas where the user should provide more input]
 
 ## Epic 2: [Name]
-...and so on
+...same detailed structure
 
-Order Epics by implementation priority (Epic 1 = most foundational).
-Write 5-10 ACs per Epic. Flag complex areas with "(needs Discovery)".
+---
+
+PLAN QUALITY RULES:
+- Order Epics by implementation priority (Epic 1 = most foundational)
+- Write 8-15 ACs per Epic — each must be specific and verifiable
+- Include pseudo-logic for any non-trivial business logic or flow
+- Describe UX in enough detail that a developer can build it without a designer
+- Mention specific animation/transition details (duration, easing, trigger)
+- Flag complex or uncertain areas with "(needs Discovery)"
+- The plan should be detailed enough that someone reading ONLY the plan (without the conversation) can understand exactly what to build
 </response_format>
 
 ${currentPlan ? `<current_plan>\nThe user's current plan document (may have been manually edited):\n${currentPlan}\n</current_plan>` : ''}
@@ -4359,28 +4413,46 @@ Each element must have:
 - "priority": string ("P0", "P1", "P2", or "P3")
 - "body": string (complete Epic markdown body with \\n for newlines)
 
-The body for each Epic MUST follow this exact format:
+The body for each Epic MUST be COMPREHENSIVE and DETAILED — transfer ALL information from the plan. It is the primary input for generating User Stories later.
 
 # [Epic Name] Epic
 
-**Epic Goal**: [1 paragraph describing WHAT will be delivered and WHY — focus on end-user value]
+## Motivation & Objectives
+[2-3 paragraphs explaining WHY this Epic exists, WHO benefits, WHAT success looks like, and HOW it fits the larger product vision. Copy/expand from the plan.]
 
-## Scope
-- [Specific capability or feature area 1]
-- [Capability that needs research (needs Discovery)]
-- [Another capability]
+## Scope & Features
+- [Feature 1]: [Detailed 2-3 sentence description of what it does, user interaction, expected outcome]
+- [Feature 2]: [Detailed description]
+- [Feature needing research]: [Description] (needs Discovery)
+
+## User Experience & Design
+[Detailed UX description:]
+- Layout, structure, visual hierarchy
+- Key UI states (empty, loading, error, success, edge cases)
+- Navigation flow and user journey
+- Style guidelines (colors, typography, spacing)
+- Animations and transitions (triggers, duration, easing, feel)
+- Responsive behavior
+- Accessibility considerations
 
 ## Acceptance Criteria
 - [ ] [Specific observable product behavior 1]
 - [ ] [Specific observable product behavior 2]
-(... 5-10 ACs per Epic, describing concrete user-visible behaviors)
+(8-15 ACs per Epic, each concrete and testable)
 
-## Technical Approach
-- [High-level architectural decision 1]
-- [Technology choice that needs research (needs Discovery)]
+## Technical Approach & Pseudo-Logic
+- [Architecture and implementation guidance]
+- [Data flow, API endpoints, state management]
+- [Pseudo-code for key business logic or flows]
+- [Error handling strategy]
+- [Performance considerations]
 
 ## Dependencies
-- [List dependencies on other Epics or external services, or "None"]
+- [Other Epics by name, external services, or "None"]
+
+## Open Questions & Risks
+- [Unresolved items needing Discovery or decisions]
+- [Technical risks or unknowns]
 
 ## Child Tasks
 See individual user story files in this Epic folder.
@@ -4388,7 +4460,10 @@ See individual user story files in this Epic folder.
 RULES:
 - Order Epics by implementation priority (E01 = most foundational)
 - Use E{NN} prefix in folderName, numbered sequentially (E01, E02, E03...)
-- Write 5-10 ACs per Epic describing specific, observable product behaviors
+- Write 8-15 ACs per Epic describing specific, observable, testable product behaviors
+- Transfer ALL detail from the plan — do NOT summarize or lose information
+- Include pseudo-logic for non-trivial flows
+- Include UX/design details so stories can be generated without a designer
 - Flag complex areas with "(needs Discovery)" suffix
 - NEVER include manual tests — only reference automated testing
 - ACs must NOT be generic — they must describe concrete behavior
@@ -4431,28 +4506,46 @@ Each element must have:
 - "priority": string ("P0", "P1", "P2", or "P3")
 - "body": string (complete Epic markdown body with \\n for newlines)
 
-The body for each Epic MUST follow this exact format:
+The body for each Epic MUST be COMPREHENSIVE and DETAILED. It is the primary input for generating User Stories later. Extract ALL relevant detail from the conversation.
 
 # [Epic Name] Epic
 
-**Epic Goal**: [1 paragraph describing WHAT will be delivered and WHY — focus on end-user value]
+## Motivation & Objectives
+[2-3 paragraphs explaining WHY this Epic exists, WHO benefits, WHAT success looks like, and HOW it fits the larger product vision.]
 
-## Scope
-- [Specific capability or feature area 1]
-- [Capability that needs research (needs Discovery)]
-- [Another capability]
+## Scope & Features
+- [Feature 1]: [Detailed 2-3 sentence description of what it does, user interaction, expected outcome]
+- [Feature 2]: [Detailed description]
+- [Feature needing research]: [Description] (needs Discovery)
+
+## User Experience & Design
+[Detailed UX description:]
+- Layout, structure, visual hierarchy
+- Key UI states (empty, loading, error, success, edge cases)
+- Navigation flow and user journey
+- Style guidelines (colors, typography, spacing)
+- Animations and transitions (triggers, duration, easing, feel)
+- Responsive behavior
+- Accessibility considerations
 
 ## Acceptance Criteria
 - [ ] [Specific observable product behavior 1]
 - [ ] [Specific observable product behavior 2]
-(... 5-10 ACs per Epic, describing concrete user-visible behaviors)
+(8-15 ACs per Epic, each concrete and testable)
 
-## Technical Approach
-- [High-level architectural decision 1]
-- [Technology choice that needs research (needs Discovery)]
+## Technical Approach & Pseudo-Logic
+- [Architecture and implementation guidance]
+- [Data flow, API endpoints, state management]
+- [Pseudo-code for key business logic or flows]
+- [Error handling strategy]
+- [Performance considerations]
 
 ## Dependencies
-- [List dependencies on other Epics or external services, or "None"]
+- [Other Epics by name, external services, or "None"]
+
+## Open Questions & Risks
+- [Unresolved items needing Discovery or decisions]
+- [Technical risks or unknowns]
 
 ## Child Tasks
 See individual user story files in this Epic folder.
@@ -4460,7 +4553,9 @@ See individual user story files in this Epic folder.
 RULES:
 - Order Epics by implementation priority (E01 = most foundational)
 - Use E{NN} prefix in folderName, numbered sequentially (E01, E02, E03...)
-- Write 5-10 ACs per Epic describing specific, observable product behaviors
+- Write 8-15 ACs per Epic describing specific, observable, testable product behaviors
+- Include pseudo-logic for non-trivial flows
+- Include UX/design details so stories can be generated without a designer
 - Flag complex areas with "(needs Discovery)" suffix
 - NEVER include manual tests — only reference automated testing
 - ACs must NOT be generic — they must describe concrete behavior
