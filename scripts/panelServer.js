@@ -4097,25 +4097,51 @@ function buildIdeaBrainstormWithPlanPrompt(messages, currentPlan, boardContext) 
     .map((m) => `[${m.role === 'user' ? 'User' : 'Assistant'}]\n${m.content}`)
     .join('\n\n');
 
-  return `You are a senior product manager helping a user refine their product ideas into well-structured Epics for implementation by an AI coding assistant (Claude Code).
+  return `You are a council of three expert agents collaborating to help a user refine their product ideas into well-structured Epics for implementation by an AI coding assistant (Claude Code).
 
-<role>
-You are a product thinker, NOT an engineer. Your job is to:
-- Understand the user's vision and goals
-- Ask clarifying questions about scope, target users, and priorities
-- Help organize ideas into logical feature groups (future Epics)
-- Identify which features belong together in the same system and which should be separate Epics
-- Suggest a logical implementation order (foundations first)
-- Point out gaps, risks, or missing features the user may not have considered
+<agents>
+You embody THREE distinct expert perspectives that work together on every response:
 
+**🎯 PM Agent (Product Manager)**
+- Owns the product vision, priorities, and scope
+- Organizes features into logical Epic groups
+- Defines acceptance criteria with specific, testable behaviors
+- Identifies dependencies between Epics and suggests implementation order
+- Points out gaps, risks, or missing features the user hasn't considered
+- Guards against scope creep and keeps Epics focused
+
+**💻 Dev Agent (Senior Developer)**
+- Provides the technical architecture and implementation guidance
+- Writes pseudo-logic for key business flows and algorithms
+- Defines API endpoints, data models, and state management
+- Identifies technical risks, performance considerations, and error handling
+- Suggests technology choices and patterns
+- Flags items that need technical Discovery
+
+**🎨 Design Agent (UX/UI Designer)**
+- Describes the user experience in detail: layout, visual hierarchy, navigation
+- Defines all UI states (empty, loading, error, success, edge cases)
+- Specifies animations and transitions (trigger, duration, easing, feel)
+- Provides responsive behavior guidance (mobile, tablet, desktop)
+- Considers accessibility (screen readers, keyboard nav, contrast)
+- Suggests style direction (colors, typography, spacing patterns)
+
+HOW THE AGENTS COLLABORATE:
+- In the <reply>, the conversation feels natural — you speak as one voice but draw on all three perspectives. When a specific agent has something important to contribute, prefix it with the agent emoji (🎯, 💻, or 🎨) to make the source clear.
+- In the <plan>, all three agents contribute to their respective sections — the PM writes Motivation, Scope, ACs, and Dependencies; the Dev writes Technical Approach & Pseudo-Logic; the Designer writes User Experience & Design.
+- The agents challenge and complement each other — the Dev may flag that a PM's scope is technically complex, or the Designer may suggest UX improvements the PM didn't consider.
+</agents>
+
+<rules>
 IMPORTANT RULES:
-- Do NOT jump to implementation details — focus on WHAT the product does, not HOW it's built
-- Ask 2-3 focused questions per turn to keep momentum
+- Ask 2-3 focused questions per turn to keep momentum (at least one from the PM, and others from Dev/Design as needed)
 - Summarize your understanding before asking questions
 - Since implementation is done entirely by AI, features can be built in their final versions — there is NO need for MVP or phased releases
 - Keep responses concise and conversational (not walls of text)
 - Write in the same language the user is writing in
-</role>
+- In early turns, focus on understanding the product vision before diving into design or technical details
+- As the conversation matures, all three agents should contribute increasingly detailed sections to the plan
+</rules>
 
 <response_format>
 You MUST structure EVERY response using exactly these two XML tags:
@@ -4124,10 +4150,10 @@ You MUST structure EVERY response using exactly these two XML tags:
 2. <plan>The full updated plan document in markdown goes here</plan>
 
 BOTH tags are REQUIRED in every response. Rules:
-- The <reply> tag contains your conversational text (questions, summaries, suggestions)
+- The <reply> tag contains your conversational text (questions, summaries, suggestions). Use agent emojis (🎯, 💻, 🎨) to attribute specific insights when relevant.
 - The <plan> tag contains the COMPLETE, CURRENT state of the plan document
 - In early turns when there isn't enough info yet, use <plan></plan> (empty)
-- As the conversation progresses, build up the plan incrementally
+- As the conversation progresses, build up the plan incrementally — all three agents contribute to their sections
 - The plan must ALWAYS contain the FULL document (not just changes) — it replaces the previous version entirely
 - If the user has manually edited the plan (shown in <current_plan>), respect their changes and build on them
 
@@ -4217,7 +4243,7 @@ ${boardContext || ''}
 ${conversationBlock}
 </conversation>
 
-Continue the brainstorming conversation. Respond in <reply> and update the plan in <plan>.`;
+Continue the brainstorming conversation. All three agents (🎯 PM, 💻 Dev, 🎨 Design) should contribute their perspectives. Respond in <reply> and update the plan in <plan>.`;
 }
 
 function buildIdeaBrainstormPrompt(messages, boardContext) {
@@ -4371,6 +4397,109 @@ async function deleteBrainstormLog(boardDir) {
   } catch {
     // File may not exist
   }
+}
+
+/**
+ * Split a plan document into individual Epic sections.
+ * Returns an array of { index, name, section } objects.
+ */
+function splitPlanIntoEpicSections(plan) {
+  const lines = plan.split('\n');
+  const epics = [];
+  let currentEpic = null;
+
+  for (const line of lines) {
+    // Match "## Epic N: Name" or "## Epic N — Name" headers
+    const headerMatch = line.match(/^##\s+Epic\s+(\d+)\s*[:—–-]\s*(.+)$/i);
+    if (headerMatch) {
+      if (currentEpic) {
+        epics.push(currentEpic);
+      }
+      currentEpic = {
+        index: parseInt(headerMatch[1], 10),
+        name: headerMatch[2].trim(),
+        section: line + '\n'
+      };
+    } else if (currentEpic) {
+      currentEpic.section += line + '\n';
+    }
+  }
+  if (currentEpic) {
+    epics.push(currentEpic);
+  }
+  return epics;
+}
+
+/**
+ * Build a prompt to generate a SINGLE Epic from its plan section.
+ * Used for parallel epic generation.
+ */
+function buildSingleEpicPrompt(epicSection, epicIndex, totalEpics, fullPlan, boardContext) {
+  return `You are a senior product manager converting ONE section of a plan document into a structured Epic for a Kanban board. The Epic will be implemented by an AI coding assistant (Claude Code).
+
+<role>
+Convert the specific Epic section below into a structured JSON object.
+The full plan is provided as context, but you MUST ONLY generate the single Epic described in the <epic_section>.
+
+PRINCIPLES:
+- Transfer ALL detail from the plan section — do NOT summarize or lose information
+- Since AI implements the code, features are built in their FINAL versions (no MVP or phased releases)
+- Only automated tests are used (NEVER manual testing or manual QA)
+- Flag areas that need research with "(needs Discovery)" suffix
+</role>
+
+${boardContext || ''}
+
+<full_plan_context>
+${fullPlan}
+</full_plan_context>
+
+<epic_section>
+This is Epic ${epicIndex} of ${totalEpics}. Generate ONLY this Epic:
+${epicSection}
+</epic_section>
+
+<output_format>
+Return ONLY a valid JSON object (NOT an array). No markdown code blocks, no explanation — just the raw JSON.
+
+The object must have:
+- "name": string (Epic name, e.g., "Authentication System")
+- "folderName": string (Epic folder name with E{NN} prefix, e.g., "E${String(epicIndex).padStart(2, '0')}-Authentication-System")
+- "priority": string ("P0", "P1", "P2", or "P3")
+- "body": string (complete Epic markdown body with \\n for newlines)
+
+The body MUST be COMPREHENSIVE and include ALL sections from the plan:
+
+# [Epic Name] Epic
+
+## Motivation & Objectives
+[2-3 paragraphs — copy/expand all motivation content from the plan section]
+
+## Scope & Features
+- [Feature 1]: [Detailed description from plan]
+(Transfer every feature listed in the plan)
+
+## User Experience & Design
+[All UX detail from the plan — layout, states, animations, transitions, responsive, accessibility]
+
+## Acceptance Criteria
+- [ ] [Specific observable behavior]
+(8-15 ACs, all transferred from the plan)
+
+## Technical Approach & Pseudo-Logic
+[All technical detail — architecture, data flow, pseudo-code, APIs, error handling, performance]
+
+## Dependencies
+[From the plan section]
+
+## Open Questions & Risks
+[From the plan section]
+
+## Child Tasks
+See individual user story files in this Epic folder.
+
+CRITICAL: Transfer ALL detail from the plan. Every feature, every AC, every technical note, every design detail. Do not summarize.
+</output_format>`;
 }
 
 function buildPlanToEpicsPrompt(plan, messages, boardContext) {
@@ -4765,12 +4894,55 @@ app.post('/api/ideas/generate-epics', async (req, res) => {
 
     const boardContext = await buildBoardContext(client, null);
 
-    // Build prompt: use plan-based prompt if plan exists, otherwise fall back to conversation-only prompt
-    const prompt = plan
-      ? buildPlanToEpicsPrompt(plan, session.messages, boardContext)
-      : buildIdeasToEpicsPrompt(session.messages, boardContext);
-    const { reply } = await runClaudePromptViaApi(prompt, 'claude-opus-4-6', 180000);
-    const epics = parseIdeasToEpicsResponse(reply);
+    // Generate Epics: use parallel agents if plan has epic sections, otherwise single call
+    const epicSections = plan ? splitPlanIntoEpicSections(plan) : [];
+    let epics;
+
+    if (epicSections.length >= 2) {
+      // ── Parallel generation: one agent per Epic ──────────────
+      pushLog('info', LOG_SOURCE.panel, `Splitting plan into ${epicSections.length} parallel agents...`);
+      const parallelResults = await Promise.allSettled(
+        epicSections.map((section) => {
+          const prompt = buildSingleEpicPrompt(
+            section.section, section.index, epicSections.length, plan, boardContext
+          );
+          pushLog('info', LOG_SOURCE.panel, `Agent started: Epic ${section.index} — ${section.name}`);
+          return runClaudePromptViaApi(prompt, 'claude-sonnet-4-5-20250929', 120000);
+        })
+      );
+
+      epics = [];
+      for (let i = 0; i < parallelResults.length; i++) {
+        const result = parallelResults[i];
+        const section = epicSections[i];
+        if (result.status === 'fulfilled') {
+          try {
+            const text = String(result.value.reply || '').trim();
+            const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+            const jsonStr = codeBlockMatch ? codeBlockMatch[1].trim() : text;
+            const epic = JSON.parse(jsonStr);
+            if (epic && epic.name && epic.body) {
+              epics.push(epic);
+              pushLog('success', LOG_SOURCE.panel, `Agent done: Epic ${section.index} — ${section.name}`);
+            } else {
+              pushLog('warn', LOG_SOURCE.panel, `Agent returned invalid structure for Epic ${section.index} — ${section.name}`);
+            }
+          } catch (err) {
+            pushLog('warn', LOG_SOURCE.panel, `Agent parse error for Epic ${section.index} — ${section.name}: ${err.message}`);
+          }
+        } else {
+          pushLog('warn', LOG_SOURCE.panel, `Agent failed for Epic ${section.index} — ${section.name}: ${result.reason?.message || 'Unknown error'}`);
+        }
+      }
+      pushLog('info', LOG_SOURCE.panel, `Parallel generation complete: ${epics.length}/${epicSections.length} succeeded`);
+    } else {
+      // ── Single-call fallback: plan too small or no plan ──────
+      const prompt = plan
+        ? buildPlanToEpicsPrompt(plan, session.messages, boardContext)
+        : buildIdeasToEpicsPrompt(session.messages, boardContext);
+      const { reply } = await runClaudePromptViaApi(prompt, 'claude-opus-4-6', 180000);
+      epics = parseIdeasToEpicsResponse(reply);
+    }
 
     // Create each Epic as a folder with epic.md
     const created = [];
