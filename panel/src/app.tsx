@@ -688,7 +688,7 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
     <div
       className={cx(
         'flex h-full overflow-hidden transition-colors duration-300',
-        isDark ? 'bg-linear-to-b from-gray-950 via-gray-900 to-gray-950' : 'bg-linear-to-b from-utility-brand-50 via-secondary to-primary'
+        isDark ? 'bg-linear-to-b from-gray-950 via-gray-900 to-gray-950' : 'bg-linear-to-b from-gray-100 via-gray-50 to-white'
       )}
     >
       {sidebarOpen ? (
