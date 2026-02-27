@@ -133,14 +133,21 @@ function AcDonut({ done, total, label = 'ACs' }: { done: number; total: number; 
   const progress = total > 0 ? done / total : 0;
   const dashOffset = circumference * (1 - progress);
   const allDone = done === total;
+  const remaining = total - done;
 
   return (
-    <div className="shrink-0" title={`${done}/${total} ${label} completed`}>
-      <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={stroke} className="text-quaternary/40" />
-        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={stroke} strokeDasharray={circumference} strokeDashoffset={dashOffset} strokeLinecap="round" className={allDone ? 'text-utility-success-500' : 'text-utility-brand-500'} />
-      </svg>
-    </div>
+    <Tooltip
+      title={allDone ? `All ${total} ${label} completed` : `${done}/${total} ${label} completed`}
+      description={allDone ? undefined : `${remaining} ${label} still pending`}
+      placement="top"
+    >
+      <TooltipTrigger className="shrink-0 cursor-default">
+        <svg width={size} height={size} className="-rotate-90">
+          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={stroke} className="text-quaternary/40" />
+          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={stroke} strokeDasharray={circumference} strokeDashoffset={dashOffset} strokeLinecap="round" className={allDone ? 'text-utility-success-500' : 'text-utility-brand-500'} />
+        </svg>
+      </TooltipTrigger>
+    </Tooltip>
   );
 }
 
@@ -443,12 +450,12 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
       {(task.type || task.priority) && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {task.type && (
-            <Badge size="sm" color={typeColor || 'gray'} className="ring-0">
+            <Badge size="sm" color={typeColor || 'gray'} className="ring-0 font-mono text-[10px]">
               {task.type}
             </Badge>
           )}
           {task.priority && (
-            <Badge size="sm" color={priorityColor || 'gray'} className="ring-0">
+            <Badge size="sm" color={priorityColor || 'gray'} className="ring-0 font-mono text-[10px]">
               {task.priority}
             </Badge>
           )}
