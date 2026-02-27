@@ -402,7 +402,7 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
           {task.name}
         </p>
         <div className="flex items-center gap-2 shrink-0">
-          {onFix && (
+          {onFix && !epic && (
             <Tooltip
               title={
                 isFixing ? (epic ? "Verifying epic ACs..." : "Verifying task ACs...") :
