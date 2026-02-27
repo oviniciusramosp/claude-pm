@@ -1148,12 +1148,12 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
                                     >
                                       <Plus className="size-3" />
-                                      <span>Add task</span>
                                     </TooltipTrigger>
                                   </Tooltip>
+                                  <div className="flex-1" />
                                   <Tooltip
-                                    title={generatingEpicId === task.id ? "Generating stories..." : "Generate stories"}
-                                    description={generatingEpicId === task.id ? "Using Claude AI to create user stories" : "Auto-generate user stories with Claude AI"}
+                                    title={generatingEpicId === task.id ? "Generating tasks..." : "Generate tasks"}
+                                    description={generatingEpicId === task.id ? "Using Claude AI to create tasks" : "Auto-generate tasks with Claude AI"}
                                   >
                                     <TooltipTrigger
                                       onPress={() => handleGenerateStories(task.id)}
@@ -1174,14 +1174,14 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                     </TooltipTrigger>
                                   </Tooltip>
                                   <Tooltip
-                                    title={fixingEpicId === task.id ? "Fixing stories..." : "Fix stories"}
-                                    description={fixingEpicId === task.id ? "Using Claude AI to complete unfinished stories" : "Auto-fix incomplete user stories with Claude AI"}
+                                    title={fixingEpicId === task.id ? "Fixing tasks..." : "Fix tasks"}
+                                    description={fixingEpicId === task.id ? "Using Claude AI to complete unfinished tasks" : "Auto-fix incomplete tasks with Claude AI"}
                                   >
                                     <TooltipTrigger
                                       onPress={() => handleFixEpicStories(task.id)}
                                       isDisabled={generatingEpicId !== null || fixingEpicId !== null}
                                       className={cx(
-                                        'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
+                                        'flex items-center rounded-sm px-2 py-1 text-xs transition',
                                         fixingEpicId === task.id
                                           ? 'text-utility-warning-600 bg-utility-warning-50'
                                           : (generatingEpicId !== null || fixingEpicId !== null)
@@ -1192,7 +1192,6 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       {fixingEpicId === task.id
                                         ? <RefreshCw01 className="size-3 animate-spin" />
                                         : <Tool01 className="size-3" />}
-                                      <span>{fixingEpicId === task.id ? 'Fixing...' : 'Fix'}</span>
                                     </TooltipTrigger>
                                   </Tooltip>
                                 </div>
@@ -1310,7 +1309,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                     className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-secondary hover:bg-primary_hover transition"
                                   >
                                     <ChevronDown className={cx('size-3 transition-transform', !expanded && '-rotate-90')} />
-                                    <span>{children.length} {children.length === 1 ? 'story' : 'stories'}</span>
+                                    <span>{children.length} {children.length === 1 ? 'task' : 'tasks'}</span>
                                   </TooltipTrigger>
                                 </Tooltip>
                                 {(col.key === 'not_started' || col.key === 'missing_status') && (
@@ -1323,9 +1322,10 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       <Plus className="size-3" />
                                     </TooltipTrigger>
                                   </Tooltip>
+                                  <div className="flex-1" />
                                   <Tooltip
-                                    title={generatingEpicId === task.id ? "Generating stories..." : "Generate stories"}
-                                    description={generatingEpicId === task.id ? "Using Claude AI to create user stories" : "Auto-generate user stories with Claude AI"}
+                                    title={generatingEpicId === task.id ? "Generating tasks..." : "Generate tasks"}
+                                    description={generatingEpicId === task.id ? "Using Claude AI to create tasks" : "Auto-generate tasks with Claude AI"}
                                   >
                                     <TooltipTrigger
                                       onPress={() => handleGenerateStories(task.id)}
@@ -1346,14 +1346,14 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                     </TooltipTrigger>
                                   </Tooltip>
                                   <Tooltip
-                                    title={fixingEpicId === task.id ? "Fixing stories..." : "Fix stories"}
-                                    description={fixingEpicId === task.id ? "Using Claude AI to complete unfinished stories" : "Auto-fix incomplete user stories with Claude AI"}
+                                    title={fixingEpicId === task.id ? "Fixing tasks..." : "Fix tasks"}
+                                    description={fixingEpicId === task.id ? "Using Claude AI to complete unfinished tasks" : "Auto-fix incomplete tasks with Claude AI"}
                                   >
                                     <TooltipTrigger
                                       onPress={() => handleFixEpicStories(task.id)}
                                       isDisabled={generatingEpicId !== null || fixingEpicId !== null}
                                       className={cx(
-                                        'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
+                                        'flex items-center rounded-sm px-2 py-1 text-xs transition',
                                         fixingEpicId === task.id
                                           ? 'text-utility-warning-600 bg-utility-warning-50'
                                           : (generatingEpicId !== null || fixingEpicId !== null)
@@ -1364,7 +1364,6 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       {fixingEpicId === task.id
                                         ? <RefreshCw01 className="size-3 animate-spin" />
                                         : <Tool01 className="size-3" />}
-                                      <span>{fixingEpicId === task.id ? 'Fixing...' : 'Fix'}</span>
                                     </TooltipTrigger>
                                   </Tooltip>
                                   </>
@@ -1422,12 +1421,12 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
                                     >
                                       <Plus className="size-3" />
-                                      <span>Add task</span>
                                     </TooltipTrigger>
                                   </Tooltip>
+                                  <div className="flex-1" />
                                   <Tooltip
-                                    title={generatingEpicId === task.id ? "Generating stories..." : "Generate stories"}
-                                    description={generatingEpicId === task.id ? "Using Claude AI to create user stories" : "Auto-generate user stories with Claude AI"}
+                                    title={generatingEpicId === task.id ? "Generating tasks..." : "Generate tasks"}
+                                    description={generatingEpicId === task.id ? "Using Claude AI to create tasks" : "Auto-generate tasks with Claude AI"}
                                   >
                                     <TooltipTrigger
                                       onPress={() => handleGenerateStories(task.id)}
@@ -1448,14 +1447,14 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                     </TooltipTrigger>
                                   </Tooltip>
                                   <Tooltip
-                                    title={fixingEpicId === task.id ? "Fixing stories..." : "Fix stories"}
-                                    description={fixingEpicId === task.id ? "Using Claude AI to complete unfinished stories" : "Auto-fix incomplete user stories with Claude AI"}
+                                    title={fixingEpicId === task.id ? "Fixing tasks..." : "Fix tasks"}
+                                    description={fixingEpicId === task.id ? "Using Claude AI to complete unfinished tasks" : "Auto-fix incomplete tasks with Claude AI"}
                                   >
                                     <TooltipTrigger
                                       onPress={() => handleFixEpicStories(task.id)}
                                       isDisabled={generatingEpicId !== null || fixingEpicId !== null}
                                       className={cx(
-                                        'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
+                                        'flex items-center rounded-sm px-2 py-1 text-xs transition',
                                         fixingEpicId === task.id
                                           ? 'text-utility-warning-600 bg-utility-warning-50'
                                           : (generatingEpicId !== null || fixingEpicId !== null)
@@ -1466,7 +1465,6 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       {fixingEpicId === task.id
                                         ? <RefreshCw01 className="size-3 animate-spin" />
                                         : <Tool01 className="size-3" />}
-                                      <span>{fixingEpicId === task.id ? 'Fixing...' : 'Fix'}</span>
                                     </TooltipTrigger>
                                   </Tooltip>
                                 </div>
