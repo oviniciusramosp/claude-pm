@@ -1,7 +1,7 @@
 // panel/src/components/idea-to-epics-modal.tsx
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Lightbulb02, Send01, RefreshCw01, X } from '@untitledui/icons';
+import { Lightbulb02, Send01, RefreshCw01, X, Edit05, Check, File06 } from '@untitledui/icons';
 import { marked } from 'marked';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
@@ -24,6 +24,8 @@ interface ChatMessage {
 
 const SYSTEM_WELCOME = `Describe your product ideas, features, and goals. I'll help you organize them into well-structured Epics for your board.
 
+The plan will build up on the right as we discuss. You can also edit it directly.
+
 You can describe:
 - What your product does
 - Who the target users are
@@ -39,6 +41,12 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
   const [sending, setSending] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
+
+  // Plan state
+  const [plan, setPlan] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState('');
+  const [planDirty, setPlanDirty] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -61,13 +69,17 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
       setSessionId(null);
       setMessages([{ role: 'system', content: SYSTEM_WELCOME }]);
       setDraft('');
+      setPlan('');
+      setIsEditing(false);
+      setEditDraft('');
+      setPlanDirty(false);
       setSending(false);
       setGenerating(false);
       setConfirmCloseOpen(false);
     }
   }, [open]);
 
-  const isDirty = useMemo(() => messages.length > 1, [messages]);
+  const isDirty = useMemo(() => messages.length > 1 || planDirty, [messages, planDirty]);
   const hasConversation = useMemo(() => messages.some(m => m.role === 'assistant'), [messages]);
 
   const handleCloseAttempt = useCallback(() => {
@@ -107,7 +119,11 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
       const response = await fetch(`${apiBaseUrl}/api/ideas/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, message: msg })
+        body: JSON.stringify({
+          sessionId,
+          message: msg,
+          plan: planDirty ? plan : undefined
+        })
       });
 
       const data = await response.json();
@@ -124,6 +140,16 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
       if (data.ok) {
         setSessionId(data.sessionId);
         setMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
+        // Update plan from Claude (only if not currently editing)
+        if (data.plan && !isEditing) {
+          setPlan(data.plan);
+          setEditDraft(data.plan);
+          setPlanDirty(false);
+        } else if (data.plan && isEditing) {
+          // Store pending plan update — will be applied when user exits edit mode
+          // For now, just track that Claude sent a plan but don't override
+          setPlanDirty(false);
+        }
       } else {
         showToast(data.message || 'Failed to get response', 'danger');
         setMessages(prev => prev.slice(0, -1));
@@ -137,7 +163,7 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
       setSending(false);
       setTimeout(() => textareaRef.current?.focus({ preventScroll: true }), 50);
     }
-  }, [draft, sending, generating, sessionId, apiBaseUrl, showToast]);
+  }, [draft, sending, generating, sessionId, apiBaseUrl, showToast, plan, planDirty, isEditing]);
 
   const handleGenerateEpics = useCallback(async () => {
     if (!sessionId || generating || sending) return;
@@ -149,7 +175,7 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
       const response = await fetch(`${apiBaseUrl}/api/ideas/generate-epics`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId })
+        body: JSON.stringify({ sessionId, plan })
       });
 
       const data = await response.json();
@@ -189,7 +215,7 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
     } finally {
       setGenerating(false);
     }
-  }, [sessionId, generating, sending, apiBaseUrl, showToast, onCreated, onClose, onShowErrorDetail]);
+  }, [sessionId, generating, sending, apiBaseUrl, showToast, onCreated, onClose, onShowErrorDetail, plan]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -209,9 +235,9 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
   return (
     <>
       <ModalOverlay isOpen={open} onOpenChange={(nextOpen) => { if (!nextOpen) handleCloseAttempt(); }} isDismissable={!sending && !generating}>
-        <Modal className="sm:max-w-2xl">
+        <Modal className="sm:max-w-6xl">
           <Dialog>
-            <div className="flex w-full flex-col rounded-xl border border-secondary bg-primary shadow-2xl" style={{ maxHeight: '85vh' }}>
+            <div className="flex w-full flex-col rounded-xl border border-secondary bg-primary shadow-2xl" style={{ maxHeight: '90vh' }}>
               {/* Header */}
               <div className="flex items-center justify-between border-b border-secondary px-6 py-4">
                 <div className="flex items-center gap-2">
@@ -227,64 +253,154 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
                 </button>
               </div>
 
-              {/* Chat Messages */}
-              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4" style={{ minHeight: '300px', maxHeight: '55vh' }}>
-                {messages.map((msg, i) => (
-                  <MessageBubble key={i} message={msg} />
-                ))}
+              {/* Two-column body */}
+              <div className="flex flex-1 flex-col sm:flex-row overflow-hidden">
+                {/* Left column: Chat */}
+                <div className="flex flex-1 flex-col border-b sm:border-b-0 sm:border-r border-secondary sm:w-1/2">
+                  {/* Chat Messages */}
+                  <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4" style={{ minHeight: '250px' }}>
+                    {messages.map((msg, i) => (
+                      <MessageBubble key={i} message={msg} />
+                    ))}
 
-                {/* Typing indicator */}
-                {sending && (
-                  <div className="flex items-start gap-2">
-                    <div className="rounded-lg rounded-tl-sm bg-secondary px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <span className="size-2 animate-bounce rounded-full bg-quaternary" style={{ animationDelay: '0ms' }} />
-                        <span className="size-2 animate-bounce rounded-full bg-quaternary" style={{ animationDelay: '150ms' }} />
-                        <span className="size-2 animate-bounce rounded-full bg-quaternary" style={{ animationDelay: '300ms' }} />
+                    {/* Typing indicator */}
+                    {sending && (
+                      <div className="flex items-start gap-2">
+                        <div className="rounded-lg rounded-tl-sm bg-secondary px-4 py-3">
+                          <div className="flex items-center gap-1">
+                            <span className="size-2 animate-bounce rounded-full bg-quaternary" style={{ animationDelay: '0ms' }} />
+                            <span className="size-2 animate-bounce rounded-full bg-quaternary" style={{ animationDelay: '150ms' }} />
+                            <span className="size-2 animate-bounce rounded-full bg-quaternary" style={{ animationDelay: '300ms' }} />
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                )}
-
-                <div ref={chatEndRef} />
-              </div>
-
-              {/* Input area */}
-              <div className="border-t border-secondary px-6 py-4 space-y-3">
-                <div className="flex items-end gap-2">
-                  <textarea
-                    ref={textareaRef}
-                    value={draft}
-                    onChange={handleTextareaInput}
-                    onKeyDown={handleKeyDown}
-                    placeholder={hasConversation ? 'Type your response...' : 'Describe your product ideas...'}
-                    className="flex-1 resize-none rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary placeholder:text-placeholder focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-                    rows={2}
-                    style={{ minHeight: '60px', maxHeight: '200px' }}
-                    disabled={sending || generating}
-                  />
-                  <Button
-                    size="sm"
-                    color="primary"
-                    onPress={handleSend}
-                    isDisabled={!draft.trim() || sending || generating}
-                    aria-label="Send message"
-                    className="shrink-0"
-                  >
-                    {sending ? (
-                      <RefreshCw01 className="size-4 animate-spin" />
-                    ) : (
-                      <Send01 className="size-4" />
                     )}
-                  </Button>
+
+                    <div ref={chatEndRef} />
+                  </div>
+
+                  {/* Input area */}
+                  <div className="border-t border-secondary px-5 py-3 space-y-2">
+                    <div className="flex items-end gap-2">
+                      <textarea
+                        ref={textareaRef}
+                        value={draft}
+                        onChange={handleTextareaInput}
+                        onKeyDown={handleKeyDown}
+                        placeholder={hasConversation ? 'Type your response...' : 'Describe your product ideas...'}
+                        className="flex-1 resize-none rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary placeholder:text-placeholder focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                        rows={2}
+                        style={{ minHeight: '60px', maxHeight: '200px' }}
+                        disabled={sending || generating}
+                      />
+                      <Button
+                        size="sm"
+                        color="primary"
+                        onPress={handleSend}
+                        isDisabled={!draft.trim() || sending || generating}
+                        aria-label="Send message"
+                        className="shrink-0"
+                      >
+                        {sending ? (
+                          <RefreshCw01 className="size-4 animate-spin" />
+                        ) : (
+                          <Send01 className="size-4" />
+                        )}
+                      </Button>
+                    </div>
+                    <p className="text-center text-xs text-quaternary">
+                      Press Enter to send, Shift+Enter for new line
+                    </p>
+                  </div>
                 </div>
 
-                {/* Generate Epics button */}
+                {/* Right column: Plan */}
+                <div className="flex flex-1 flex-col sm:w-1/2">
+                  {/* Plan header bar */}
+                  <div className="flex items-center justify-between border-b border-secondary px-5 py-2.5">
+                    <span className="text-sm font-semibold text-primary">Plan</span>
+                    <button
+                      onClick={() => {
+                        if (isEditing) {
+                          // Exiting edit mode — apply changes
+                          if (editDraft !== plan) {
+                            setPlan(editDraft);
+                            setPlanDirty(true);
+                          }
+                          setIsEditing(false);
+                        } else {
+                          // Entering edit mode
+                          setEditDraft(plan);
+                          setIsEditing(true);
+                        }
+                      }}
+                      disabled={!plan}
+                      className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-secondary transition hover:bg-primary_hover hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {isEditing ? (
+                        <>
+                          <Check className="size-3.5" />
+                          <span>Done</span>
+                        </>
+                      ) : (
+                        <>
+                          <Edit05 className="size-3.5" />
+                          <span>Edit</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Plan content */}
+                  <div className="flex-1 overflow-y-auto px-5 py-4">
+                    {!plan ? (
+                      /* Empty state */
+                      <div className="flex h-full items-center justify-center">
+                        <div className="flex flex-col items-center gap-3 text-center">
+                          <File06 className="size-10 text-quaternary" />
+                          <div>
+                            <p className="text-sm font-medium text-tertiary">No plan yet</p>
+                            <p className="mt-1 text-xs text-quaternary">
+                              Start chatting and a plan will appear here
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : isEditing ? (
+                      /* Edit mode */
+                      <textarea
+                        value={editDraft}
+                        onChange={(e) => setEditDraft(e.target.value)}
+                        className="h-full w-full resize-none rounded-lg border border-secondary bg-primary p-3 font-mono text-xs text-primary focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                        style={{ minHeight: '300px' }}
+                      />
+                    ) : (
+                      /* View mode — rendered markdown */
+                      <div
+                        className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-primary prose-p:text-secondary prose-li:text-secondary prose-strong:text-primary prose-a:text-brand-primary [&_input[type=checkbox]]:mr-2 [&_input[type=checkbox]]:accent-utility-success-500"
+                        dangerouslySetInnerHTML={{ __html: parseMarkdownSafe(plan) }}
+                      />
+                    )}
+                  </div>
+
+                  {/* Dirty indicator */}
+                  {planDirty && !isEditing && (
+                    <div className="border-t border-secondary px-5 py-2">
+                      <p className="text-xs text-utility-warning-500">
+                        You have manual edits. They will be sent with your next message.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Generate Epics button (full width footer) */}
+              <div className="border-t border-secondary px-6 py-4">
                 <Button
                   size="md"
                   color="primary"
                   onPress={handleGenerateEpics}
-                  isDisabled={!hasConversation || sending || generating}
+                  isDisabled={!plan.trim() || sending || generating}
                   className="w-full"
                 >
                   {generating ? (
@@ -295,14 +411,10 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
                   ) : (
                     <>
                       <Lightbulb02 className="size-4" />
-                      <span className="ml-2">Generate Epics</span>
+                      <span className="ml-2">Generate Epics from Plan</span>
                     </>
                   )}
                 </Button>
-
-                <p className="text-center text-xs text-quaternary">
-                  Press Enter to send, Shift+Enter for new line
-                </p>
               </div>
             </div>
           </Dialog>
@@ -319,7 +431,7 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
   );
 }
 
-// ── Chat Message Bubble ──────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────
 
 function parseMarkdownSafe(content: string): string {
   try {
@@ -330,7 +442,7 @@ function parseMarkdownSafe(content: string): string {
   }
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageBubble({ message }: { message: ChatMessage }): React.JSX.Element {
   if (message.role === 'system') {
     return (
       <div className="flex justify-center">

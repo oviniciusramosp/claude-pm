@@ -4053,6 +4053,89 @@ app.post('/api/board/fix-epic-stories', async (req, res) => {
 
 // ── Idea to Epics — Brainstorming & Epic Generation ──────────────────
 
+function parseReplyAndPlan(rawReply) {
+  const text = String(rawReply || '').trim();
+  const replyMatch = text.match(/<reply>([\s\S]*?)<\/reply>/);
+  const planMatch = text.match(/<plan>([\s\S]*?)<\/plan>/);
+  const reply = replyMatch ? replyMatch[1].trim() : text; // Fallback: whole response as reply
+  const plan = planMatch ? planMatch[1].trim() : '';
+  return { reply, plan };
+}
+
+function buildIdeaBrainstormWithPlanPrompt(messages, currentPlan, boardContext) {
+  const conversationBlock = messages
+    .map((m) => `[${m.role === 'user' ? 'User' : 'Assistant'}]\n${m.content}`)
+    .join('\n\n');
+
+  return `You are a senior product manager helping a user refine their product ideas into well-structured Epics for implementation by an AI coding assistant (Claude Code).
+
+<role>
+You are a product thinker, NOT an engineer. Your job is to:
+- Understand the user's vision and goals
+- Ask clarifying questions about scope, target users, and priorities
+- Help organize ideas into logical feature groups (future Epics)
+- Identify which features belong together in the same system and which should be separate Epics
+- Suggest a logical implementation order (foundations first)
+- Point out gaps, risks, or missing features the user may not have considered
+
+IMPORTANT RULES:
+- Do NOT jump to implementation details — focus on WHAT the product does, not HOW it's built
+- Ask 2-3 focused questions per turn to keep momentum
+- Summarize your understanding before asking questions
+- Since implementation is done entirely by AI, features can be built in their final versions — there is NO need for MVP or phased releases
+- Keep responses concise and conversational (not walls of text)
+- Write in the same language the user is writing in
+</role>
+
+<response_format>
+You MUST structure EVERY response using exactly these two XML tags:
+
+1. <reply>Your conversational response to the user goes here</reply>
+2. <plan>The full updated plan document in markdown goes here</plan>
+
+BOTH tags are REQUIRED in every response. Rules:
+- The <reply> tag contains your conversational text (questions, summaries, suggestions)
+- The <plan> tag contains the COMPLETE, CURRENT state of the plan document
+- In early turns when there isn't enough info yet, use <plan></plan> (empty)
+- As the conversation progresses, build up the plan incrementally
+- The plan must ALWAYS contain the FULL document (not just changes) — it replaces the previous version entirely
+- If the user has manually edited the plan (shown in <current_plan>), respect their changes and build on them
+
+Plan document format — once you have enough information, structure the plan like this:
+# Plan
+
+## Epic 1: [Name]
+**Priority**: P0/P1/P2/P3
+**Epic Goal**: [1 paragraph — WHAT and WHY]
+### Scope
+- [Capability 1]
+- [Capability needing research (needs Discovery)]
+### Acceptance Criteria
+- [ ] [Specific observable behavior 1]
+- [ ] [Specific observable behavior 2]
+### Technical Approach
+- [High-level decision]
+### Dependencies
+- [Other epics or None]
+
+## Epic 2: [Name]
+...and so on
+
+Order Epics by implementation priority (Epic 1 = most foundational).
+Write 5-10 ACs per Epic. Flag complex areas with "(needs Discovery)".
+</response_format>
+
+${currentPlan ? `<current_plan>\nThe user's current plan document (may have been manually edited):\n${currentPlan}\n</current_plan>` : ''}
+
+${boardContext || ''}
+
+<conversation>
+${conversationBlock}
+</conversation>
+
+Continue the brainstorming conversation. Respond in <reply> and update the plan in <plan>.`;
+}
+
 function buildIdeaBrainstormPrompt(messages, boardContext) {
   const conversationBlock = messages
     .map((m) => `[${m.role === 'user' ? 'User' : 'Assistant'}]\n${m.content}`)
@@ -4086,6 +4169,83 @@ ${conversationBlock}
 </conversation>
 
 Continue the brainstorming conversation. Respond to the user's latest message, summarize what you understand so far, and ask 2-3 clarifying questions to refine the product vision.`;
+}
+
+function buildPlanToEpicsPrompt(plan, messages, boardContext) {
+  const conversationBlock = messages
+    .map((m) => `[${m.role === 'user' ? 'User' : 'Assistant'}]\n${m.content}`)
+    .join('\n\n');
+
+  return `You are a senior product manager converting a finalized plan document into structured Epics for a Kanban board. The Epics will be implemented by an AI coding assistant (Claude Code).
+
+<role>
+Parse the plan document below and convert each Epic section into a structured JSON object.
+The plan document is the PRIMARY source of truth. The conversation is provided as secondary context only.
+
+PRINCIPLES:
+- Each Epic = a cohesive feature area that can be developed independently
+- Epics should be ordered for linear, incremental implementation (foundations first)
+- Since AI implements the code, features are built in their FINAL versions (no MVP or phased releases)
+- Only automated tests are used (NEVER manual testing or manual QA)
+- Flag areas that need research with "(needs Discovery)" in Scope or Technical Approach sections
+- Do NOT create user stories or tasks — ONLY the Epic structure
+- Each Epic should be specific enough to generate concrete child tasks later
+</role>
+
+${boardContext || ''}
+
+<plan>
+${plan}
+</plan>
+
+<conversation_context>
+${conversationBlock}
+</conversation_context>
+
+<output_format>
+Return ONLY a valid JSON array. No markdown code blocks, no explanation text — just the raw JSON.
+
+Each element must have:
+- "name": string (Epic name, e.g., "Authentication System")
+- "folderName": string (Epic folder name with E{NN} prefix, e.g., "E01-Authentication-System")
+- "priority": string ("P0", "P1", "P2", or "P3")
+- "body": string (complete Epic markdown body with \\n for newlines)
+
+The body for each Epic MUST follow this exact format:
+
+# [Epic Name] Epic
+
+**Epic Goal**: [1 paragraph describing WHAT will be delivered and WHY — focus on end-user value]
+
+## Scope
+- [Specific capability or feature area 1]
+- [Capability that needs research (needs Discovery)]
+- [Another capability]
+
+## Acceptance Criteria
+- [ ] [Specific observable product behavior 1]
+- [ ] [Specific observable product behavior 2]
+(... 5-10 ACs per Epic, describing concrete user-visible behaviors)
+
+## Technical Approach
+- [High-level architectural decision 1]
+- [Technology choice that needs research (needs Discovery)]
+
+## Dependencies
+- [List dependencies on other Epics or external services, or "None"]
+
+## Child Tasks
+See individual user story files in this Epic folder.
+
+RULES:
+- Order Epics by implementation priority (E01 = most foundational)
+- Use E{NN} prefix in folderName, numbered sequentially (E01, E02, E03...)
+- Write 5-10 ACs per Epic describing specific, observable product behaviors
+- Flag complex areas with "(needs Discovery)" suffix
+- NEVER include manual tests — only reference automated testing
+- ACs must NOT be generic — they must describe concrete behavior
+- Dependencies section must reference other Epics by name when applicable
+</output_format>`;
 }
 
 function buildIdeasToEpicsPrompt(messages, boardContext) {
@@ -4198,7 +4358,7 @@ function parseIdeasToEpicsResponse(reply) {
 }
 
 app.post('/api/ideas/chat', async (req, res) => {
-  const { sessionId: reqSessionId, message } = req.body;
+  const { sessionId: reqSessionId, message, plan: clientPlan } = req.body;
 
   if (!message || typeof message !== 'string' || !message.trim()) {
     res.status(400).json({ ok: false, message: 'Message is required.' });
@@ -4221,8 +4381,13 @@ app.post('/api/ideas/chat', async (req, res) => {
       session = ideaSessions.get(sessionId);
     } else {
       sessionId = crypto.randomUUID();
-      session = { messages: [], createdAt: Date.now() };
+      session = { messages: [], plan: '', createdAt: Date.now() };
       ideaSessions.set(sessionId, session);
+    }
+
+    // If client sends an updated plan (user may have edited it), use it
+    if (typeof clientPlan === 'string') {
+      session.plan = clientPlan;
     }
 
     // Add user message
@@ -4253,16 +4418,25 @@ app.post('/api/ideas/chat', async (req, res) => {
       // Non-fatal: proceed without board context
     }
 
-    const prompt = buildIdeaBrainstormPrompt(session.messages, boardContext);
-    const { reply } = await runClaudePromptViaApi(prompt, 'claude-opus-4-6', 180000);
+    const prompt = buildIdeaBrainstormWithPlanPrompt(session.messages, session.plan, boardContext);
+    const { reply: rawReply } = await runClaudePromptViaApi(prompt, 'claude-opus-4-6', 180000);
 
-    const normalizedReply = normalizeMarkdownNewlines(String(reply || '').trim());
+    const { reply: parsedReply, plan: parsedPlan } = parseReplyAndPlan(rawReply);
+    const normalizedReply = normalizeMarkdownNewlines(parsedReply);
+
+    // Store assistant reply (only the conversational part, not the plan)
     session.messages.push({ role: 'assistant', content: normalizedReply });
+
+    // Update session plan if Claude returned one
+    if (parsedPlan) {
+      session.plan = parsedPlan;
+    }
 
     res.json({
       ok: true,
       sessionId,
       reply: normalizedReply,
+      plan: session.plan,
       messageCount: session.messages.length
     });
   } catch (error) {
@@ -4274,7 +4448,7 @@ app.post('/api/ideas/chat', async (req, res) => {
 });
 
 app.post('/api/ideas/generate-epics', async (req, res) => {
-  const { sessionId } = req.body;
+  const { sessionId, plan: clientPlan } = req.body;
 
   if (!sessionId || !ideaSessions.has(sessionId)) {
     res.status(404).json({ ok: false, message: 'Brainstorm session not found. Start a new conversation.' });
@@ -4291,6 +4465,9 @@ app.post('/api/ideas/generate-epics', async (req, res) => {
 
   try {
     const session = ideaSessions.get(sessionId);
+
+    // Resolve plan: prefer client-sent plan, then session plan
+    const plan = clientPlan || session.plan || '';
 
     // Gather board context
     const env = await readEnvPairs();
@@ -4311,8 +4488,10 @@ app.post('/api/ideas/generate-epics', async (req, res) => {
 
     const boardContext = await buildBoardContext(client, null);
 
-    // Build prompt and call Claude
-    const prompt = buildIdeasToEpicsPrompt(session.messages, boardContext);
+    // Build prompt: use plan-based prompt if plan exists, otherwise fall back to conversation-only prompt
+    const prompt = plan
+      ? buildPlanToEpicsPrompt(plan, session.messages, boardContext)
+      : buildIdeasToEpicsPrompt(session.messages, boardContext);
     const { reply } = await runClaudePromptViaApi(prompt, 'claude-opus-4-6', 180000);
     const epics = parseIdeasToEpicsResponse(reply);
 
