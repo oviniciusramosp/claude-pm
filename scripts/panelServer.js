@@ -4118,6 +4118,137 @@ app.post('/api/board/fix-epic-stories', async (req, res) => {
 
 // ── Idea to Epics — Brainstorming & Epic Generation ──────────────────
 
+// ── Idea Session: Auto-Compact & Timeout Helpers ─────────────────────
+
+/**
+ * Estimate token count from text (rough: ~4 chars per token).
+ */
+function estimateTokens(text) {
+  return Math.ceil((text || '').length / 4);
+}
+
+/**
+ * Build a compaction prompt that summarizes older messages into a concise
+ * context block, preserving key decisions and the current plan state.
+ */
+function buildCompactionPrompt(messagesToCompact, currentPlan) {
+  const block = messagesToCompact
+    .map((m) => `[${m.role === 'user' ? 'User' : 'Assistant'}]\n${m.content}`)
+    .join('\n\n');
+
+  return `Summarize this brainstorming conversation into a compact context block (max 800 words). Preserve:
+- Key product decisions and agreed-upon features
+- User preferences, constraints, and priorities stated
+- Important technical decisions or design choices
+- Any open questions or unresolved items
+- The user's language and tone
+
+Do NOT include the plan itself (it is tracked separately). Focus only on context that would be lost if these messages were removed.
+
+Write the summary as a structured bullet list grouped by topic. Write in the same language as the conversation.
+
+<conversation>
+${block}
+</conversation>
+
+${currentPlan ? `<current_plan_for_reference>\n${currentPlan}\n</current_plan_for_reference>` : ''}
+
+Return ONLY the summary, no preamble or explanation.`;
+}
+
+/**
+ * Auto-compact: if the conversation exceeds thresholds, summarize older
+ * messages into a single "[system] context_summary" message, keeping
+ * the most recent messages intact.
+ *
+ * Thresholds:
+ * - COMPACT_AFTER_PAIRS: trigger compaction after this many user-assistant pairs (default: 8)
+ * - KEEP_RECENT_PAIRS: number of recent pairs to preserve verbatim (default: 3)
+ * - TOKEN_THRESHOLD: estimated token count that triggers compaction (default: 12000)
+ *
+ * Returns { messages, compacted } — the (possibly compacted) message array and a flag.
+ */
+const COMPACT_AFTER_PAIRS = 8;
+const KEEP_RECENT_PAIRS = 3;
+const TOKEN_THRESHOLD = 12000;
+
+async function autoCompactMessages(session, logger) {
+  const msgs = session.messages;
+  const pairs = Math.floor(msgs.length / 2);
+  const totalTokens = estimateTokens(msgs.map(m => m.content).join('\n'));
+
+  // Check if compaction is needed
+  if (pairs < COMPACT_AFTER_PAIRS && totalTokens < TOKEN_THRESHOLD) {
+    return { messages: msgs, compacted: false };
+  }
+
+  // Split: messages to compact vs. messages to keep
+  const keepCount = KEEP_RECENT_PAIRS * 2; // pairs → individual messages
+  if (msgs.length <= keepCount + 2) {
+    // Not enough messages to compact meaningfully
+    return { messages: msgs, compacted: false };
+  }
+
+  const toCompact = msgs.slice(0, msgs.length - keepCount);
+  const toKeep = msgs.slice(msgs.length - keepCount);
+
+  logger.info(`Auto-compacting ${toCompact.length} older messages (keeping ${toKeep.length} recent)...`);
+
+  try {
+    const compactPrompt = buildCompactionPrompt(toCompact, session.plan);
+    const { reply: summary } = await runClaudePromptViaApi(compactPrompt, 'claude-haiku-4-5-20251001', 30000);
+    const trimmedSummary = String(summary || '').trim();
+
+    if (!trimmedSummary || trimmedSummary.length < 50) {
+      logger.warn('Compaction returned insufficient summary, skipping');
+      return { messages: msgs, compacted: false };
+    }
+
+    // Replace older messages with a single context summary
+    const compactedMessages = [
+      { role: 'system', content: `[Context from earlier conversation — ${toCompact.length} messages compacted]\n\n${trimmedSummary}` },
+      ...toKeep
+    ];
+
+    // Update session in-place
+    session.messages = compactedMessages;
+
+    logger.success(`Compacted: ${msgs.length} → ${compactedMessages.length} messages (~${estimateTokens(trimmedSummary)} tokens saved)`);
+    return { messages: compactedMessages, compacted: true };
+  } catch (err) {
+    logger.warn(`Auto-compaction failed (non-fatal): ${err.message}`);
+    return { messages: msgs, compacted: false };
+  }
+}
+
+/**
+ * Run a Claude prompt with timeout handling and one automatic retry.
+ * On first timeout, retries with a shorter prompt hint.
+ */
+async function runClaudeWithRetry(prompt, model, timeoutMs, logger) {
+  try {
+    return await runClaudePromptViaApi(prompt, model, timeoutMs);
+  } catch (err) {
+    const isTimeout = err.message && err.message.includes('timed out');
+    if (!isTimeout) throw err;
+
+    logger.warn('Claude timed out, retrying with shorter timeout hint...');
+
+    // Retry once: append a hint to keep the response shorter
+    const retryPrompt = prompt + `\n\n<system_note>IMPORTANT: The previous attempt timed out. Please keep your response concise. For the <reply>, limit to 2-3 short paragraphs. For the <plan>, only update sections that changed — you can keep unchanged sections brief with "[no changes]" markers that you'll expand in the next turn.</system_note>`;
+
+    try {
+      return await runClaudePromptViaApi(retryPrompt, model, timeoutMs);
+    } catch (retryErr) {
+      const isRetryTimeout = retryErr.message && retryErr.message.includes('timed out');
+      if (isRetryTimeout) {
+        throw new Error('Response timed out twice. The conversation may be too long — try sending a shorter message or editing the plan directly.');
+      }
+      throw retryErr;
+    }
+  }
+}
+
 function parseReplyAndPlan(rawReply) {
   const text = String(rawReply || '').trim();
   const replyMatch = text.match(/<reply>([\s\S]*?)<\/reply>/);
@@ -4829,7 +4960,16 @@ app.post('/api/ideas/chat', async (req, res) => {
     // Add user message
     session.messages.push({ role: 'user', content: message.trim() });
 
-    pushLog('info', LOG_SOURCE.panel, `Idea brainstorm (turn ${Math.ceil(session.messages.length / 2)}): "${message.trim().slice(0, 80)}..."`);
+    const turnNumber = Math.ceil(session.messages.length / 2);
+    pushLog('info', LOG_SOURCE.panel, `Idea brainstorm (turn ${turnNumber}): "${message.trim().slice(0, 80)}..."`);
+
+    // Auto-compact older messages if conversation is getting long
+    const compactLogger = {
+      info: (msg) => pushLog('info', LOG_SOURCE.panel, msg),
+      warn: (msg) => pushLog('warn', LOG_SOURCE.panel, msg),
+      success: (msg) => pushLog('success', LOG_SOURCE.panel, msg),
+    };
+    await autoCompactMessages(session, compactLogger);
 
     // Gather board context for cross-epic awareness
     let boardContext = '';
@@ -4855,7 +4995,7 @@ app.post('/api/ideas/chat', async (req, res) => {
     }
 
     const prompt = buildIdeaBrainstormWithPlanPrompt(session.messages, session.plan, boardContext);
-    const { reply: rawReply } = await runClaudePromptViaApi(prompt, 'claude-opus-4-6', 180000);
+    const { reply: rawReply } = await runClaudeWithRetry(prompt, 'claude-opus-4-6', 180000, compactLogger);
 
     const { reply: parsedReply, plan: parsedPlan } = parseReplyAndPlan(rawReply);
     const normalizedReply = normalizeMarkdownNewlines(parsedReply);
