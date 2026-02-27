@@ -1145,7 +1145,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   <Tooltip title="Add task" description={`Create a new task in ${task.name}`}>
                                     <TooltipTrigger
                                       onPress={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
-                                      className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
+                                      className="flex h-6 items-center gap-1 rounded-sm px-2 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
                                     >
                                       <Plus className="size-3" />
                                     </TooltipTrigger>
@@ -1159,7 +1159,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       onPress={() => handleGenerateStories(task.id)}
                                       isDisabled={generatingEpicId !== null || fixingEpicId !== null}
                                       className={cx(
-                                        'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
+                                        'flex h-6 items-center gap-1 rounded-sm px-2 text-xs transition',
                                         generatingEpicId === task.id
                                           ? 'text-brand-secondary bg-utility-brand-50'
                                           : (generatingEpicId !== null || fixingEpicId !== null)
@@ -1181,7 +1181,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       onPress={() => handleFixEpicStories(task.id)}
                                       isDisabled={generatingEpicId !== null || fixingEpicId !== null}
                                       className={cx(
-                                        'flex items-center rounded-sm px-2 py-1 text-xs transition',
+                                        'flex h-6 items-center rounded-sm px-2 text-xs transition',
                                         fixingEpicId === task.id
                                           ? 'text-utility-warning-600 bg-utility-warning-50'
                                           : (generatingEpicId !== null || fixingEpicId !== null)
@@ -1317,7 +1317,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   <Tooltip title="Add task" description={`Create a new task in ${task.name}`}>
                                     <TooltipTrigger
                                       onPress={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
-                                      className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
+                                      className="flex h-6 items-center gap-1 rounded-sm px-2 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
                                     >
                                       <Plus className="size-3" />
                                     </TooltipTrigger>
@@ -1331,7 +1331,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       onPress={() => handleGenerateStories(task.id)}
                                       isDisabled={generatingEpicId !== null || fixingEpicId !== null}
                                       className={cx(
-                                        'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
+                                        'flex h-6 items-center gap-1 rounded-sm px-2 text-xs transition',
                                         generatingEpicId === task.id
                                           ? 'text-brand-secondary bg-utility-brand-50'
                                           : (generatingEpicId !== null || fixingEpicId !== null)
@@ -1353,7 +1353,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       onPress={() => handleFixEpicStories(task.id)}
                                       isDisabled={generatingEpicId !== null || fixingEpicId !== null}
                                       className={cx(
-                                        'flex items-center rounded-sm px-2 py-1 text-xs transition',
+                                        'flex h-6 items-center rounded-sm px-2 text-xs transition',
                                         fixingEpicId === task.id
                                           ? 'text-utility-warning-600 bg-utility-warning-50'
                                           : (generatingEpicId !== null || fixingEpicId !== null)
@@ -1418,7 +1418,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   <Tooltip title="Add task" description={`Create a new task in ${task.name}`}>
                                     <TooltipTrigger
                                       onPress={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
-                                      className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
+                                      className="flex h-6 items-center gap-1 rounded-sm px-2 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
                                     >
                                       <Plus className="size-3" />
                                     </TooltipTrigger>
@@ -1432,7 +1432,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       onPress={() => handleGenerateStories(task.id)}
                                       isDisabled={generatingEpicId !== null || fixingEpicId !== null}
                                       className={cx(
-                                        'flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition',
+                                        'flex h-6 items-center gap-1 rounded-sm px-2 text-xs transition',
                                         generatingEpicId === task.id
                                           ? 'text-brand-secondary bg-utility-brand-50'
                                           : (generatingEpicId !== null || fixingEpicId !== null)
@@ -1454,7 +1454,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       onPress={() => handleFixEpicStories(task.id)}
                                       isDisabled={generatingEpicId !== null || fixingEpicId !== null}
                                       className={cx(
-                                        'flex items-center rounded-sm px-2 py-1 text-xs transition',
+                                        'flex h-6 items-center rounded-sm px-2 text-xs transition',
                                         fixingEpicId === task.id
                                           ? 'text-utility-warning-600 bg-utility-warning-50'
                                           : (generatingEpicId !== null || fixingEpicId !== null)
