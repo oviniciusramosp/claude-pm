@@ -1048,7 +1048,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
 
       {/* Board columns */}
       {showBoard && (
-        <div className="flex h-[calc(100vh-280px)] snap-x snap-mandatory gap-4 overflow-x-auto pb-4 sm:snap-none sm:grid sm:grid-cols-2 sm:overflow-x-visible sm:pb-0 lg:h-[calc(100vh-220px)] lg:grid-cols-4">
+        <div className={cx('flex h-[calc(100vh-280px)] snap-x snap-mandatory gap-4 overflow-x-auto pb-4 sm:snap-none sm:grid sm:overflow-x-visible sm:pb-0 lg:h-[calc(100vh-220px)]', columns.length >= 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3 lg:grid-cols-3')}>
           {columns.map((col) => (
             <div
               key={col.key}
