@@ -4628,13 +4628,26 @@ ${epicSection}
 </epic_section>
 
 <output_format>
-Return ONLY a valid JSON object (NOT an array). No markdown code blocks, no explanation — just the raw JSON.
+Your output MUST use the following separator-based format — NOT a single JSON object.
+This avoids JSON escaping issues with long markdown strings.
 
-The object must have:
-- "name": string (Epic name, e.g., "Authentication System")
-- "folderName": string (Epic folder name with E{NN} prefix, e.g., "E${String(epicIndex).padStart(2, '0')}-Authentication-System")
-- "priority": string ("P0", "P1", "P2", or "P3")
-- "body": string (complete Epic markdown body with \\n for newlines)
+First, emit a small JSON metadata line, then the separator "---BODY---", then the full markdown body as plain text.
+
+EXAMPLE FORMAT:
+{"name": "Authentication System", "folderName": "E${String(epicIndex).padStart(2, '0')}-Authentication-System", "priority": "P1"}
+---BODY---
+# Authentication System Epic
+
+## Motivation & Objectives
+...rest of markdown...
+
+RULES:
+1. The FIRST line must be a single-line JSON object with ONLY these keys:
+   - "name": string (Epic name, e.g., "Authentication System")
+   - "folderName": string (Epic folder name with E{NN} prefix)
+   - "priority": string ("P0", "P1", "P2", or "P3")
+2. The SECOND line must be exactly: ---BODY---
+3. Everything after "---BODY---" is the Epic's markdown body (plain text, no JSON escaping needed).
 
 The body MUST be COMPREHENSIVE and include ALL sections from the plan:
 
@@ -4703,15 +4716,35 @@ ${conversationBlock}
 </conversation_context>
 
 <output_format>
-Return ONLY a valid JSON array. No markdown code blocks, no explanation text — just the raw JSON.
+Your output MUST use the following separator-based format to avoid JSON escaping issues with long markdown.
+Each Epic is delimited by "---EPIC---". Within each Epic, the metadata JSON is on one line, followed by "---BODY---", then the full markdown body.
 
-Each element must have:
-- "name": string (Epic name, e.g., "Authentication System")
-- "folderName": string (Epic folder name with E{NN} prefix, e.g., "E01-Authentication-System")
-- "priority": string ("P0", "P1", "P2", or "P3")
-- "body": string (complete Epic markdown body with \\n for newlines)
+EXAMPLE FORMAT:
+---EPIC---
+{"name": "Project Foundation", "folderName": "E01-Project-Foundation", "priority": "P0"}
+---BODY---
+# Project Foundation Epic
+
+## Motivation & Objectives
+...full markdown...
+
+---EPIC---
+{"name": "Authentication System", "folderName": "E02-Authentication-System", "priority": "P1"}
+---BODY---
+# Authentication System Epic
+
+## Motivation & Objectives
+...full markdown...
+
+RULES FOR FORMAT:
+1. Start each Epic with the line: ---EPIC---
+2. Next line: a single-line JSON object with ONLY "name", "folderName", and "priority"
+3. Next line: ---BODY---
+4. Everything after "---BODY---" until the next "---EPIC---" (or end of output) is the markdown body
 
 The body for each Epic MUST be COMPREHENSIVE and DETAILED — transfer ALL information from the plan. It is the primary input for generating User Stories later.
+
+Body template for each Epic:
 
 # [Epic Name] Epic
 
@@ -4755,7 +4788,7 @@ The body for each Epic MUST be COMPREHENSIVE and DETAILED — transfer ALL infor
 ## Child Tasks
 See individual user story files in this Epic folder.
 
-RULES:
+ADDITIONAL RULES:
 - Order Epics by implementation priority (E01 = most foundational)
 - Use E{NN} prefix in folderName, numbered sequentially (E01, E02, E03...)
 - Write 8-15 ACs per Epic describing specific, observable, testable product behaviors
@@ -4797,15 +4830,35 @@ ${conversationBlock}
 </brainstorm_session>
 
 <output_format>
-Return ONLY a valid JSON array. No markdown code blocks, no explanation text — just the raw JSON.
+Your output MUST use the following separator-based format to avoid JSON escaping issues with long markdown.
+Each Epic is delimited by "---EPIC---". Within each Epic, the metadata JSON is on one line, followed by "---BODY---", then the full markdown body.
 
-Each element must have:
-- "name": string (Epic name, e.g., "Authentication System")
-- "folderName": string (Epic folder name with E{NN} prefix, e.g., "E01-Authentication-System")
-- "priority": string ("P0", "P1", "P2", or "P3")
-- "body": string (complete Epic markdown body with \\n for newlines)
+EXAMPLE FORMAT:
+---EPIC---
+{"name": "Project Foundation", "folderName": "E01-Project-Foundation", "priority": "P0"}
+---BODY---
+# Project Foundation Epic
+
+## Motivation & Objectives
+...full markdown...
+
+---EPIC---
+{"name": "Authentication System", "folderName": "E02-Authentication-System", "priority": "P1"}
+---BODY---
+# Authentication System Epic
+
+## Motivation & Objectives
+...full markdown...
+
+RULES FOR FORMAT:
+1. Start each Epic with the line: ---EPIC---
+2. Next line: a single-line JSON object with ONLY "name", "folderName", and "priority"
+3. Next line: ---BODY---
+4. Everything after "---BODY---" until the next "---EPIC---" (or end of output) is the markdown body
 
 The body for each Epic MUST be COMPREHENSIVE and DETAILED. It is the primary input for generating User Stories later. Extract ALL relevant detail from the conversation.
+
+Body template for each Epic:
 
 # [Epic Name] Epic
 
@@ -4849,7 +4902,7 @@ The body for each Epic MUST be COMPREHENSIVE and DETAILED. It is the primary inp
 ## Child Tasks
 See individual user story files in this Epic folder.
 
-RULES:
+ADDITIONAL RULES:
 - Order Epics by implementation priority (E01 = most foundational)
 - Use E{NN} prefix in folderName, numbered sequentially (E01, E02, E03...)
 - Write 8-15 ACs per Epic describing specific, observable, testable product behaviors
@@ -4863,9 +4916,88 @@ RULES:
 </output_format>`;
 }
 
+/**
+ * Parse a single Epic response from the separator-based format:
+ *   {"name": "...", "folderName": "...", "priority": "P1"}
+ *   ---BODY---
+ *   # Epic markdown body...
+ *
+ * Falls back to legacy JSON parsing if separator is not found.
+ */
+function parseSingleEpicResponse(text, epicIndex) {
+  const separator = '---BODY---';
+  const sepIdx = text.indexOf(separator);
+
+  if (sepIdx !== -1) {
+    // Separator-based format: small JSON metadata + plain markdown body
+    let metaStr = text.slice(0, sepIdx).trim();
+    const body = text.slice(sepIdx + separator.length).trim();
+
+    // Strip markdown code block wrapper from metadata if present
+    const metaCodeBlock = metaStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+    if (metaCodeBlock) metaStr = metaCodeBlock[1].trim();
+
+    const meta = JSON.parse(metaStr);
+    return {
+      name: (meta.name || '').trim(),
+      folderName: (meta.folderName || '').trim() || `E${String(epicIndex).padStart(2, '0')}-${slugFromTitle((meta.name || '').trim())}`,
+      priority: ['P0', 'P1', 'P2', 'P3'].includes(meta.priority) ? meta.priority : 'P1',
+      body
+    };
+  }
+
+  // Fallback: try parsing as a single JSON object (legacy format)
+  const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  const jsonStr = codeBlockMatch ? codeBlockMatch[1].trim() : text;
+  const epic = JSON.parse(jsonStr);
+  return {
+    name: (epic.name || '').trim(),
+    folderName: (epic.folderName || '').trim() || `E${String(epicIndex).padStart(2, '0')}-${slugFromTitle((epic.name || '').trim())}`,
+    priority: ['P0', 'P1', 'P2', 'P3'].includes(epic.priority) ? epic.priority : 'P1',
+    body: epic.body || ''
+  };
+}
+
 function parseIdeasToEpicsResponse(reply) {
   const text = String(reply || '').trim();
 
+  // Try separator-based format first (---EPIC--- delimited)
+  if (text.includes('---EPIC---')) {
+    const chunks = text.split('---EPIC---').filter((c) => c.trim());
+    const normalized = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i].trim();
+      const bodySep = '---BODY---';
+      const bodyIdx = chunk.indexOf(bodySep);
+      if (bodyIdx === -1) continue;
+
+      let metaStr = chunk.slice(0, bodyIdx).trim();
+      const body = chunk.slice(bodyIdx + bodySep.length).trim();
+      if (!body) continue;
+
+      // Strip markdown code block wrapper from metadata if present
+      const metaCodeBlock = metaStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+      if (metaCodeBlock) metaStr = metaCodeBlock[1].trim();
+
+      try {
+        const meta = JSON.parse(metaStr);
+        if (!meta.name) continue;
+        normalized.push({
+          name: meta.name.trim(),
+          folderName: (meta.folderName || '').trim() || slugFromTitle(meta.name.trim()),
+          priority: ['P0', 'P1', 'P2', 'P3'].includes(meta.priority) ? meta.priority : 'P1',
+          body
+        });
+        if (normalized.length >= 20) break; // Hard cap
+      } catch {
+        continue; // Skip malformed metadata
+      }
+    }
+    if (normalized.length > 0) return normalized;
+    // If separator format found but parsing failed, fall through to legacy
+  }
+
+  // Fallback: legacy JSON array format
   const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
   const jsonStr = codeBlockMatch ? codeBlockMatch[1].trim() : text;
 
@@ -5098,9 +5230,7 @@ app.post('/api/ideas/generate-epics', async (req, res) => {
         if (result.status === 'fulfilled') {
           try {
             const text = String(result.value.reply || '').trim();
-            const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-            const jsonStr = codeBlockMatch ? codeBlockMatch[1].trim() : text;
-            const epic = JSON.parse(jsonStr);
+            const epic = parseSingleEpicResponse(text, section.index);
             if (epic && epic.name && epic.body) {
               epics.push(epic);
               pushLog('success', LOG_SOURCE.panel, `Agent done: Epic ${section.index} — ${section.name}`);
