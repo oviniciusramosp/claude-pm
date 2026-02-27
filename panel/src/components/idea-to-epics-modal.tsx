@@ -1,10 +1,11 @@
 // panel/src/components/idea-to-epics-modal.tsx
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Lightbulb02, Send01, RefreshCw01, X, Edit05, Check, File06 } from '@untitledui/icons';
+import { Lightbulb02, Send01, RefreshCw01, X, Edit05, Check, File06, ChevronRight } from '@untitledui/icons';
 import { marked } from 'marked';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
+import { Tooltip, TooltipTrigger } from '@/components/base/tooltip/tooltip';
 import { Icon } from './icon';
 
 interface IdeaToEpicsModalProps {
@@ -45,6 +46,8 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
   const [isEditing, setIsEditing] = useState(false);
   const [editDraft, setEditDraft] = useState('');
   const [planDirty, setPlanDirty] = useState(false);
+  const [planUpdatedAt, setPlanUpdatedAt] = useState<Date | null>(null);
+  const [syncingToPlan, setSyncingToPlan] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -70,6 +73,8 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
     setIsEditing(false);
     setEditDraft('');
     setPlanDirty(false);
+    setPlanUpdatedAt(null);
+    setSyncingToPlan(false);
     setSending(false);
     setGenerating(false);
     // Try to restore a saved session from disk
@@ -89,6 +94,7 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
           setMessages(restored);
           setPlan(data.plan || '');
           setEditDraft(data.plan || '');
+          if (data.plan) setPlanUpdatedAt(new Date());
           return;
         }
       } catch {
@@ -146,6 +152,7 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
           setPlan(data.plan);
           setEditDraft(data.plan);
           setPlanDirty(false);
+          setPlanUpdatedAt(new Date());
         } else if (data.plan && isEditing) {
           // Store pending plan update — will be applied when user exits edit mode
           // For now, just track that Claude sent a plan but don't override
@@ -225,6 +232,45 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
     }
   }, [handleSend]);
 
+  // "To Plan" — ask Claude to update the plan based on the conversation so far
+  const handleSyncToPlan = useCallback(async () => {
+    if (!sessionId || sending || generating || syncingToPlan) return;
+
+    setSyncingToPlan(true);
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/ideas/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          message: '[System] Please update the plan document to reflect everything we have discussed so far. Make sure the plan is comprehensive and up to date. Do not ask questions — just update the plan.',
+          plan: planDirty ? plan : undefined
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.ok) {
+        setSessionId(data.sessionId);
+        // We don't add the system message to the visible chat — just update the plan silently
+        if (data.plan) {
+          setPlan(data.plan);
+          setEditDraft(data.plan);
+          setPlanDirty(false);
+          setPlanUpdatedAt(new Date());
+        }
+        showToast('Plan updated', 'success');
+      } else {
+        showToast(data?.message || 'Failed to sync plan', 'danger');
+      }
+    } catch (error: any) {
+      showToast(`Network error: ${error.message}`, 'danger');
+    } finally {
+      setSyncingToPlan(false);
+    }
+  }, [sessionId, sending, generating, syncingToPlan, apiBaseUrl, plan, planDirty, showToast]);
+
   // Auto-resize textarea
   const handleTextareaInput = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setDraft(e.target.value);
@@ -254,7 +300,24 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
               </div>
 
               {/* Two-column body */}
-              <div className="flex flex-1 flex-col sm:flex-row overflow-hidden">
+              <div className="relative flex flex-1 flex-col sm:flex-row overflow-hidden">
+                {/* "To Plan" button on the column divider */}
+                <div className="hidden sm:flex absolute left-1/2 top-3 z-10 -translate-x-1/2">
+                  <Tooltip title="To Plan" placement="right">
+                    <TooltipTrigger
+                      onPress={handleSyncToPlan}
+                      isDisabled={!hasConversation || sending || generating || syncingToPlan}
+                      className="flex items-center justify-center rounded-full border border-secondary bg-primary p-1.5 shadow-sm transition hover:bg-primary_hover disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {syncingToPlan ? (
+                        <RefreshCw01 className="size-3.5 animate-spin text-tertiary" />
+                      ) : (
+                        <ChevronRight className="size-3.5 text-tertiary" />
+                      )}
+                    </TooltipTrigger>
+                  </Tooltip>
+                </div>
+
                 {/* Left column: Chat */}
                 <div className="flex flex-1 flex-col border-b sm:border-b-0 sm:border-r border-secondary sm:w-1/2">
                   {/* Chat Messages */}
@@ -318,7 +381,14 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
                 <div className="flex flex-1 flex-col sm:w-1/2">
                   {/* Plan header bar */}
                   <div className="flex items-center justify-between border-b border-secondary px-5 py-2.5">
-                    <span className="text-sm font-semibold text-primary">Plan</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-primary">Plan</span>
+                      {planUpdatedAt && (
+                        <span className="text-[10px] text-quaternary tabular-nums">
+                          {planUpdatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
                     <button
                       onClick={() => {
                         if (isEditing) {
