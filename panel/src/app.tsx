@@ -36,13 +36,73 @@ import { DebugErrorsModal } from './components/debug-errors-modal';
 import { AuthProvider, useAuth } from './contexts/auth-context';
 import { LoginPage } from './components/login-page';
 
+// ── Error Boundary ──────────────────────────────────────────────────
+// Catches uncaught errors in the React tree and renders a fallback UI
+// instead of letting the entire tree unmount to an empty #root.
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+  errorInfo: React.ErrorInfo | null;
+}
+
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, ErrorBoundaryState> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('[ErrorBoundary] Caught error:', error);
+    console.error('[ErrorBoundary] Component stack:', errorInfo.componentStack);
+    this.setState({ errorInfo });
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-primary p-8">
+          <div className="w-full max-w-lg rounded-xl border border-error-primary bg-primary p-6 shadow-lg">
+            <h2 className="text-lg font-semibold text-error-primary">Something went wrong</h2>
+            <p className="mt-2 text-sm text-secondary">
+              An unexpected error caused the panel to crash. Check the browser console for full details.
+            </p>
+            <pre className="mt-4 max-h-48 overflow-auto rounded-lg bg-secondary p-3 text-xs text-primary">
+              {this.state.error?.message || 'Unknown error'}
+              {this.state.error?.stack && (
+                <>
+                  {'\n\n'}
+                  {this.state.error.stack}
+                </>
+              )}
+            </pre>
+            <button
+              onClick={() => this.setState({ hasError: false, error: null, errorInfo: null })}
+              className="mt-4 rounded-lg bg-brand-solid px-4 py-2 text-sm font-semibold text-white hover:bg-brand-solid_hover"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export function App({ mode = 'light', setMode = () => {} }) {
   const apiBaseUrl = useMemo(resolveApiBaseUrl, []);
 
   return (
-    <AuthProvider apiBaseUrl={apiBaseUrl}>
-      <AppInner mode={mode} setMode={setMode} apiBaseUrl={apiBaseUrl} />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider apiBaseUrl={apiBaseUrl}>
+        <AppInner mode={mode} setMode={setMode} apiBaseUrl={apiBaseUrl} />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

@@ -3,6 +3,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React, { useState } from "react";
 import { ModalOverlay, Modal, Dialog } from "./modal";
+import { Button } from "@/components/base/buttons/button";
+import { styles as buttonStyles } from "@/components/base/buttons/button";
 
 // Minimal wrapper that simulates opening a modal via state,
 // mirroring how IdeaToEpicsModal and other modals are rendered.
@@ -25,6 +27,34 @@ function TestModalHost({ startOpen = false }: { startOpen?: boolean }) {
               <button data-testid="close-btn" onClick={() => setOpen(false)}>
                 Close
               </button>
+            </div>
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+    </div>
+  );
+}
+
+// Wrapper that renders a modal with Button components inside,
+// mirroring how IdeaToEpicsModal renders buttons with specific colors.
+function ModalWithButton({ startOpen = false, buttonColor = "primary" }: { startOpen?: boolean; buttonColor?: string }) {
+  const [open, setOpen] = useState(startOpen);
+  return (
+    <div data-testid="react-root">
+      <button data-testid="open-btn" onClick={() => setOpen(true)}>
+        Open Modal
+      </button>
+      <ModalOverlay
+        isOpen={open}
+        onOpenChange={(next) => { if (!next) setOpen(false); }}
+        isDismissable
+      >
+        <Modal>
+          <Dialog aria-label="Test modal with button">
+            <div data-testid="modal-content">
+              <Button size="sm" color={buttonColor as any} onPress={() => {}}>
+                Test Button
+              </Button>
             </div>
           </Dialog>
         </Modal>
@@ -87,5 +117,27 @@ describe("ModalOverlay", () => {
     // The tree must still be mounted (not empty).
     expect(container.innerHTML).not.toBe("");
     expect(container.querySelector('[data-testid="react-root"]')).toBeInTheDocument();
+  });
+
+  it("renders modal with Button using valid color prop without crashing (regression guard)", () => {
+    // The IdeaToEpicsModal crash was caused by passing color="brand" to the Button component.
+    // The Button component's styles.colors object does not have a "brand" key, so
+    // styles.colors["brand"].root throws: TypeError: Cannot read properties of undefined (reading 'root')
+    // This uncaught error during render unmounts the entire React tree.
+    //
+    // This test verifies that a modal with a Button using color="primary" renders correctly.
+    const { container } = render(<ModalWithButton startOpen buttonColor="primary" />);
+    expect(container.querySelector('[data-testid="react-root"]')).toBeInTheDocument();
+    expect(screen.getByText("Test Button")).toBeInTheDocument();
+  });
+
+  it("Button styles.colors contains only known color keys (no 'brand' key)", () => {
+    // Guard: "brand" is a valid Badge color but NOT a valid Button color.
+    // Using color="brand" on Button crashes the app because styles.colors["brand"]
+    // is undefined, and accessing .root on undefined throws a TypeError.
+    const validButtonColors = Object.keys(buttonStyles.colors);
+    expect(validButtonColors).not.toContain("brand");
+    expect(validButtonColors).toContain("primary");
+    expect(validButtonColors).toContain("secondary");
   });
 });

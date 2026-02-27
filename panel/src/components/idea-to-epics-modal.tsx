@@ -265,7 +265,7 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
                   />
                   <Button
                     size="sm"
-                    color="brand"
+                    color="primary"
                     onPress={handleSend}
                     isDisabled={!draft.trim() || sending || generating}
                     aria-label="Send message"
@@ -282,7 +282,7 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
                 {/* Generate Epics button */}
                 <Button
                   size="md"
-                  color="brand"
+                  color="primary"
                   onPress={handleGenerateEpics}
                   isDisabled={!hasConversation || sending || generating}
                   className="w-full"
