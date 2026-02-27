@@ -189,6 +189,41 @@ async function loadIdeaSessionFromDisk() {
   }
 }
 
+const IDEA_SESSION_ARCHIVE_DIR = path.join(cwd, '.data', 'idea-sessions');
+
+/**
+ * Archive the active session file by renaming it with a timestamp.
+ * The archived file is moved to .data/idea-sessions/ so the modal
+ * no longer loads it, but the history is preserved.
+ */
+async function archiveIdeaSession(epicNames) {
+  try {
+    await fs.access(IDEA_SESSION_FILE);
+  } catch {
+    return null; // No active session to archive
+  }
+
+  try {
+    await fs.mkdir(IDEA_SESSION_ARCHIVE_DIR, { recursive: true });
+    const now = new Date();
+    const ts = now.toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
+    const slug = (epicNames && epicNames.length > 0)
+      ? '-' + epicNames[0].toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
+      : '';
+    const archiveName = `session_${ts}${slug}.json`;
+    const archivePath = path.join(IDEA_SESSION_ARCHIVE_DIR, archiveName);
+    await fs.rename(IDEA_SESSION_FILE, archivePath);
+    return archiveName;
+  } catch (err) {
+    // Fallback: delete if rename fails
+    try { await fs.unlink(IDEA_SESSION_FILE); } catch { /* ignore */ }
+    return null;
+  }
+}
+
+/**
+ * Delete the active session file (used when user explicitly discards).
+ */
 async function deleteIdeaSessionFromDisk() {
   try {
     await fs.unlink(IDEA_SESSION_FILE);
@@ -4995,9 +5030,13 @@ app.post('/api/ideas/generate-epics', async (req, res) => {
       // Non-fatal: epics were already created
     }
 
-    // Clean up session (memory + disk)
+    // Archive session (rename to .data/idea-sessions/) so modal starts fresh
     ideaSessions.delete(sessionId);
-    await deleteIdeaSessionFromDisk();
+    const epicNames = created.map((e) => e.name);
+    const archiveName = await archiveIdeaSession(epicNames);
+    if (archiveName) {
+      pushLog('info', LOG_SOURCE.panel, `Session archived: ${archiveName}`);
+    }
 
     res.json({ ok: true, created, total: epics.length, failed });
   } catch (error) {
