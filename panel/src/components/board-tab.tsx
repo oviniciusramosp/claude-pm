@@ -111,6 +111,15 @@ function extractTaskCode(task: BoardTask): string | null {
 }
 
 
+function formatModelName(model: string): string {
+  if (!model) return '';
+  const m = model.toLowerCase();
+  if (m.includes('opus')) return 'Opus';
+  if (m.includes('sonnet')) return 'Sonnet';
+  if (m.includes('haiku')) return 'Haiku';
+  return model;
+}
+
 function AcDonut({ done, total, label = 'ACs' }: { done: number; total: number; label?: string }) {
   const size = 20;
   const stroke = 2.5;
@@ -473,7 +482,7 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
         dragging && 'opacity-50'
       )}
     >
-      {/* Row 1: Epic reference + task code on same line (only for child tasks) */}
+      {/* Row 1: Epic reference + task code + priority on same line (only for child tasks) */}
       {parentEpic && (
         <Tooltip title={parentEpic.name} placement="top">
           <TooltipTrigger className="flex items-center gap-1 mb-2 text-[11px] text-quaternary font-mono tracking-wide cursor-default">
@@ -483,6 +492,12 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
               <>
                 <span className="opacity-40">|</span>
                 <span>{taskCode}</span>
+              </>
+            )}
+            {task.priority && (
+              <>
+                <span className="opacity-40">·</span>
+                <span>{task.priority}</span>
               </>
             )}
           </TooltipTrigger>
@@ -498,6 +513,14 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
           <p className="text-sm font-medium text-primary">
             {task.name}
           </p>
+          {/* Agents + model below task name */}
+          {!epic && (task.agents?.length > 0 || task.model) && (
+            <div className="mt-0.5 flex items-center gap-1 text-[11px] text-quaternary truncate">
+              {task.agents?.length > 0 && <span>{task.agents.join(', ')}</span>}
+              {task.agents?.length > 0 && task.model && <span className="opacity-40">·</span>}
+              {task.model && <span className="font-mono">{formatModelName(task.model)}</span>}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {onFix && !epic && (
@@ -520,8 +543,8 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
         </div>
       )}
 
-      {/* Row 3: Priority only */}
-      {task.priority && (
+      {/* Row 3: Priority badge (standalone tasks only — child tasks show priority inline in Row 1) */}
+      {!parentEpic && task.priority && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <Badge size="sm" color={priorityColor || 'gray'} className="ring-0 font-mono text-xs">
             {task.priority}
