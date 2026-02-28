@@ -265,6 +265,13 @@ export const TOAST_TONE_CLASSES: Record<string, string> = {
   danger: 'border-white/10 bg-utility-error-50/80 text-error-primary backdrop-blur-md'
 };
 
+export const TOAST_PROGRESS_CLASSES: Record<string, string> = {
+  neutral: 'bg-white/30',
+  success: 'bg-success-primary/50',
+  warning: 'bg-warning-primary/50',
+  danger: 'bg-error-primary/50'
+};
+
 export const PROCESS_ACTION_BUTTON_CLASS = 'w-24 justify-center';
 
 export const BOARD_COLUMNS = [

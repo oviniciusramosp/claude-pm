@@ -3,7 +3,7 @@
 import React, { useEffect } from 'react';
 import { AlertCircle, CheckCircle, InfoCircle, XCircle, X } from '@untitledui/icons';
 import { cx } from '@/utils/cx';
-import { TOAST_TONE_CLASSES } from '../constants';
+import { TOAST_TONE_CLASSES, TOAST_PROGRESS_CLASSES } from '../constants';
 import { Icon } from './icon';
 import type { ToastState } from '../types';
 
@@ -13,50 +13,58 @@ interface ToastContainerProps {
 }
 
 function ToastItem({ toast, onDismiss }: { toast: ToastState[number]; onDismiss: (id: string) => void }) {
+  const ms = toast.duration === undefined ? 30000 : toast.duration;
+
   useEffect(() => {
-    // duration: undefined = default 30s, null = persist forever, number = custom ms
-    const ms = toast.duration === undefined ? 30000 : toast.duration;
     if (ms === null) return;
     const timer = setTimeout(() => onDismiss(toast.id), ms);
     return () => clearTimeout(timer);
-  }, [toast.id, toast.duration, onDismiss]);
+  }, [toast.id, ms, onDismiss]);
 
   return (
     <div
       role="status"
       aria-live="polite"
       className={cx(
-        'rounded-lg border px-4 py-3 text-sm flex items-center justify-between gap-3 pointer-events-auto shadow-lg',
+        'relative rounded-lg border text-sm pointer-events-auto overflow-hidden',
         TOAST_TONE_CLASSES[toast.color] || TOAST_TONE_CLASSES.neutral
       )}
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <div className="inline-flex items-center gap-2 min-w-0">
-        <Icon
-          icon={
-            toast.color === 'success'
-              ? CheckCircle
-              : toast.color === 'danger'
-                ? XCircle
-                : toast.color === 'warning'
-                  ? AlertCircle
-                  : InfoCircle
-          }
-          className="size-4 shrink-0"
-        />
-        <span className="break-words">{toast.message}</span>
+      <div className="flex items-center justify-between gap-3 px-4 py-3">
+        <div className="inline-flex items-center gap-2 min-w-0">
+          <Icon
+            icon={
+              toast.color === 'success'
+                ? CheckCircle
+                : toast.color === 'danger'
+                  ? XCircle
+                  : toast.color === 'warning'
+                    ? AlertCircle
+                    : InfoCircle
+            }
+            className="size-4 shrink-0"
+          />
+          <span className="break-words">{toast.message}</span>
+        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); onDismiss(toast.id); }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="shrink-0 p-1 rounded hover:opacity-75 transition-opacity"
+          aria-label="Dismiss notification"
+        >
+          <Icon icon={X} className="size-4" />
+        </button>
       </div>
-      <button
-        onClick={(e) => { e.stopPropagation(); onDismiss(toast.id); }}
-        onMouseDown={(e) => e.stopPropagation()}
-        onPointerDown={(e) => e.stopPropagation()}
-        className="shrink-0 p-1 rounded hover:opacity-75 transition-opacity"
-        aria-label="Dismiss notification"
-      >
-        <Icon icon={X} className="size-4" />
-      </button>
+      {ms !== null && (
+        <div
+          className={cx('absolute bottom-0 left-0 h-[2px]', TOAST_PROGRESS_CLASSES[toast.color] || TOAST_PROGRESS_CLASSES.neutral)}
+          style={{ animation: `toastProgress ${ms}ms linear forwards` }}
+        />
+      )}
     </div>
   );
 }
@@ -83,14 +91,12 @@ export function ToastNotification({ toasts, onDismiss }: ToastContainerProps) {
       ))}
       <style>{`
         @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes toastProgress {
+          from { width: 100%; }
+          to   { width: 0%; }
         }
       `}</style>
     </div>
