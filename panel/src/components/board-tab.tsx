@@ -1,6 +1,6 @@
 // panel/src/components/board-tab.tsx
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { CheckCircle, ChevronDown, Columns03, CpuChip01, Folder, FolderPlus, Lightbulb02, Plus, RefreshCw01, Stars01, Target02, Tool01, Users01 } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
@@ -646,6 +646,11 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const [fixStatus, setFixStatus] = useState<Record<string, { status: string; startedAt?: string; completedAt?: string; error?: string }>>({});
   const [selectedTask, setSelectedTask] = useState<BoardTask | null>(null);
   const [expandedEpics, setExpandedEpics] = useState(() => new Set<string>());
+  // FLIP animation refs for epic expand
+  const peekCardRefs = useRef<Map<string, (HTMLDivElement | null)[]>>(new Map());
+  const listCardRefs = useRef<Map<string, (HTMLDivElement | null)[]>>(new Map());
+  const capturedFlipRectsRef = useRef<Map<string, DOMRect[]>>(new Map());
+  const pendingFlipRef = useRef<string | null>(null);
   const [addingStatus, setAddingStatus] = useState(false);
   const [draggedTask, setDraggedTask] = useState<BoardTask | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
@@ -682,13 +687,63 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   }, [apiBaseUrl]);
 
   const toggleEpic = useCallback((epicId: string) => {
+    const isCurrentlyExpanded = expandedEpics.has(epicId);
+    if (!isCurrentlyExpanded) {
+      // Capture peek card positions before expanding so FLIP can animate from them
+      const refs = peekCardRefs.current.get(epicId) ?? [];
+      const rects = refs.map(el => el?.getBoundingClientRect() ?? null).filter(Boolean) as DOMRect[];
+      if (rects.length > 0) {
+        capturedFlipRectsRef.current.set(epicId, rects);
+        pendingFlipRef.current = epicId;
+      }
+    }
     setExpandedEpics((prev) => {
       const next = new Set(prev);
       if (next.has(epicId)) next.delete(epicId);
       else next.add(epicId);
       return next;
     });
-  }, []);
+  }, [expandedEpics]);
+
+  // FLIP animation: after expanding an epic, animate list cards FROM captured peek positions
+  useLayoutEffect(() => {
+    const epicId = pendingFlipRef.current;
+    if (!epicId) return;
+    pendingFlipRef.current = null;
+
+    const capturedRects = capturedFlipRectsRef.current.get(epicId) ?? [];
+    const refs = (listCardRefs.current.get(epicId) ?? []).filter((el): el is HTMLDivElement => el !== null);
+    if (!refs.length || !capturedRects.length) return;
+
+    // Measure final (expanded) positions — useLayoutEffect fires before paint so layout is at final state
+    const newRects = refs.map(el => el.getBoundingClientRect());
+
+    // Fallback origin for cards with no corresponding peek (they come from behind the last peek card)
+    const deckOrigin = capturedRects[capturedRects.length - 1];
+
+    // Apply inverse transforms (FLIP: Invert — move each card to its "peek" starting position)
+    refs.forEach((el, i) => {
+      const from = capturedRects[i] ?? deckOrigin;
+      if (!from || !newRects[i]) return;
+      const dx = from.left - newRects[i].left;
+      const dy = from.top - newRects[i].top;
+      const sx = capturedRects[i] ? from.width / newRects[i].width : 0.9;
+      el.style.transition = 'none';
+      el.style.transform = `translate(${dx}px, ${dy}px) scaleX(${sx})`;
+      el.style.opacity = capturedRects[i] ? '1' : '0';
+    });
+
+    // Force reflow so the browser registers the initial position before we animate
+    refs[0].getBoundingClientRect();
+
+    // Play: remove inverse transforms — CSS transition animates each card to its final position
+    refs.forEach((el, i) => {
+      const delay = i * 45;
+      el.style.transition = `transform 440ms cubic-bezier(0.34, 1.15, 0.64, 1) ${delay}ms, opacity 300ms ease ${delay}ms`;
+      el.style.transform = '';
+      el.style.opacity = '1';
+    });
+  }, [expandedEpics]);
 
   const fetchFixStatus = useCallback(
     async () => {
@@ -1693,44 +1748,69 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                     }
                                   />
                                 </div>
-                                {/* Stack peek cards (visible when collapsed, hidden when expanded) */}
-                                {!expanded && (
-                                  <>
-                                    <div
-                                      className="relative z-20 -mt-2 h-3 bg-primary dark:bg-secondary shadow-sm"
-                                      style={{ borderRadius: 'var(--board-card-radius)', transform: 'scaleX(0.94)', transformOrigin: 'center' }}
+                                {/* Peek cards – actual child card content clipped to peek height (visible when collapsed) */}
+                                {!expanded && children.slice(0, 2).map((child, i) => (
+                                  <div
+                                    key={`peek-${child.id}`}
+                                    ref={(el) => {
+                                      if (!peekCardRefs.current.has(task.id)) peekCardRefs.current.set(task.id, []);
+                                      peekCardRefs.current.get(task.id)![i] = el;
+                                    }}
+                                    aria-hidden="true"
+                                    className={cx('relative shadow-sm pointer-events-none select-none', i === 0 ? 'z-20 -mt-2' : 'z-10 -mt-2')}
+                                    style={{
+                                      transform: `scaleX(${1 - (i + 1) * 0.06})`,
+                                      transformOrigin: 'center',
+                                      borderRadius: 'var(--board-card-radius)',
+                                      height: 12,
+                                      overflow: 'hidden',
+                                    }}
+                                  >
+                                    <BoardCard
+                                      task={child}
+                                      epic={false}
+                                      allTasks={tasks}
+                                      onClick={() => {}}
+                                      onDragStart={() => {}}
+                                      onDragEnd={() => {}}
+                                      dragging={false}
+                                      isGlobalOperationRunning={true}
+                                      fixingTaskType={null}
+                                      showAddStatus={false}
+                                      addingStatus={false}
                                     />
-                                    {children.length >= 2 && (
-                                      <div
-                                        className="relative z-10 -mt-2 h-3 bg-primary dark:bg-secondary shadow-sm"
-                                        style={{ borderRadius: 'var(--board-card-radius)', transform: 'scaleX(0.88)', transformOrigin: 'center' }}
-                                      />
-                                    )}
-                                  </>
-                                )}
-                                {/* Expanded children with smooth CSS grid animation */}
+                                  </div>
+                                ))}
+                                {/* Expanded children with smooth CSS grid animation + FLIP refs */}
                                 <div className={cx('grid transition-all duration-500 ease-in-out', expanded ? 'grid-rows-[1fr] mt-2' : 'grid-rows-[0fr]')}>
                                   <div className="overflow-hidden">
                                     <div className="flex flex-col gap-2">
-                                      {children.map((child) => (
-                                        <BoardCard
+                                      {children.map((child, i) => (
+                                        <div
                                           key={child.id}
-                                          task={child}
-                                          epic={false}
-                                          allTasks={tasks}
-                                          onClick={() => setSelectedTask(child)}
-                                          onFix={handleFixTask}
-                                          fixStatus={fixStatus[child.id]}
-                                          allFixStatuses={fixStatus}
-                                          fixingTaskType={fixingTaskId === child.id ? fixingTaskType : null}
-                                          isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
-                                          showAddStatus={isMissingStatus}
-                                          onAddStatus={isMissingStatus ? handleAddStatus : undefined}
-                                          addingStatus={addingStatus}
-                                          onDragStart={() => setDraggedTask(child)}
-                                          onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
-                                          dragging={draggedTask?.id === child.id}
-                                        />
+                                          ref={(el) => {
+                                            if (!listCardRefs.current.has(task.id)) listCardRefs.current.set(task.id, []);
+                                            listCardRefs.current.get(task.id)![i] = el;
+                                          }}
+                                        >
+                                          <BoardCard
+                                            task={child}
+                                            epic={false}
+                                            allTasks={tasks}
+                                            onClick={() => setSelectedTask(child)}
+                                            onFix={handleFixTask}
+                                            fixStatus={fixStatus[child.id]}
+                                            allFixStatuses={fixStatus}
+                                            fixingTaskType={fixingTaskId === child.id ? fixingTaskType : null}
+                                            isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
+                                            showAddStatus={isMissingStatus}
+                                            onAddStatus={isMissingStatus ? handleAddStatus : undefined}
+                                            addingStatus={addingStatus}
+                                            onDragStart={() => setDraggedTask(child)}
+                                            onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
+                                            dragging={draggedTask?.id === child.id}
+                                          />
+                                        </div>
                                       ))}
                                     </div>
                                   </div>
