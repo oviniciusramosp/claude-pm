@@ -394,10 +394,10 @@ function TaskFixDropdown({
           onPress={() => { if (!isAnyOperationRunning) setIsOpen(!isOpen); }}
           isDisabled={isAnyOperationRunning}
           className={cx(
-            'transition-opacity rounded-md p-1.5 shadow-sm',
+            'flex h-6 w-6 items-center justify-center rounded-md transition-all duration-200',
             isAnyOperationRunning
-              ? 'bg-utility-gray-100 border border-utility-gray-200 cursor-not-allowed opacity-60'
-              : 'hover:bg-secondary',
+              ? 'text-quaternary cursor-not-allowed opacity-60'
+              : 'text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10',
             isFixing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
           )}
         >
@@ -591,18 +591,18 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {onFix && !epic && (
-            <TaskFixDropdown
-              taskId={task.id}
-              onFix={onFix}
-              isFixing={isFixing}
-              isAnyOperationRunning={!!isGlobalOperationRunning}
-              currentFixType={isFixing ? (fixingTaskType || null) : null}
-            />
-          )}
-        </div>
       </div>
+      {onFix && !epic && (
+        <div className="absolute bottom-4 right-4">
+          <TaskFixDropdown
+            taskId={task.id}
+            onFix={onFix}
+            isFixing={isFixing}
+            isAnyOperationRunning={!!isGlobalOperationRunning}
+            currentFixType={isFixing ? (fixingTaskType || null) : null}
+          />
+        </div>
+      )}
 
       {/* Row 2.5: Add Status button (only in Missing Status column) */}
       {showAddStatus && onAddStatus && (
