@@ -1374,21 +1374,25 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                   handleDrop(col.key);
                 }}
               >
-                {/* Floating sticky header */}
-                <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 backdrop-blur-md bg-secondary/80 dark:bg-primary/80">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="size-2 rounded-full shrink-0"
-                      style={{
-                        backgroundColor: col.key === 'not_started' ? '#9CA3AF'
-                          : col.key === 'in_progress' ? 'rgb(239 104 32)'
-                          : col.key === 'done' ? '#22C55E'
-                          : '#F59E0B'
-                      }}
-                    />
-                    <span className="text-sm font-semibold text-primary">{col.label}</span>
-                    <span className="text-sm text-quaternary font-normal">{col.tasks.length}</span>
+                {/* Floating sticky header + fade below */}
+                <div className="sticky top-0 z-40">
+                  <div className="flex items-center justify-between px-4 py-3 backdrop-blur-md bg-secondary/80 dark:bg-primary/80">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="size-2 rounded-full shrink-0"
+                        style={{
+                          backgroundColor: col.key === 'not_started' ? '#9CA3AF'
+                            : col.key === 'in_progress' ? 'rgb(239 104 32)'
+                            : col.key === 'done' ? '#22C55E'
+                            : '#F59E0B'
+                        }}
+                      />
+                      <span className="text-sm font-semibold text-primary">{col.label}</span>
+                      <span className="text-sm text-quaternary font-normal">{col.tasks.length}</span>
+                    </div>
                   </div>
+                  {/* Fade below header — same height as header, soft card reveal */}
+                  <div className="h-11 pointer-events-none bg-gradient-to-b from-secondary/80 to-transparent dark:from-primary/80" />
                 </div>
                 <div className="flex flex-col gap-3" style={{ padding: '0.5rem var(--board-col-padding) 5rem' }}>
                   {loading && tasks.length === 0 ? (
