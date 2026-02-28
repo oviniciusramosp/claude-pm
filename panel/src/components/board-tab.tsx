@@ -1359,8 +1359,8 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                   dragOverColumn === col.key && col.statusMatch !== null && 'bg-tertiary/40'
                 )}
                 style={{
-                  maskImage: 'linear-gradient(to bottom, black 0%, black calc(100% - 5rem), transparent 100%)',
-                  WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black calc(100% - 5rem), transparent 100%)',
+                  maskImage: 'linear-gradient(to bottom, black 0%, black calc(100% - 2.5rem), transparent 100%)',
+                  WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black calc(100% - 2.5rem), transparent 100%)',
                 }}
                 onDragOver={(e) => {
                   if (col.statusMatch === null) return;
@@ -1374,9 +1374,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                   handleDrop(col.key);
                 }}
               >
-                {/* Floating sticky header + fade below */}
-                <div className="sticky top-0 z-40">
-                  <div className="flex items-center justify-between px-4 py-3 backdrop-blur-md bg-secondary/80 dark:bg-primary/80">
+                {/* Floating sticky header — frosted glass gradient */}
+                <div className="sticky top-0 z-40 pointer-events-none backdrop-blur-md bg-gradient-to-b from-secondary/80 to-transparent dark:from-primary/80 pb-4">
+                  <div className="flex items-center justify-between px-4 py-3 pointer-events-auto">
                     <div className="flex items-center gap-2">
                       <span
                         className="size-2 rounded-full shrink-0"
@@ -1391,10 +1391,8 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                       <span className="text-sm text-quaternary font-normal">{col.tasks.length}</span>
                     </div>
                   </div>
-                  {/* Fade below header — same height as header, soft card reveal */}
-                  <div className="h-11 pointer-events-none bg-gradient-to-b from-secondary/80 to-transparent dark:from-primary/80" />
                 </div>
-                <div className="flex flex-col gap-3" style={{ padding: '0.5rem var(--board-col-padding) 5rem' }}>
+                <div className="flex flex-col gap-3" style={{ padding: '0.5rem var(--board-col-padding) 2.5rem' }}>
                   {loading && tasks.length === 0 ? (
                     <>
                       <SkeletonCard />
