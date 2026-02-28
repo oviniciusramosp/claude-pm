@@ -1707,6 +1707,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                     const isPeek = !expanded && i < 2;
                                     const isHidden = !expanded && i >= 2;
                                     const peekHeight = i === 0 ? 10 : 6;
+                                    const peekBottomRadius = i === 0 ? 6 : 4;
                                     return (
                                       <div
                                         key={child.id}
@@ -1723,7 +1724,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                           marginTop: i === 0 ? 0 : expanded ? 8 : isPeek ? -1 : 0,
                                           borderRadius: expanded
                                             ? 'var(--board-card-radius)'
-                                            : '0 0 var(--board-card-radius) var(--board-card-radius)',
+                                            : `0 0 ${peekBottomRadius}px ${peekBottomRadius}px`,
                                           pointerEvents: expanded ? 'auto' : 'none',
                                           zIndex: expanded ? undefined : 20 - i * 5,
                                           transition: expanded
@@ -1735,23 +1736,29 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                           boxShadow: !expanded && isPeek ? '0 1px 2px rgba(0,0,0,0.06)' : undefined,
                                         }}
                                       >
-                                        <BoardCard
-                                          task={child}
-                                          epic={false}
-                                          allTasks={tasks}
-                                          onClick={() => setSelectedTask(child)}
-                                          onFix={handleFixTask}
-                                          fixStatus={fixStatus[child.id]}
-                                          allFixStatuses={fixStatus}
-                                          fixingTaskType={fixingTaskId === child.id ? fixingTaskType : null}
-                                          isGlobalOperationRunning={!expanded || fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
-                                          showAddStatus={isMissingStatus}
-                                          onAddStatus={isMissingStatus ? handleAddStatus : undefined}
-                                          addingStatus={addingStatus}
-                                          onDragStart={() => setDraggedTask(child)}
-                                          onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
-                                          dragging={draggedTask?.id === child.id}
-                                        />
+                                        {/* Pull card up when collapsed so its own rounded top hides above the clip edge */}
+                                        <div style={{
+                                          marginTop: expanded ? 0 : isPeek ? -12 : 0,
+                                          transition: expanded ? 'margin-top 350ms ease' : 'margin-top 250ms ease',
+                                        }}>
+                                          <BoardCard
+                                            task={child}
+                                            epic={false}
+                                            allTasks={tasks}
+                                            onClick={() => setSelectedTask(child)}
+                                            onFix={handleFixTask}
+                                            fixStatus={fixStatus[child.id]}
+                                            allFixStatuses={fixStatus}
+                                            fixingTaskType={fixingTaskId === child.id ? fixingTaskType : null}
+                                            isGlobalOperationRunning={!expanded || fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
+                                            showAddStatus={isMissingStatus}
+                                            onAddStatus={isMissingStatus ? handleAddStatus : undefined}
+                                            addingStatus={addingStatus}
+                                            onDragStart={() => setDraggedTask(child)}
+                                            onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
+                                            dragging={draggedTask?.id === child.id}
+                                          />
+                                        </div>
                                       </div>
                                     );
                                   })}
