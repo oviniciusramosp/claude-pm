@@ -697,12 +697,13 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
         pendingFlipRef.current = epicId;
       }
     } else {
-      // Cascade fade-out: last card fades first so cards dissolve before being clipped by overflow
+      // Cascade fade-out + slide-down: last card fades/slides first, first card last
       const refs = (listCardRefs.current.get(epicId) ?? []).filter((el): el is HTMLDivElement => el !== null);
       refs.forEach((el, i) => {
         const delay = (refs.length - 1 - i) * 45;
-        el.style.transition = `opacity 240ms ease ${delay}ms`;
+        el.style.transition = `opacity 240ms ease ${delay}ms, transform 260ms cubic-bezier(0.4, 0, 1, 1) ${delay}ms`;
         el.style.opacity = '0';
+        el.style.transform = 'translateY(20px)';
       });
     }
     setExpandedEpics((prev) => {
