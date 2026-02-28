@@ -486,26 +486,30 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
         dragging && 'opacity-50'
       )}
     >
-      {/* Row 1: code / priority / donut — all card types */}
+      {/* Donut chart — absolute top-right, does not affect row height */}
+      {progressTotal > 0 && (
+        <div className="absolute top-4 right-4">
+          <AcDonut done={progressDone} total={progressTotal} label={epic ? 'tasks' : 'ACs'} />
+        </div>
+      )}
+
+      {/* Row 1: code / priority — all card types */}
       {epic && taskCode && (
         /* Epic card */
-        <div className="flex items-center justify-between w-full mb-2">
-          <div className="flex items-center gap-1 text-[11px] text-quaternary font-mono tracking-wide">
-            <Icon icon={Folder} className="size-3 shrink-0" />
-            <span>{taskCode}</span>
-            {task.priority && (
-              <>
-                <span className="opacity-40">·</span>
-                <span className={PRIORITY_INLINE_COLORS[task.priority] || ''}>{task.priority}</span>
-              </>
-            )}
-          </div>
-          {progressTotal > 0 && <AcDonut done={progressDone} total={progressTotal} label="tasks" />}
+        <div className="flex items-center gap-1 mb-2 text-[11px] text-quaternary font-mono tracking-wide">
+          <Icon icon={Folder} className="size-3 shrink-0" />
+          <span>{taskCode}</span>
+          {task.priority && (
+            <>
+              <span className="opacity-40">·</span>
+              <span className={PRIORITY_INLINE_COLORS[task.priority] || ''}>{task.priority}</span>
+            </>
+          )}
         </div>
       )}
       {parentEpic && (
         /* Child task card */
-        <div className="flex items-center justify-between w-full mb-2">
+        <div className="mb-2">
           <Tooltip title={parentEpic.name} placement="top">
             <TooltipTrigger className="flex items-center gap-1 text-[11px] text-quaternary font-mono tracking-wide cursor-default">
               <Icon icon={Folder} className="size-3 shrink-0" />
@@ -524,20 +528,16 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
               )}
             </TooltipTrigger>
           </Tooltip>
-          {progressTotal > 0 && <AcDonut done={progressDone} total={progressTotal} label="ACs" />}
         </div>
       )}
       {!epic && !parentEpic && (taskCode || task.priority) && (
         /* Standalone task card */
-        <div className="flex items-center justify-between w-full mb-2">
-          <div className="flex items-center gap-1 text-[11px] text-quaternary font-mono tracking-wide">
-            {taskCode && <span>{taskCode}</span>}
-            {taskCode && task.priority && <span className="opacity-40">·</span>}
-            {task.priority && (
-              <span className={PRIORITY_INLINE_COLORS[task.priority] || ''}>{task.priority}</span>
-            )}
-          </div>
-          {progressTotal > 0 && <AcDonut done={progressDone} total={progressTotal} label="ACs" />}
+        <div className="flex items-center gap-1 mb-2 text-[11px] text-quaternary font-mono tracking-wide">
+          {taskCode && <span>{taskCode}</span>}
+          {taskCode && task.priority && <span className="opacity-40">·</span>}
+          {task.priority && (
+            <span className={PRIORITY_INLINE_COLORS[task.priority] || ''}>{task.priority}</span>
+          )}
         </div>
       )}
 
