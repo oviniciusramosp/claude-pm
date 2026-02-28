@@ -505,7 +505,7 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
         <>
           <div
             className="absolute inset-0 pointer-events-none dark:hidden"
-            style={{ borderRadius: 'inherit', background: 'radial-gradient(circle at -15% -25%, rgba(168, 85, 247, 0.2) 0%, transparent 65%)' }}
+            style={{ borderRadius: 'inherit', background: 'radial-gradient(circle at -15% -25%, rgba(168, 85, 247, 0.1) 0%, transparent 65%)' }}
           />
           <div
             className="absolute inset-0 pointer-events-none hidden dark:block"
