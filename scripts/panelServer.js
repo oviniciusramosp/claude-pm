@@ -155,7 +155,14 @@ const reviewTaskState = {
   running: false
 };
 const generateStoriesState = {
-  running: false
+  running: false,
+  epicId: null,
+  epicName: null,
+  created: 0,
+  total: 0,
+  failed: 0,
+  phase: null, // 'planning' | 'generating'
+  errors: []
 };
 const fixEpicStoriesState = {
   running: false
@@ -3860,16 +3867,18 @@ app.post('/api/board/review-task', async (req, res) => {
   }
 });
 
-// --- Generate Stories from Epic ---
+// --- Generate Stories from Epic (two-phase: plan then generate one by one) ---
 
-const GENERATE_STORIES_TIMEOUT_MS = 180000; // 3 minutes
-
-function buildGenerateStoriesPrompt({ epicName, epicBody, existingChildren, boardContext }) {
+/**
+ * Phase 1: Ask Claude for story outlines only (no full bodies).
+ * Fast call that returns a plan: [{name, priority, type, model, brief, dependsOn}]
+ */
+function buildStoryPlanPrompt({ epicName, epicBody, existingChildren, boardContext }) {
   const childList = existingChildren.length > 0
     ? existingChildren.map((c) => `- ${c.name}`).join('\n')
     : '(none)';
 
-  return `You are a technical architect breaking down an Epic into executable tasks for an AI coding assistant (Claude Code). Each task will be executed autonomously in a single session — write instructions as direct orders, not as agile ceremonies.
+  return `You are a technical architect planning the task breakdown for an Epic.
 
 <epic>
 <name>${epicName}</name>
@@ -3885,203 +3894,190 @@ ${childList}
 ${boardContext || ''}
 
 <methodology>
-**DISCOVERY-FIRST APPROACH:**
-- For complex features where the implementation approach is unclear (choice of library, architecture pattern, API design, etc.), create a **Discovery task BEFORE the implementation task**.
-- Discovery tasks (type: "Discovery") research and document the recommended approach. They use \`model: claude-opus-4-6\` for deeper analysis.
-- The Discovery task output MUST be saved to a markdown file inside the project (e.g., \`docs/discoveries/auth-strategy.md\`). This file becomes the reference for subsequent tasks.
-- Tasks that follow a Discovery MUST reference the Discovery output file in their Dependencies section.
+**DISCOVERY-FIRST:** For complex features where the implementation approach is unclear, create a Discovery task BEFORE the implementation task. Discovery tasks use \`model: claude-opus-4-6\`.
 
-**WHEN TO USE DISCOVERY vs INLINE RESEARCH:**
-- **Use a Discovery task** for complex decisions: choosing frameworks/libraries, defining API contracts, architectural patterns, database schema design, integration strategies.
-- **Use inline ACs** (within a task) for simpler research: checking if a package exists, reading existing code to understand a pattern, minor technology choices.
-
-**INCREMENTAL DELIVERY:**
-- Order tasks so each builds on the previous one — never assume something exists that hasn't been built yet.
-- Each task should produce a working, testable increment.
-- Earlier tasks lay foundations; later tasks add features on top.
+**INCREMENTAL DELIVERY:** Order tasks so each builds on the previous — Discoveries first, then foundations, then features.
 </methodology>
 
-<instructions>
-1. Analyze the Epic and identify all distinct features or capabilities that need implementation.
-
-2. For each feature, decide if it needs a Discovery task:
-   - If the Epic mentions "(needs Discovery)" in its Technical Approach or Scope, create a Discovery task first.
-   - If the implementation involves choosing between alternatives, create a Discovery task.
-   - If straightforward with a clear implementation path, create a task directly.
-
-3. **For Discovery tasks**, use this structure:
-   - type: "Discovery"
-   - name: "Research [topic]" (e.g., "Research authentication strategy")
-   - body structure:
-
-     # [Discovery Name]
-
-     Research and document the recommended approach for [topic].
-
-     ## Research Questions
-     - [ ] What are the available options for [topic]?
-     - [ ] What are the trade-offs of each option?
-     - [ ] Which option is recommended for this project and why?
-
-     ## Acceptance Criteria
-     - [ ] Research document created at \`docs/discoveries/[topic-slug].md\`
-     - [ ] Document includes comparison of alternatives with pros/cons
-     - [ ] Document includes a clear recommendation with justification
-     - [ ] Document includes implementation guidelines for the recommended approach
-
-     ## Output
-     Save findings to: \`docs/discoveries/[topic-slug].md\`
-
-     ## Dependencies
-     - None (or list if depends on another Discovery)
-
-     ## Completion
-     - [ ] Research document created and complete
-     - [ ] Commit: \`docs(discovery): research [topic]\`
-
-4. **For implementation tasks** (type: "UserStory"), use this structure:
-   - type: "UserStory"
-   - model: Choose based on task complexity (see <model_selection> below)
-   - name: Imperative form (e.g., "Implement login form", "Add JWT authentication endpoint")
-   - body structure:
-
-     # [Task Name]
-
-     [1-3 sentences: imperative description of what to build. Be specific about scope and expected outcome. No "As a user..." format.]
-
-     ## Acceptance Criteria
-     - [ ] [Technically verifiable condition — checkable by tests, build, or code inspection]
-     (3-8 ACs per task. Each must be specific, verifiable, and actionable.)
-
-     ## Implementation
-     1. [Step with specific file path] (e.g., "Create \`src/components/LoginForm.tsx\`")
-     2. [Step with specific change] (e.g., "Add form validation using zod schema")
-     (Numbered, sequential. Each step is a concrete action Claude Code executes.)
-
-     ## Tests
-     - File: \`[specific test file path]\`
-     - [Specific test case 1]
-     - [Specific test case 2]
-     - Or "N/A — infrastructure/research task"
-     - NEVER include manual testing steps
-
-     ## Dependencies
-     - Reference Discovery output files if applicable (e.g., "See \`docs/discoveries/auth-strategy.md\`")
-     - List other prerequisites or blocking tasks
-     - Or "None" if standalone
-
-     ## Completion
-     - [ ] Tests pass (or N/A)
-     - [ ] Build passes
-     - [ ] Commit: \`type(scope): description\`
-
-5. DO NOT duplicate tasks that already exist (see existing_children above).
-6. Review the <board_context> section (if present). DO NOT generate tasks that overlap with work in other epics. Note cross-epic dependencies.
-7. Each task should be completable by Claude Code in a single session.
-8. **Order tasks incrementally**: Discoveries first, then foundational tasks, then features that build on them.
-9. Generate between 2 and 15 tasks. Do not exceed 15.
-10. Use imperative language: "Research X", "Implement Y", "Add Z", "Create W".
-11. **NEVER include manual tests** — only automated tests (unit, integration, e2e).
-12. Avoid narrative language — no "As a user...", no "motivation", no "user experience" sections. Write direct implementation instructions.
-</instructions>
-
 <model_selection>
-Choose the Claude model for each task based on its complexity and nature:
-
-- **claude-opus-4-6** — Use for Discovery tasks, complex architectural work, large refactors, tasks requiring deep reasoning or multi-file coordination, and tasks explicitly marked as needing Opus.
-- **claude-sonnet-4-5-20250929** — Use for standard implementation tasks: building features, writing tests, adding endpoints, creating components, bug fixes with clear scope.
-- **claude-haiku-4-5-20251001** — Use for simple/mechanical tasks: config changes, dependency installs, renaming, boilerplate generation, documentation-only tasks, chores.
-
-When in doubt, prefer Sonnet. Only use Opus when the task genuinely requires deeper analysis.
+- **claude-opus-4-6** — Discovery tasks, complex architectural work, large refactors.
+- **claude-sonnet-4-5-20250929** — Standard implementation tasks: features, tests, endpoints, components.
+- **claude-haiku-4-5-20251001** — Simple/mechanical tasks: config changes, dependency installs, boilerplate.
 </model_selection>
 
-<ac_rules>
-STRICT rules for Acceptance Criteria in every story:
+<instructions>
+1. Analyze the Epic and identify all distinct tasks needed.
+2. Order tasks: Discoveries first, then foundational tasks, then features.
+3. Cap at 15 tasks total. Do NOT include tasks from <existing_children>.
+4. For each task, provide: name, priority, type, model, a brief one-sentence summary, and dependsOn (list of other task names this task requires to be done first).
 
-1. Every AC must be assertable via an automated test (unit, integration, or e2e assertion).
-   - GOOD: "Submit button is disabled when form has validation errors"
-   - GOOD: "POST /api/login returns 401 for invalid credentials"
-   - GOOD: "AuthContext.isAuthenticated is true after successful login"
-   - BAD: "User sees an error message" (requires human eyes)
-   - BAD: "Page renders correctly" (not a meaningful assertion)
-   - BAD: "The UI looks clean and modern" (untestable)
-
-2. Do NOT duplicate what the Completion section already covers.
-   - No AC for "TypeScript compiles", "linter passes", or "tests pass" — those are in Completion.
-
-3. No redundancy between ACs — each one tests a distinct behavior or code path.
-   - If two ACs test the same logic, merge them or remove the weaker one.
-
-4. Keep it tight: 3-6 ACs per story. Only what meaningfully defines "done".
-</ac_rules>
-
-<output_format>
-Return ONLY a valid JSON array. No markdown code blocks, no explanation — just raw JSON.
-
-Each element must have:
-- "name": string (task name, imperative form)
-- "priority": string ("P0", "P1", "P2", or "P3")
-- "type": string ("Discovery" or "UserStory") — defaults to "UserStory" if omitted
-- "model": string (Claude model ID — see <model_selection> above)
-- "body": string (complete markdown body with \\n for newlines)
-
-Example:
+Return ONLY a JSON array with NO additional text or code blocks:
 [
   {
-    "name": "Research authentication strategy",
-    "priority": "P0",
-    "type": "Discovery",
-    "model": "claude-opus-4-6",
-    "body": "# Research Authentication Strategy\\n\\nResearch and document the recommended authentication approach for this project.\\n\\n## Research Questions\\n- [ ] JWT vs session-based auth trade-offs\\n- [ ] Recommended token storage strategy\\n\\n## Acceptance Criteria\\n- [ ] Research document created at \`docs/discoveries/auth-strategy.md\`\\n- [ ] Document includes comparison with pros/cons\\n- [ ] Document includes clear recommendation\\n\\n## Output\\nSave findings to: \`docs/discoveries/auth-strategy.md\`\\n\\n## Dependencies\\n- None\\n\\n## Completion\\n- [ ] Research document created\\n- [ ] Commit: \`docs(discovery): research auth strategy\`"
-  },
-  {
-    "name": "Implement JWT authentication endpoint",
-    "priority": "P1",
-    "type": "UserStory",
-    "model": "claude-sonnet-4-5-20250929",
-    "body": "# Implement JWT Authentication Endpoint\\n\\nCreate a POST \`/api/auth/login\` endpoint that validates credentials and returns a signed JWT token. Include refresh token rotation and httpOnly cookie storage.\\n\\n## Acceptance Criteria\\n- [ ] POST /api/auth/login accepts email and password\\n- [ ] Returns signed JWT on valid credentials\\n- [ ] Returns 401 with error message on invalid credentials\\n\\n## Implementation\\n1. Create \`src/routes/auth.ts\` with login endpoint\\n2. Add JWT signing using jsonwebtoken package\\n3. Implement credential validation against user store\\n\\n## Tests\\n- File: \`__tests__/routes/auth.test.ts\`\\n- Valid credentials return 200 with token\\n- Invalid credentials return 401\\n\\n## Dependencies\\n- See \`docs/discoveries/auth-strategy.md\`\\n\\n## Completion\\n- [ ] Tests pass\\n- [ ] Build passes\\n- [ ] Commit: \`feat(auth): implement JWT login endpoint\`"
+    "name": "Task name (imperative form)",
+    "priority": "P0|P1|P2|P3",
+    "type": "Discovery|UserStory|Bug|Chore",
+    "model": "claude-opus-4-6|claude-sonnet-4-5-20250929|claude-haiku-4-5-20251001",
+    "brief": "One sentence describing what this task implements or researches.",
+    "dependsOn": ["Name of prerequisite task"]
   }
 ]
-</output_format>`;
+
+Rules:
+- Return ONLY valid JSON array, no markdown, no code blocks, no explanation.
+- 2-15 tasks maximum.
+- Use imperative task names: "Research X", "Implement Y", "Add Z".
+- Do NOT include any task whose name matches an existing child.
+</instructions>`;
 }
 
-function parseGenerateStoriesResponse(reply) {
+function parseStoryPlanResponse(reply) {
   const text = String(reply || '').trim();
-
-  // Try to extract JSON from code blocks if wrapped
   const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
   const jsonStr = codeBlockMatch ? codeBlockMatch[1].trim() : text;
 
-  let stories;
+  let plan;
   try {
-    stories = JSON.parse(jsonStr);
+    plan = JSON.parse(jsonStr);
   } catch {
-    throw new Error('Claude did not return valid JSON. Raw response: ' + text.slice(0, 500));
+    throw new Error('Claude did not return valid JSON for story plan. Raw: ' + text.slice(0, 500));
   }
 
-  if (!Array.isArray(stories)) {
-    throw new Error('Expected a JSON array of stories but got: ' + typeof stories);
+  if (!Array.isArray(plan)) {
+    throw new Error('Expected a JSON array for story plan but got: ' + typeof plan);
   }
 
-  // Validate and normalize
-  const normalized = [];
-  for (const s of stories) {
-    if (!s.name || typeof s.name !== 'string') continue;
-    if (!s.body || typeof s.body !== 'string') continue;
-    normalized.push({
+  return plan
+    .filter((s) => s.name && typeof s.name === 'string')
+    .map((s) => ({
       name: s.name.trim(),
       priority: ['P0', 'P1', 'P2', 'P3'].includes(s.priority) ? s.priority : 'P1',
       type: ['Discovery', 'UserStory', 'Bug', 'Chore'].includes(s.type) ? s.type : 'UserStory',
-      body: s.body
-    });
-    if (normalized.length >= 15) break; // Hard cap
-  }
+      model: s.model || 'claude-sonnet-4-5-20250929',
+      brief: s.brief || '',
+      dependsOn: Array.isArray(s.dependsOn) ? s.dependsOn : []
+    }))
+    .slice(0, 15);
+}
 
-  if (normalized.length === 0) {
-    throw new Error('Claude returned no valid stories. Raw response: ' + text.slice(0, 500));
-  }
+/**
+ * Phase 2: Generate the full markdown body for a single story.
+ */
+function buildSingleStoryBodyPrompt({ outline, epicName, epicBody, allOutlines, position }) {
+  const allTasksList = allOutlines
+    .map((t, i) => `${i + 1}. [${t.type}] ${t.name} — ${t.brief}`)
+    .join('\n');
 
-  return normalized;
+  const depNotes = outline.dependsOn && outline.dependsOn.length > 0
+    ? `Depends on: ${outline.dependsOn.join(', ')}.`
+    : 'No dependencies.';
+
+  const isDiscovery = outline.type === 'Discovery';
+
+  const template = isDiscovery
+    ? `# [Task Name]
+
+Research and document the recommended approach for [topic].
+
+## Research Questions
+- [ ] What are the available options for [topic]?
+- [ ] What are the trade-offs of each option?
+- [ ] Which option is recommended for this project and why?
+
+## Acceptance Criteria
+- [ ] Research document created at \`docs/discoveries/[topic-slug].md\`
+- [ ] Document includes comparison of alternatives with pros/cons
+- [ ] Document includes a clear recommendation with justification
+- [ ] Document includes implementation guidelines for the recommended approach
+
+## Output
+Save findings to: \`docs/discoveries/[topic-slug].md\`
+
+## Dependencies
+- [List prerequisite tasks or "None"]
+
+## Completion
+- [ ] Research document created and complete
+- [ ] Commit: \`docs(discovery): research [topic]\``
+    : `# [Task Name]
+
+[1-3 sentences: imperative description of what to build. Be specific about scope and expected outcome. No "As a user..." format.]
+
+## Acceptance Criteria
+- [ ] [Technically verifiable condition — checkable by tests, build, or code inspection]
+(3-6 ACs. Each must be specific, verifiable, and actionable.)
+
+## Implementation
+1. [Step with specific file path, e.g., "Create \`src/components/LoginForm.tsx\`"]
+2. [Concrete implementation step]
+(Numbered, sequential. Each step is a concrete action Claude Code executes.)
+
+## Tests
+- File: \`[specific test file path]\`
+- [Specific test case 1]
+- [Specific test case 2]
+- Or "N/A — infrastructure/research task"
+- NEVER include manual testing steps
+
+## Dependencies
+- [Reference Discovery output files: e.g., "See \`docs/discoveries/auth-strategy.md\`"]
+- [Or "None"]
+
+## Completion
+- [ ] Tests pass (or N/A)
+- [ ] Build passes
+- [ ] Commit: \`type(scope): description\``;
+
+  return `You are writing a detailed task specification for an AI coding assistant (Claude Code). The task will be executed autonomously in a single session. Write instructions as direct commands.
+
+<epic>
+<name>${epicName}</name>
+<body>
+${epicBody}
+</body>
+</epic>
+
+<all_tasks_in_epic>
+${allTasksList}
+</all_tasks_in_epic>
+
+<current_task>
+Position: ${position + 1} of ${allOutlines.length}
+Name: ${outline.name}
+Type: ${outline.type}
+Priority: ${outline.priority}
+Brief: ${outline.brief}
+${depNotes}
+</current_task>
+
+<ac_rules>
+STRICT rules for Acceptance Criteria:
+1. Every AC must be assertable via an automated test — GOOD: "POST /api/login returns 401 for invalid credentials" / BAD: "User sees an error message".
+2. Do NOT include "TypeScript compiles", "linter passes", or "tests pass" in ACs — those go in Completion.
+3. No redundancy — each AC tests a distinct behavior.
+4. Keep it tight: 3-6 ACs per story.
+</ac_rules>
+
+<instructions>
+Write the complete markdown body for this task using the template below.
+
+Template:
+${template}
+
+Rules:
+- If this task depends on a Discovery, reference the Discovery output file in Dependencies (e.g., "See \`docs/discoveries/auth-strategy.md\`").
+- Write implementation steps as direct commands (e.g., "Create src/auth.ts" not "You should create...").
+- Return ONLY the markdown body — no YAML frontmatter, no wrapping code blocks.
+- NEVER include manual tests — only automated tests (unit, integration, e2e).
+- Use imperative language throughout.
+</instructions>`;
+}
+
+function parseSingleStoryBodyResponse(reply) {
+  const text = String(reply || '').trim();
+  // Strip wrapping code blocks if Claude added them
+  const codeBlockMatch = text.match(/^```(?:markdown)?\s*\n([\s\S]*?)\n```\s*$/);
+  return codeBlockMatch ? codeBlockMatch[1].trim() : text;
 }
 
 function buildFixEpicStoriesPrompt({ epicName, stories }) {
@@ -4270,6 +4266,19 @@ function parseFixEpicStoriesResponse(reply) {
   return normalized;
 }
 
+app.get('/api/board/generate-stories/status', (_req, res) => {
+  res.json({
+    running: generateStoriesState.running,
+    epicId: generateStoriesState.epicId,
+    epicName: generateStoriesState.epicName,
+    created: generateStoriesState.created,
+    total: generateStoriesState.total,
+    failed: generateStoriesState.failed,
+    phase: generateStoriesState.phase,
+    errors: [...generateStoriesState.errors]
+  });
+});
+
 app.post('/api/board/generate-stories', async (req, res) => {
   const { epicId } = req.body;
 
@@ -4283,101 +4292,124 @@ app.post('/api/board/generate-stories', async (req, res) => {
     return;
   }
 
-  generateStoriesState.running = true;
-  pushLog('info', LOG_SOURCE.panel, `Generating stories for Epic: "${epicId}"`);
+  // Initialize state and respond immediately so the client never times out
+  Object.assign(generateStoriesState, {
+    running: true,
+    epicId,
+    epicName: null,
+    created: 0,
+    total: 0,
+    failed: 0,
+    phase: 'planning',
+    errors: []
+  });
 
-  try {
-    const env = await readEnvPairs();
-    const boardDir = resolveBoardDir(env);
+  pushLog('info', LOG_SOURCE.panel, `Starting story generation for Epic: "${epicId}"`);
+  res.json({ ok: true, started: true });
 
-    const boardConfig = {
-      board: {
-        dir: boardDir,
-        statuses: {
-          notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
-          inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
-          done: env.BOARD_STATUS_DONE || 'Done'
-        },
-        typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
-      }
-    };
+  // Run generation in background
+  (async () => {
+    try {
+      const env = await readEnvPairs();
+      const boardDir = resolveBoardDir(env);
 
-    const client = new LocalBoardClient(boardConfig);
-    await client.initialize();
-
-    // Read epic markdown
-    const epicMarkdown = await client.getTaskMarkdown(epicId);
-    if (!epicMarkdown) {
-      res.status(404).json({ ok: false, message: `Epic not found: ${epicId}` });
-      return;
-    }
-
-    const { frontmatter: epicFields, body: epicBody } = parseFrontmatter(epicMarkdown);
-    const epicName = (epicFields && epicFields.name) || epicId;
-
-    if (!epicBody || epicBody.trim().length < 20) {
-      res.status(400).json({ ok: false, message: 'Epic has no description or description is too short. Add content to the Epic before generating stories.' });
-      return;
-    }
-
-    // Find existing children to avoid duplication
-    const allTasks = await client.listTasks();
-    const existingChildren = allTasks.filter((t) => t.parentId === epicId);
-
-    // Gather cross-epic context from the board
-    const boardContext = await buildBoardContext(client, epicId);
-
-    // Build prompt and call Claude
-    const prompt = buildGenerateStoriesPrompt({
-      epicName,
-      epicBody: epicBody.trim(),
-      existingChildren: existingChildren.map((c) => ({ name: c.name })),
-      boardContext
-    });
-
-    const { reply } = await runClaudePromptViaApi(prompt, 'claude-sonnet-4-5-20250929');
-    const stories = parseGenerateStoriesResponse(reply);
-
-    // Create each story as a task file with numbered pattern S{epic}-{story}-{slug}
-    const created = [];
-    let failed = 0;
-
-    for (let i = 0; i < stories.length; i++) {
-      const story = stories[i];
-      try {
-        const fileName = generateStoryFileName(epicId, i, story.name);
-        const taskFields = { name: story.name, priority: story.priority, type: story.type || 'UserStory', status: 'Not Started' };
-        // Apply model from Claude's response (all tasks should have a model defined)
-        if (story.model) {
-          taskFields.model = story.model;
-        } else if (story.type === 'Discovery') {
-          // Fallback: Discovery tasks default to Opus if model not specified
-          taskFields.model = 'claude-opus-4-6';
+      const boardConfig = {
+        board: {
+          dir: boardDir,
+          statuses: {
+            notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+            inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+            done: env.BOARD_STATUS_DONE || 'Done'
+          },
+          typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
         }
-        await client.createTask(
-          taskFields,
-          story.body,
-          { epicId, fileName }
-        );
-        created.push({ name: story.name, fileName, type: story.type || 'UserStory' });
-      } catch (err) {
-        pushLog('warn', LOG_SOURCE.panel, `Failed to create story "${story.name}": ${err.message}`);
-        failed++;
-      }
-    }
+      };
 
-    const discoveryCount = created.filter(c => c.type === 'Discovery').length;
-    const storyCount = created.filter(c => c.type !== 'Discovery').length;
-    const typeBreakdown = discoveryCount > 0 ? ` (${discoveryCount} Discovery, ${storyCount} UserStory)` : '';
-    const summary = `Generated ${created.length} tasks${typeBreakdown} for "${epicName}"${failed > 0 ? ` (${failed} failed)` : ''}`;
-    pushLog('success', LOG_SOURCE.claude, summary);
-    res.json({ ok: true, created, total: stories.length, failed });
-  } catch (error) {
-    pushLog('error', LOG_SOURCE.claude, `Story generation failed: ${error.message}`);
-    res.status(500).json({ ok: false, message: error.message });
-  } finally {
-    generateStoriesState.running = false;
-  }
+      const client = new LocalBoardClient(boardConfig);
+      await client.initialize();
+
+      const epicMarkdown = await client.getTaskMarkdown(epicId);
+      if (!epicMarkdown) {
+        pushLog('error', LOG_SOURCE.panel, `Story generation failed: Epic not found: ${epicId}`);
+        return;
+      }
+
+      const { frontmatter: epicFields, body: epicBody } = parseFrontmatter(epicMarkdown);
+      const epicName = (epicFields && epicFields.name) || epicId;
+      generateStoriesState.epicName = epicName;
+
+      if (!epicBody || epicBody.trim().length < 20) {
+        pushLog('error', LOG_SOURCE.panel, `Story generation failed: Epic "${epicName}" has no description or description is too short.`);
+        return;
+      }
+
+      const allTasks = await client.listTasks();
+      const existingChildren = allTasks.filter((t) => t.parentId === epicId);
+      const boardContext = await buildBoardContext(client, epicId);
+
+      // Phase 1: Generate story plan (outlines only — fast call)
+      pushLog('info', LOG_SOURCE.panel, `Planning stories for "${epicName}"...`);
+      const planPrompt = buildStoryPlanPrompt({
+        epicName,
+        epicBody: epicBody.trim(),
+        existingChildren: existingChildren.map((c) => ({ name: c.name })),
+        boardContext
+      });
+      const { reply: planReply } = await runClaudePromptViaApi(planPrompt, 'claude-sonnet-4-5-20250929', 60000);
+      const storyPlan = parseStoryPlanResponse(planReply);
+
+      generateStoriesState.total = storyPlan.length;
+      generateStoriesState.phase = 'generating';
+      pushLog('info', LOG_SOURCE.panel, `Story plan ready: ${storyPlan.length} tasks for "${epicName}". Generating one by one...`);
+
+      // Phase 2: Generate each story body individually
+      for (let i = 0; i < storyPlan.length; i++) {
+        const outline = storyPlan[i];
+        try {
+          const storyPrompt = buildSingleStoryBodyPrompt({
+            outline,
+            epicName,
+            epicBody: epicBody.trim(),
+            allOutlines: storyPlan,
+            position: i
+          });
+
+          const { reply: storyReply } = await runClaudePromptViaApi(storyPrompt, 'claude-sonnet-4-5-20250929', 90000);
+          const storyBody = parseSingleStoryBodyResponse(storyReply);
+
+          const taskFields = {
+            name: outline.name,
+            priority: outline.priority,
+            type: outline.type || 'UserStory',
+            status: 'Not Started',
+            model: outline.model || (outline.type === 'Discovery' ? 'claude-opus-4-6' : 'claude-sonnet-4-5-20250929')
+          };
+
+          const fileName = generateStoryFileName(epicId, existingChildren.length + i, outline.name);
+          await client.createTask(taskFields, storyBody, { epicId, fileName });
+
+          generateStoriesState.created++;
+          pushLog('success', LOG_SOURCE.claude, `Story created (${generateStoriesState.created}/${storyPlan.length}): "${outline.name}"`);
+        } catch (err) {
+          generateStoriesState.failed++;
+          generateStoriesState.errors.push(outline.name);
+          pushLog('warn', LOG_SOURCE.panel, `Failed to create story "${outline.name}": ${err.message}`);
+        }
+      }
+
+      const discoveryCount = storyPlan.filter((s) => s.type === 'Discovery').length;
+      const storyCount = storyPlan.filter((s) => s.type !== 'Discovery').length;
+      const typeBreakdown = discoveryCount > 0 ? ` (${discoveryCount} Discovery, ${storyCount} UserStory)` : '';
+      const summary = `Generated ${generateStoriesState.created}/${storyPlan.length} tasks${typeBreakdown} for "${epicName}"${generateStoriesState.failed > 0 ? ` (${generateStoriesState.failed} failed)` : ''}`;
+      pushLog('success', LOG_SOURCE.claude, summary);
+    } catch (error) {
+      pushLog('error', LOG_SOURCE.claude, `Story generation failed: ${error.message}`);
+      generateStoriesState.failed++;
+    } finally {
+      generateStoriesState.running = false;
+      generateStoriesState.phase = null;
+    }
+  })();
 });
 
 // ── Epic Fix Handlers ─────────────────────────────────────────────────

@@ -558,6 +558,8 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const [createDefaultEpicId, setCreateDefaultEpicId] = useState<string | undefined>(undefined);
   const [ideaModalOpen, setIdeaModalOpen] = useState(false);
   const [generatingEpicId, setGeneratingEpicId] = useState(null as string | null);
+  const [generateProgress, setGenerateProgress] = useState(null as { created: number; total: number; phase: string | null } | null);
+  const generatePollRef = useRef(null as ReturnType<typeof setTimeout> | null);
   const [fixingEpicId, setFixingEpicId] = useState(null as string | null);
   const [fixingEpicType, setFixingEpicType] = useState(null as string | null);
   const [fixingTaskId, setFixingTaskId] = useState(null as string | null);
@@ -984,8 +986,22 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
     }
   }, [draggedEpicId, tasks, apiBaseUrl, showToast, fetchBoard, handleEpicDragEnd]);
 
+  // Cleanup poll on unmount
+  useEffect(() => {
+    return () => {
+      if (generatePollRef.current) clearTimeout(generatePollRef.current);
+    };
+  }, []);
+
   const handleGenerateStories = useCallback(async (epicId: string) => {
     setGeneratingEpicId(epicId);
+    setGenerateProgress({ created: 0, total: 0, phase: 'planning' });
+
+    const stopGenerating = () => {
+      setGeneratingEpicId(null);
+      setGenerateProgress(null);
+    };
+
     try {
       const response = await fetch(`${apiBaseUrl}/api/board/generate-stories`, {
         method: 'POST',
@@ -995,22 +1011,48 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         showToast(payload?.message || 'Failed to generate stories', 'danger');
+        stopGenerating();
         return;
       }
-      const msg = payload.failed > 0
-        ? `Generated ${payload.created.length} of ${payload.total} stories (${payload.failed} failed)`
-        : `Generated ${payload.created.length} stories`;
-      showToast(msg, payload.failed > 0 ? 'warning' : 'success');
-      setExpandedEpics((prev) => {
-        const next = new Set(prev);
-        next.add(epicId);
-        return next;
-      });
-      await fetchBoard(true);
+
+      // Backend responds immediately; poll status until done
+      const pollStatus = async () => {
+        try {
+          const statusRes = await fetch(`${apiBaseUrl}/api/board/generate-stories/status`);
+          const status = await statusRes.json().catch(() => ({}));
+          setGenerateProgress({
+            created: status.created || 0,
+            total: status.total || 0,
+            phase: status.phase || null
+          });
+
+          if (status.running) {
+            generatePollRef.current = setTimeout(pollStatus, 1500);
+          } else {
+            const failed = status.failed || 0;
+            const created = status.created || 0;
+            const total = status.total || 0;
+            const msg = failed > 0
+              ? `Generated ${created} of ${total} stories (${failed} failed)`
+              : `Generated ${created} stories`;
+            showToast(msg, failed > 0 ? 'warning' : 'success');
+            setExpandedEpics((prev) => {
+              const next = new Set(prev);
+              next.add(epicId);
+              return next;
+            });
+            await fetchBoard(true);
+            stopGenerating();
+          }
+        } catch {
+          stopGenerating();
+        }
+      };
+
+      pollStatus();
     } catch (err: any) {
       showToast(err.message || 'Failed to generate stories', 'danger');
-    } finally {
-      setGeneratingEpicId(null);
+      stopGenerating();
     }
   }, [apiBaseUrl, showToast, fetchBoard]);
 
@@ -1344,7 +1386,11 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       {generatingEpicId === task.id
                                         ? <RefreshCw01 className="size-3 animate-spin" />
                                         : <Stars01 className="size-3" />}
-                                      <span>{generatingEpicId === task.id ? 'Generating...' : 'Generate'}</span>
+                                      <span>{generatingEpicId === task.id
+                                        ? (generateProgress && generateProgress.total > 0
+                                          ? (generateProgress.phase === 'planning' ? 'Planning...' : `${generateProgress.created}/${generateProgress.total}`)
+                                          : 'Planning...')
+                                        : 'Generate'}</span>
                                     </TooltipTrigger>
                                   </Tooltip>
                                   <EpicFixDropdown
@@ -1504,7 +1550,11 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       {generatingEpicId === task.id
                                         ? <RefreshCw01 className="size-3 animate-spin" />
                                         : <Stars01 className="size-3" />}
-                                      <span>{generatingEpicId === task.id ? 'Generating...' : 'Generate'}</span>
+                                      <span>{generatingEpicId === task.id
+                                        ? (generateProgress && generateProgress.total > 0
+                                          ? (generateProgress.phase === 'planning' ? 'Planning...' : `${generateProgress.created}/${generateProgress.total}`)
+                                          : 'Planning...')
+                                        : 'Generate'}</span>
                                     </TooltipTrigger>
                                   </Tooltip>
                                   <EpicFixDropdown
@@ -1595,7 +1645,11 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       {generatingEpicId === task.id
                                         ? <RefreshCw01 className="size-3 animate-spin" />
                                         : <Stars01 className="size-3" />}
-                                      <span>{generatingEpicId === task.id ? 'Generating...' : 'Generate'}</span>
+                                      <span>{generatingEpicId === task.id
+                                        ? (generateProgress && generateProgress.total > 0
+                                          ? (generateProgress.phase === 'planning' ? 'Planning...' : `${generateProgress.created}/${generateProgress.total}`)
+                                          : 'Planning...')
+                                        : 'Generate'}</span>
                                     </TooltipTrigger>
                                   </Tooltip>
                                   <EpicFixDropdown

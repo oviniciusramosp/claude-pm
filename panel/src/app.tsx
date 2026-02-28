@@ -390,7 +390,8 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
           msg.startsWith('Returned to Not Started') ||
           msg.startsWith('Epic moved to Done') ||
           msg.startsWith('Resuming In Progress task:') ||
-          msg.includes('Reconciliation finished')
+          msg.includes('Reconciliation finished') ||
+          msg.startsWith('Story created (')
         ) {
           setBoardRefreshTrigger((prev) => prev + 1);
         }
