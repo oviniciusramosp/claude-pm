@@ -696,6 +696,14 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
         capturedFlipRectsRef.current.set(epicId, rects);
         pendingFlipRef.current = epicId;
       }
+    } else {
+      // Cascade fade-out: last card fades first so cards dissolve before being clipped by overflow
+      const refs = (listCardRefs.current.get(epicId) ?? []).filter((el): el is HTMLDivElement => el !== null);
+      refs.forEach((el, i) => {
+        const delay = (refs.length - 1 - i) * 45;
+        el.style.transition = `opacity 240ms ease ${delay}ms`;
+        el.style.opacity = '0';
+      });
     }
     setExpandedEpics((prev) => {
       const next = new Set(prev);
@@ -1757,13 +1765,14 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       peekCardRefs.current.get(task.id)![i] = el;
                                     }}
                                     aria-hidden="true"
-                                    className={cx('relative shadow-sm pointer-events-none select-none', i === 0 ? 'z-20 -mt-2' : 'z-10 -mt-2')}
+                                    className={cx('epic-peek-card relative shadow-sm pointer-events-none select-none', i === 0 ? 'z-20 -mt-2' : 'z-10 -mt-2')}
                                     style={{
                                       transform: `scaleX(${1 - (i + 1) * 0.06})`,
                                       transformOrigin: 'center',
                                       borderRadius: 'var(--board-card-radius)',
                                       height: 12,
                                       overflow: 'hidden',
+                                      animationDelay: `${420 + i * 60}ms`,
                                     }}
                                   >
                                     <BoardCard
