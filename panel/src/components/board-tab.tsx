@@ -1612,8 +1612,8 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                 {epicDropBeforeId === task.id && (
                                   <div className="absolute -top-1 left-0 right-0 h-0.5 bg-utility-brand-500 z-10 rounded-full" />
                                 )}
-                                {/* Epic card with action footer inside */}
-                                <div className="relative z-30">
+                                {/* Epic card with action footer inside — always on top of children stack */}
+                                <div className="relative" style={{ zIndex: 2 }}>
                                   <BoardCard
                                     task={task}
                                     epic
@@ -1693,72 +1693,56 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                     }
                                   />
                                 </div>
-                                {/* Children — CSS-transition-driven stacking deck / expanded list */}
+                                {/* Children — stacking deck (collapsed) / normal list (expanded) */}
                                 <div
                                   className="relative flex flex-col"
-                                  style={{
-                                    zIndex: expanded ? undefined : 10,
-                                    marginTop: expanded ? 8 : -6,
-                                    transition: expanded ? 'margin-top 300ms ease' : 'margin-top 250ms ease',
-                                  }}
+                                  style={{ marginTop: expanded ? 8 : 0, transition: 'margin-top 300ms ease' }}
                                 >
                                   {children.map((child, i) => {
                                     const total = children.length;
                                     const isPeek = !expanded && i < 2;
                                     const isHidden = !expanded && i >= 2;
-                                    const peekHeight = i === 0 ? 10 : 6;
-                                    const peekBottomRadius = i === 0 ? 6 : 4;
                                     return (
                                       <div
                                         key={child.id}
-                                        className="overflow-hidden"
                                         style={{
-                                          maxHeight: expanded ? 200 : isPeek ? peekHeight : 0,
+                                          position: 'relative',
+                                          zIndex: expanded ? undefined : -(i + 1),
                                           transform: expanded
                                             ? 'scale(1)'
                                             : isPeek
-                                              ? `scale(${1 - (i + 1) * 0.05})`
+                                              ? `scale(${0.95 - i * 0.05})`
                                               : 'scale(0.85)',
                                           transformOrigin: 'center top',
                                           opacity: expanded ? 1 : isHidden ? 0 : 1,
-                                          marginTop: i === 0 ? 0 : expanded ? 8 : isPeek ? -1 : 0,
-                                          borderRadius: expanded
-                                            ? 'var(--board-card-radius)'
-                                            : `0 0 ${peekBottomRadius}px ${peekBottomRadius}px`,
+                                          marginTop: expanded ? (i === 0 ? 0 : 8) : isPeek ? -4 : 0,
+                                          height: expanded ? undefined : isHidden ? 0 : undefined,
                                           pointerEvents: expanded ? 'auto' : 'none',
-                                          zIndex: expanded ? undefined : 20 - i * 5,
                                           transition: expanded
-                                            ? 'max-height 350ms ease, transform 350ms ease, opacity 250ms ease, margin-top 300ms ease, border-radius 250ms ease'
-                                            : 'max-height 250ms ease, transform 250ms ease, opacity 200ms ease, margin-top 250ms ease, border-radius 200ms ease',
+                                            ? 'transform 350ms ease, opacity 250ms ease, margin-top 300ms ease, height 300ms ease'
+                                            : 'transform 250ms ease, opacity 200ms ease, margin-top 250ms ease, height 250ms ease',
                                           transitionDelay: expanded
                                             ? `${i * 60}ms`
                                             : `${Math.max(0, total - 1 - i) * 30}ms`,
-                                          boxShadow: !expanded && isPeek ? '0 1px 2px rgba(0,0,0,0.06)' : undefined,
                                         }}
                                       >
-                                        {/* Slide card up when collapsed so only its bottom edge peeks out */}
-                                        <div style={{
-                                          transform: expanded ? 'translateY(0)' : isPeek ? `translateY(calc(-100% + ${peekHeight}px))` : 'translateY(-100%)',
-                                          transition: expanded ? 'transform 350ms ease' : 'transform 250ms ease',
-                                        }}>
-                                          <BoardCard
-                                            task={child}
-                                            epic={false}
-                                            allTasks={tasks}
-                                            onClick={() => setSelectedTask(child)}
-                                            onFix={handleFixTask}
-                                            fixStatus={fixStatus[child.id]}
-                                            allFixStatuses={fixStatus}
-                                            fixingTaskType={fixingTaskId === child.id ? fixingTaskType : null}
-                                            isGlobalOperationRunning={!expanded || fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
-                                            showAddStatus={isMissingStatus}
-                                            onAddStatus={isMissingStatus ? handleAddStatus : undefined}
-                                            addingStatus={addingStatus}
-                                            onDragStart={() => setDraggedTask(child)}
-                                            onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
-                                            dragging={draggedTask?.id === child.id}
-                                          />
-                                        </div>
+                                        <BoardCard
+                                          task={child}
+                                          epic={false}
+                                          allTasks={tasks}
+                                          onClick={() => setSelectedTask(child)}
+                                          onFix={handleFixTask}
+                                          fixStatus={fixStatus[child.id]}
+                                          allFixStatuses={fixStatus}
+                                          fixingTaskType={fixingTaskId === child.id ? fixingTaskType : null}
+                                          isGlobalOperationRunning={!expanded || fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
+                                          showAddStatus={isMissingStatus}
+                                          onAddStatus={isMissingStatus ? handleAddStatus : undefined}
+                                          addingStatus={addingStatus}
+                                          onDragStart={() => setDraggedTask(child)}
+                                          onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
+                                          dragging={draggedTask?.id === child.id}
+                                        />
                                       </div>
                                     );
                                   })}
