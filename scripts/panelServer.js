@@ -4424,7 +4424,7 @@ app.post('/api/board/generate-stories', async (req, res) => {
       });
       let planReply;
       try {
-        ({ reply: planReply } = await runClaudePromptViaApi(planPrompt, 'claude-sonnet-4-5-20250929', 60000));
+        ({ reply: planReply } = await runClaudePromptViaApi(planPrompt, 'claude-sonnet-4-5-20250929', 120000));
       } catch (planErr) {
         pushLog('error', LOG_SOURCE.claude, `Phase 1 (planning) failed for "${epicName}": ${planErr.message}`, {
           stderr: planErr.stderr || null,
