@@ -293,10 +293,14 @@ export function SetupTab({
                                 <Input
                                   size="md"
                                   aria-label={field.label}
-                                  type={isSecretField && !isFieldVisible ? 'password' : 'text'}
+                                  type="text"
+                                  autoComplete="off"
                                   placeholder={field.placeholder}
                                   wrapperClassName="h-11"
-                                  inputClassName={hasInlineValidationIcon ? 'pr-9' : undefined}
+                                  inputClassName={cx(
+                                    hasInlineValidationIcon ? 'pr-9' : undefined,
+                                    isSecretField && !isFieldVisible ? 'masked-text' : undefined,
+                                  )}
                                   tooltipClassName={validation.level === 'error' ? 'hidden' : undefined}
                                   value={config[field.key] || ''}
                                   isInvalid={validation.level === 'error'}

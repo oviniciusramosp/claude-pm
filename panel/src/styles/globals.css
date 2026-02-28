@@ -107,3 +107,8 @@ input[type="number"] {
 input[type="search"]::-webkit-search-cancel-button {
     -webkit-appearance: none;
 }
+
+/* Visually mask text (like type="password") without triggering macOS Passwords autocomplete. */
+.masked-text {
+    -webkit-text-security: disc;
+}

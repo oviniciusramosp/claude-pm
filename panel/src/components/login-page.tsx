@@ -101,11 +101,13 @@ export function LoginPage({ isDark }: { isDark: boolean }) {
             <form onSubmit={handlePasskeySubmit} className="space-y-3">
               <div>
                 <Input
-                  type="password"
+                  type="text"
+                  autoComplete="off"
                   placeholder="Enter your passkey"
                   value={passkey}
                   onChange={(value) => setPasskey(value || '')}
                   isDisabled={submitting}
+                  inputClassName="masked-text"
                 />
                 {passkeyError && (
                   <p className="mt-1 text-xs text-danger">{passkeyError}</p>

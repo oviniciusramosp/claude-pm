@@ -1,6 +1,6 @@
 {
   "name": "product-manager-automation",
-  "version": "1.72.33",
+  "version": "1.72.34",
   "description": "Product Manager automation with local file-based board + Claude Code",
   "type": "module",
   "engines": {
