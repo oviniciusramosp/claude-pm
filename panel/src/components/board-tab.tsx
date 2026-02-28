@@ -646,11 +646,11 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const [fixStatus, setFixStatus] = useState<Record<string, { status: string; startedAt?: string; completedAt?: string; error?: string }>>({});
   const [selectedTask, setSelectedTask] = useState<BoardTask | null>(null);
   const [expandedEpics, setExpandedEpics] = useState(() => new Set<string>());
-  // FLIP animation refs for epic expand
-  const peekCardRefs = useRef<Map<string, (HTMLDivElement | null)[]>>(new Map());
-  const listCardRefs = useRef<Map<string, (HTMLDivElement | null)[]>>(new Map());
+  // FLIP animation refs for epic expand/collapse — single set of children
+  const childCardRefs = useRef<Map<string, (HTMLDivElement | null)[]>>(new Map());
   const capturedFlipRectsRef = useRef<Map<string, DOMRect[]>>(new Map());
   const pendingFlipRef = useRef<string | null>(null);
+  const flipDirectionRef = useRef<'expand' | 'collapse' | null>(null);
   const [addingStatus, setAddingStatus] = useState(false);
   const [draggedTask, setDraggedTask] = useState<BoardTask | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
@@ -688,23 +688,13 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
 
   const toggleEpic = useCallback((epicId: string) => {
     const isCurrentlyExpanded = expandedEpics.has(epicId);
-    if (!isCurrentlyExpanded) {
-      // Capture peek card positions before expanding so FLIP can animate from them
-      const refs = peekCardRefs.current.get(epicId) ?? [];
-      const rects = refs.map(el => el?.getBoundingClientRect() ?? null).filter(Boolean) as DOMRect[];
-      if (rects.length > 0) {
-        capturedFlipRectsRef.current.set(epicId, rects);
-        pendingFlipRef.current = epicId;
-      }
-    } else {
-      // Cascade fade-out + slide-down: last card fades/slides first, first card last
-      const refs = (listCardRefs.current.get(epicId) ?? []).filter((el): el is HTMLDivElement => el !== null);
-      refs.forEach((el, i) => {
-        const delay = (refs.length - 1 - i) * 45;
-        el.style.transition = `opacity 240ms ease ${delay}ms, transform 260ms cubic-bezier(0.4, 0, 1, 1) ${delay}ms`;
-        el.style.opacity = '0';
-        el.style.transform = 'translateY(20px)';
-      });
+    // Capture current positions of child cards before state change (FLIP: First)
+    const refs = (childCardRefs.current.get(epicId) ?? []).filter((el): el is HTMLDivElement => el !== null);
+    const rects = refs.map(el => el.getBoundingClientRect());
+    if (rects.length > 0) {
+      capturedFlipRectsRef.current.set(epicId, rects);
+      pendingFlipRef.current = epicId;
+      flipDirectionRef.current = isCurrentlyExpanded ? 'collapse' : 'expand';
     }
     setExpandedEpics((prev) => {
       const next = new Set(prev);
@@ -714,44 +704,68 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
     });
   }, [expandedEpics]);
 
-  // FLIP animation: after expanding an epic, animate list cards FROM captured peek positions
+  // FLIP animation: after expand/collapse, animate child cards from captured positions to new positions
   useLayoutEffect(() => {
     const epicId = pendingFlipRef.current;
-    if (!epicId) return;
+    const direction = flipDirectionRef.current;
+    if (!epicId || !direction) return;
     pendingFlipRef.current = null;
+    flipDirectionRef.current = null;
 
     const capturedRects = capturedFlipRectsRef.current.get(epicId) ?? [];
-    const refs = (listCardRefs.current.get(epicId) ?? []).filter((el): el is HTMLDivElement => el !== null);
+    const refs = (childCardRefs.current.get(epicId) ?? []).filter((el): el is HTMLDivElement => el !== null);
     if (!refs.length || !capturedRects.length) return;
 
-    // Measure final (expanded) positions — useLayoutEffect fires before paint so layout is at final state
+    // Measure new positions (useLayoutEffect fires before paint — layout is at final state)
     const newRects = refs.map(el => el.getBoundingClientRect());
 
-    // Fallback origin for cards with no corresponding peek (they come from behind the last peek card)
-    const deckOrigin = capturedRects[capturedRects.length - 1];
-
-    // Apply inverse transforms (FLIP: Invert — move each card to its "peek" starting position)
-    refs.forEach((el, i) => {
-      const from = capturedRects[i] ?? deckOrigin;
-      if (!from || !newRects[i]) return;
-      const dx = from.left - newRects[i].left;
-      const dy = from.top - newRects[i].top;
-      const sx = capturedRects[i] ? from.width / newRects[i].width : 0.9;
-      el.style.transition = 'none';
-      el.style.transform = `translate(${dx}px, ${dy}px) scaleX(${sx})`;
-      el.style.opacity = capturedRects[i] ? '1' : '0';
-    });
-
-    // Force reflow so the browser registers the initial position before we animate
-    refs[0].getBoundingClientRect();
-
-    // Play: remove inverse transforms — CSS transition animates each card to its final position
-    refs.forEach((el, i) => {
-      const delay = i * 45;
-      el.style.transition = `transform 440ms cubic-bezier(0.34, 1.15, 0.64, 1) ${delay}ms, opacity 300ms ease ${delay}ms`;
-      el.style.transform = '';
-      el.style.opacity = '1';
-    });
+    if (direction === 'expand') {
+      // Expanding: animate FROM old peek positions TO new list positions
+      refs.forEach((el, i) => {
+        const from = capturedRects[i];
+        const to = newRects[i];
+        if (!from || !to) return;
+        const dx = from.left - to.left;
+        const dy = from.top - to.top;
+        const sx = from.width / to.width;
+        el.style.transition = 'none';
+        el.style.transform = `translate(${dx}px, ${dy}px) scaleX(${sx})`;
+        el.style.opacity = i < 2 ? '1' : '0'; // only first 2 were visible as peeks
+        el.style.zIndex = '';
+      });
+      refs[0].getBoundingClientRect(); // force reflow
+      refs.forEach((el, i) => {
+        const delay = i * 45;
+        el.style.transition = `transform 440ms cubic-bezier(0.34, 1.15, 0.64, 1) ${delay}ms, opacity 300ms ease ${delay}ms`;
+        el.style.transform = '';
+        el.style.opacity = '1';
+      });
+    } else {
+      // Collapsing: animate FROM old list positions TO new peek positions
+      refs.forEach((el, i) => {
+        const from = capturedRects[i];
+        const to = newRects[i];
+        if (!from || !to) return;
+        const dx = from.left - to.left;
+        const dy = from.top - to.top;
+        const sx = from.width / to.width;
+        el.style.transition = 'none';
+        el.style.transform = `translate(${dx}px, ${dy}px) scaleX(${sx})`;
+        el.style.opacity = '1';
+        el.style.zIndex = '40'; // keep above epic card during animation
+      });
+      refs[0].getBoundingClientRect(); // force reflow
+      refs.forEach((el, i) => {
+        const delay = (refs.length - 1 - i) * 35; // reverse cascade: last card first
+        const isPeek = i < 2;
+        el.style.transition = `transform 400ms cubic-bezier(0.4, 0, 0.2, 1) ${delay}ms, opacity ${isPeek ? '0ms' : '250ms'} ease ${delay}ms`;
+        el.style.transform = '';
+        el.style.opacity = isPeek ? '1' : '0';
+        // Clean up z-index after animation
+        const cleanup = () => { el.style.zIndex = ''; el.removeEventListener('transitionend', cleanup); };
+        el.addEventListener('transitionend', cleanup);
+      });
+    }
   }, [expandedEpics]);
 
   const fetchFixStatus = useCallback(
@@ -1757,73 +1771,66 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                     }
                                   />
                                 </div>
-                                {/* Peek cards – actual child card content clipped to peek height (visible when collapsed) */}
-                                {!expanded && children.slice(0, 2).map((child, i) => (
-                                  <div
-                                    key={`peek-${child.id}`}
-                                    ref={(el) => {
-                                      if (!peekCardRefs.current.has(task.id)) peekCardRefs.current.set(task.id, []);
-                                      peekCardRefs.current.get(task.id)![i] = el;
-                                    }}
-                                    aria-hidden="true"
-                                    className={cx('epic-peek-card relative shadow-sm pointer-events-none select-none', i === 0 ? 'z-20 -mt-2' : 'z-10 -mt-2')}
-                                    style={{
-                                      transform: `scaleX(${1 - (i + 1) * 0.06})`,
-                                      transformOrigin: 'center',
-                                      borderRadius: 'var(--board-card-radius)',
-                                      height: 12,
-                                      overflow: 'hidden',
-                                      animationDelay: `${420 + i * 60}ms`,
-                                    }}
-                                  >
-                                    <BoardCard
-                                      task={child}
-                                      epic={false}
-                                      allTasks={tasks}
-                                      onClick={() => {}}
-                                      onDragStart={() => {}}
-                                      onDragEnd={() => {}}
-                                      dragging={false}
-                                      isGlobalOperationRunning={true}
-                                      fixingTaskType={null}
-                                      showAddStatus={false}
-                                      addingStatus={false}
-                                    />
-                                  </div>
-                                ))}
-                                {/* Expanded children with smooth CSS grid animation + FLIP refs */}
-                                <div className={cx('grid transition-all duration-500 ease-in-out', expanded ? 'grid-rows-[1fr] mt-2' : 'grid-rows-[0fr]')}>
-                                  <div className="overflow-hidden">
-                                    <div className="flex flex-col gap-2">
-                                      {children.map((child, i) => (
-                                        <div
-                                          key={child.id}
-                                          ref={(el) => {
-                                            if (!listCardRefs.current.has(task.id)) listCardRefs.current.set(task.id, []);
-                                            listCardRefs.current.get(task.id)![i] = el;
-                                          }}
-                                        >
-                                          <BoardCard
-                                            task={child}
-                                            epic={false}
-                                            allTasks={tasks}
-                                            onClick={() => setSelectedTask(child)}
-                                            onFix={handleFixTask}
-                                            fixStatus={fixStatus[child.id]}
-                                            allFixStatuses={fixStatus}
-                                            fixingTaskType={fixingTaskId === child.id ? fixingTaskType : null}
-                                            isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
-                                            showAddStatus={isMissingStatus}
-                                            onAddStatus={isMissingStatus ? handleAddStatus : undefined}
-                                            addingStatus={addingStatus}
-                                            onDragStart={() => setDraggedTask(child)}
-                                            onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
-                                            dragging={draggedTask?.id === child.id}
-                                          />
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
+                                {/* Children — single set of elements for both peek (collapsed) and list (expanded) */}
+                                <div
+                                  className={cx(
+                                    expanded ? 'flex flex-col gap-2 mt-2' : 'relative',
+                                  )}
+                                  style={!expanded ? { height: 8, marginTop: -2 } : undefined}
+                                >
+                                  {children.map((child, i) => {
+                                    const isPeek = !expanded && i < 2;
+                                    return (
+                                      <div
+                                        key={child.id}
+                                        ref={(el) => {
+                                          if (!childCardRefs.current.has(task.id)) childCardRefs.current.set(task.id, []);
+                                          childCardRefs.current.get(task.id)![i] = el;
+                                        }}
+                                        className={cx(isPeek && 'shadow-sm')}
+                                        style={expanded ? undefined : isPeek ? {
+                                          position: 'absolute' as const,
+                                          top: i * 4,
+                                          left: 0,
+                                          right: 0,
+                                          height: 12,
+                                          overflow: 'hidden',
+                                          transform: `scaleX(${1 - (i + 1) * 0.06})`,
+                                          transformOrigin: 'center',
+                                          borderRadius: 'var(--board-card-radius)',
+                                          zIndex: 20 - i * 10,
+                                          pointerEvents: 'none' as const,
+                                        } : {
+                                          position: 'absolute' as const,
+                                          top: 0,
+                                          left: 0,
+                                          right: 0,
+                                          height: 0,
+                                          overflow: 'hidden',
+                                          opacity: 0,
+                                          pointerEvents: 'none' as const,
+                                        }}
+                                      >
+                                        <BoardCard
+                                          task={child}
+                                          epic={false}
+                                          allTasks={tasks}
+                                          onClick={() => setSelectedTask(child)}
+                                          onFix={handleFixTask}
+                                          fixStatus={fixStatus[child.id]}
+                                          allFixStatuses={fixStatus}
+                                          fixingTaskType={fixingTaskId === child.id ? fixingTaskType : null}
+                                          isGlobalOperationRunning={!expanded || fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
+                                          showAddStatus={isMissingStatus}
+                                          onAddStatus={isMissingStatus ? handleAddStatus : undefined}
+                                          addingStatus={addingStatus}
+                                          onDragStart={() => setDraggedTask(child)}
+                                          onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
+                                          dragging={draggedTask?.id === child.id}
+                                        />
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             );
