@@ -2,7 +2,7 @@
 /// <reference path="../vite-env.d.ts" />
 
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertOctagon, Asterisk02, ChevronDown, LayersThree01, Moon01, PauseCircle, PlayCircle, Server01, Settings01, StopCircle, Sun } from '@untitledui/icons';
+import { AlertOctagon, ArrowUpRight, Asterisk02, ChevronDown, LayersThree01, Moon01, PauseCircle, PlayCircle, Server01, Settings01, StopCircle, Sun } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { Tooltip, TooltipTrigger } from './base/tooltip/tooltip';
 import { cx } from '@/utils/cx';
@@ -333,6 +333,18 @@ export function SidebarNav({
         </button>
 
         {serverInfo?.authEnabled && <UserMenu compact />}
+
+        {serverInfo?.hasUpdate && (
+          <a
+            href={serverInfo.updateUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1 flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-medium text-warning-primary transition hover:bg-warning-secondary"
+          >
+            <Icon icon={ArrowUpRight} className="size-3.5 shrink-0" />
+            <span>Update available — v{serverInfo.latestVersion}</span>
+          </a>
+        )}
 
         <p className="mt-1 px-3 text-[11px] text-quaternary">v{__APP_VERSION__}</p>
       </div>

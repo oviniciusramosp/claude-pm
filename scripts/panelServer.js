@@ -64,6 +64,61 @@ const tunnelState = {
   error: null
 };
 
+// ── GitHub Version Check ────────────────────────────────────────────────
+const GITHUB_REPO = 'oviniciusramosp/claude-pm';
+const VERSION_CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+
+const versionCheckState = {
+  latestVersion: null,
+  hasUpdate: false,
+  updateUrl: `https://github.com/${GITHUB_REPO}/releases/latest`,
+  lastChecked: null,
+  error: null
+};
+
+async function fetchLatestGithubVersion() {
+  try {
+    const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+      headers: { 'User-Agent': 'claude-pm-panel' }
+    });
+    if (!response.ok) {
+      versionCheckState.error = `GitHub API returned ${response.status}`;
+      return;
+    }
+    const data = await response.json();
+    const tag = (data.tag_name || '').replace(/^v/, '');
+    if (!tag) return;
+    versionCheckState.latestVersion = tag;
+    versionCheckState.updateUrl = data.html_url || versionCheckState.updateUrl;
+    versionCheckState.lastChecked = new Date().toISOString();
+    versionCheckState.error = null;
+
+    const parseSemver = (v) => v.split('.').map(Number);
+    const [lMaj, lMin, lPat] = parseSemver(tag);
+    const [cMaj, cMin, cPat] = parseSemver(APP_VERSION);
+    versionCheckState.hasUpdate =
+      lMaj > cMaj ||
+      (lMaj === cMaj && lMin > cMin) ||
+      (lMaj === cMaj && lMin === cMin && lPat > cPat);
+  } catch (err) {
+    versionCheckState.error = err.message;
+  }
+}
+
+// Read local version from package.json at startup
+let APP_VERSION = '0.0.0';
+try {
+  const pkgPath = path.join(cwd, 'package.json');
+  const pkgRaw = fsSync.readFileSync(pkgPath, 'utf8');
+  APP_VERSION = JSON.parse(pkgRaw).version || '0.0.0';
+} catch {
+  // fallback
+}
+
+// Initial check (non-blocking) + periodic recheck
+fetchLatestGithubVersion();
+setInterval(fetchLatestGithubVersion, VERSION_CHECK_INTERVAL_MS);
+
 function startCloudflaredTunnel() {
   tunnelState.status = 'starting';
   tunnelState.error = null;
@@ -1597,7 +1652,11 @@ app.get('/api/server/info', (_req, res) => {
     tunnelError: tunnelState.error,
     isPublicMode,
     authEnabled: isPublicMode,
-    authProviders: isPublicMode ? getEnabledProviders() : []
+    authProviders: isPublicMode ? getEnabledProviders() : [],
+    currentVersion: APP_VERSION,
+    latestVersion: versionCheckState.latestVersion,
+    hasUpdate: versionCheckState.hasUpdate,
+    updateUrl: versionCheckState.updateUrl
   });
 });
 
