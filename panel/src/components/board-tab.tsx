@@ -468,7 +468,7 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
       onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; onDragStart?.(); }}
       onDragEnd={() => onDragEnd?.()}
       className={cx(
-        'group relative cursor-pointer rounded-xl bg-primary p-4 shadow-sm transition-all duration-200 ease-out hover:shadow-lg',
+        'group relative cursor-pointer rounded-xl bg-primary dark:bg-secondary p-4 shadow-sm transition-all duration-200 ease-out hover:shadow-lg',
         epic && 'border-l-2 border-l-purple-300',
         dragging && 'opacity-50'
       )}
@@ -546,7 +546,7 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
 
 function SkeletonCard() {
   return (
-    <div className="animate-pulse rounded-xl bg-primary p-4 shadow-sm">
+    <div className="animate-pulse rounded-xl bg-primary dark:bg-secondary p-4 shadow-sm">
       <div className="h-4 w-3/4 rounded bg-quaternary" />
       <div className="mt-3 flex gap-2">
         <div className="h-5 w-8 rounded-full bg-quaternary" />
@@ -1278,7 +1278,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
           {columns.map((col) => (
             <div
               key={col.key}
-              className="flex w-[85vw] shrink-0 snap-center flex-col rounded-2xl border border-secondary bg-secondary overflow-hidden sm:w-auto sm:shrink"
+              className="flex w-[85vw] shrink-0 snap-center flex-col rounded-2xl border border-secondary bg-secondary dark:bg-primary overflow-hidden sm:w-auto sm:shrink"
             >
               {/* Column header - fixed */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-secondary shrink-0">
