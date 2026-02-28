@@ -1473,7 +1473,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                           {generatingEpicId === task.id
                                             ? <RefreshCw01 className="size-3 animate-spin" />
                                             : <Stars01 className="size-3" />}
-                                          <span>{generatingEpicId === task.id
+                                          <span className="hidden sm:inline">{generatingEpicId === task.id
                                             ? (generateProgress && generateProgress.total > 0
                                               ? (generateProgress.phase === 'planning' ? 'Planning...' : `${generateProgress.created}/${generateProgress.total}`)
                                               : 'Planning...')
@@ -1601,10 +1601,10 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                         <Tooltip title={expanded ? "Collapse stories" : "Expand stories"} description={expanded ? "Hide child tasks" : "Show child tasks"}>
                                           <TooltipTrigger
                                             onPress={() => toggleEpic(task.id)}
-                                            className="flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10 transition-all duration-200"
+                                            className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-0.5 text-xs text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10 transition-all duration-200"
                                           >
-                                            <ChevronDown className={cx('size-3 transition-transform duration-200', !expanded && '-rotate-90')} />
-                                            <span>{children.length} {children.length === 1 ? 'task' : 'tasks'}</span>
+                                            <ChevronDown className={cx('size-3 shrink-0 transition-transform duration-200', !expanded && '-rotate-90')} />
+                                            <span className="whitespace-nowrap">{children.length} {children.length === 1 ? 'task' : 'tasks'}</span>
                                           </TooltipTrigger>
                                         </Tooltip>
                                         {(col.key === 'not_started' || col.key === 'missing_status') && (
