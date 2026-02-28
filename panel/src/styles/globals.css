@@ -48,6 +48,14 @@
     transition-timing-function: inherit;
 }
 
+:root {
+    /* Board layout: col-radius and col-padding drive card-radius automatically.
+       card-radius = col-radius - col-padding (Apple nested corner formula). */
+    --board-col-radius: 1.5rem;   /* column border-radius (24px) */
+    --board-col-padding: 0.75rem; /* column inner padding (12px = p-3) */
+    --board-card-radius: calc(var(--board-col-radius) - var(--board-col-padding)); /* 12px */
+}
+
 html,
 body {
     height: 100%;

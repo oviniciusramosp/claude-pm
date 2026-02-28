@@ -482,8 +482,9 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
       onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; onDragStart?.(); }}
       onDragEnd={() => onDragEnd?.()}
+      style={{ borderRadius: 'var(--board-card-radius)' }}
       className={cx(
-        'group relative cursor-pointer rounded-xl bg-primary dark:bg-secondary p-4 shadow-sm transition-all duration-200 ease-out hover:shadow-lg',
+        'group relative cursor-pointer bg-primary dark:bg-secondary p-4 shadow-sm transition-all duration-200 ease-out hover:shadow-lg',
         epic && 'border-l-2 border-l-purple-300',
         dragging && 'opacity-50'
       )}
@@ -599,7 +600,7 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
 
 function SkeletonCard() {
   return (
-    <div className="animate-pulse rounded-xl bg-primary dark:bg-secondary p-4 shadow-sm">
+    <div className="animate-pulse bg-primary dark:bg-secondary p-4 shadow-sm" style={{ borderRadius: 'var(--board-card-radius)' }}>
       <div className="h-4 w-3/4 rounded bg-quaternary" />
       <div className="mt-3 flex gap-2">
         <div className="h-5 w-8 rounded-full bg-quaternary" />
@@ -1331,7 +1332,8 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
           {columns.map((col) => (
             <div
               key={col.key}
-              className="flex w-[85vw] shrink-0 snap-center flex-col rounded-2xl border border-secondary bg-secondary dark:bg-primary overflow-hidden sm:w-auto sm:shrink"
+              className="flex w-[85vw] shrink-0 snap-center flex-col border border-secondary bg-secondary dark:bg-primary overflow-hidden sm:w-auto sm:shrink"
+              style={{ borderRadius: 'var(--board-col-radius)' }}
             >
               {/* Column header - fixed */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-secondary shrink-0">
@@ -1352,9 +1354,10 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
 
               {/* Cards - scrollable (drop zone) */}
               <div
-                className={cx(
-                  'flex-1 overflow-y-auto scrollbar-hide p-4 transition-colors',
-                  dragOverColumn === col.key && col.statusMatch !== null && 'bg-tertiary/40 rounded-b-2xl'
+                style={{ padding: 'var(--board-col-padding)' }}
+              className={cx(
+                  'flex-1 overflow-y-auto scrollbar-hide transition-colors',
+                  dragOverColumn === col.key && col.statusMatch !== null && 'bg-tertiary/40 rounded-b-[var(--board-col-radius)]'
                 )}
                 onDragOver={(e) => {
                   if (col.statusMatch === null) return;
@@ -1657,9 +1660,15 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                 {/* Stack peek cards (visible when collapsed, hidden when expanded) */}
                                 {!expanded && (
                                   <>
-                                    <div className="relative z-20 -mt-2 mx-2 h-3 rounded-xl bg-primary border border-secondary shadow-xs" />
+                                    <div
+                                      className="relative z-20 -mt-2 h-3 bg-primary dark:bg-secondary shadow-sm"
+                                      style={{ borderRadius: 'var(--board-card-radius)', transform: 'scaleX(0.94)', transformOrigin: 'center' }}
+                                    />
                                     {children.length >= 2 && (
-                                      <div className="relative z-10 -mt-1.5 mx-4 h-2.5 rounded-xl bg-secondary border border-secondary shadow-xs" />
+                                      <div
+                                        className="relative z-10 -mt-2 h-3 bg-primary dark:bg-secondary shadow-sm"
+                                        style={{ borderRadius: 'var(--board-card-radius)', transform: 'scaleX(0.88)', transformOrigin: 'center' }}
+                                      />
                                     )}
                                   </>
                                 )}
