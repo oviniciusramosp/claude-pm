@@ -549,14 +549,14 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
           </p>
           {/* Agents row */}
           {task.agents?.length > 0 && (
-            <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-quaternary w-full">
+            <div className="mt-2 flex items-center gap-1.5 text-[11px] text-quaternary w-full">
               <Icon icon={Users01} className="size-3 shrink-0" />
               <span>{task.agents.map(a => a.charAt(0).toUpperCase() + a.slice(1)).join(', ')}</span>
             </div>
           )}
           {/* Model row */}
           {task.model && (
-            <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-quaternary w-full">
+            <div className={cx(task.agents?.length > 0 ? 'mt-0.5' : 'mt-2', 'flex items-center gap-1.5 text-[11px] text-quaternary w-full')}>
               <Icon icon={CpuChip01} className="size-3 shrink-0" />
               <span>{formatModelName(task.model)}</span>
             </div>
