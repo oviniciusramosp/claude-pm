@@ -1471,7 +1471,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                           )}
                                         >
                                           {generatingEpicId === task.id
-                                            ? <RefreshCw01 className="size-3 animate-spin" />
+                                            ? <div className="size-3 animate-spin rounded-full border-[1.5px] border-current/25 border-t-current" />
                                             : <Stars01 className="size-3" />}
                                           <span className="hidden min-[961px]:inline">{generatingEpicId === task.id
                                             ? (generateProgress && generateProgress.total > 0
@@ -1635,7 +1635,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                                 )}
                                               >
                                                 {generatingEpicId === task.id
-                                                  ? <RefreshCw01 className="size-3 animate-spin" />
+                                                  ? <div className="size-3 animate-spin rounded-full border-[1.5px] border-current/25 border-t-current" />
                                                   : <Stars01 className="size-3" />}
                                                 <span className="hidden min-[961px]:inline">{generatingEpicId === task.id
                                                   ? (generateProgress && generateProgress.total > 0
@@ -1751,7 +1751,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                         )}
                                       >
                                         {generatingEpicId === task.id
-                                          ? <RefreshCw01 className="size-3 animate-spin" />
+                                          ? <div className="size-3 animate-spin rounded-full border-[1.5px] border-current/25 border-t-current" />
                                           : <Stars01 className="size-3" />}
                                         <span className="hidden min-[961px]:inline">{generatingEpicId === task.id
                                           ? (generateProgress && generateProgress.total > 0
