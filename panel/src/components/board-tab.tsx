@@ -499,10 +499,19 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
       style={{ borderRadius: 'var(--board-card-radius)' }}
       className={cx(
         'group relative cursor-pointer bg-primary dark:bg-secondary p-4 shadow-sm transition-all duration-200 ease-out hover:shadow-lg',
-        epic && 'border-l-2 border-l-purple-300',
         dragging && 'opacity-50'
       )}
     >
+      {/* Epic gradient overlay — radial from outside bottom-right corner inward */}
+      {epic && (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            borderRadius: 'inherit',
+            background: 'radial-gradient(circle at 115% 125%, rgba(168, 85, 247, 0.18) 0%, transparent 65%)',
+          }}
+        />
+      )}
       {/* Donut chart — absolute top-right, does not affect row height */}
       {progressTotal > 0 && (
         <div className="absolute top-4 right-4">
