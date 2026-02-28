@@ -1240,7 +1240,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   }, [boardError, onShowErrorDetail]);
 
   return (
-    <section className="flex min-w-0 flex-col gap-5">
+    <section className="flex min-h-0 flex-1 min-w-0 flex-col gap-5">
       {/* Setup required banner */}
       {!setupComplete && <SetupRequiredBanner onNavigateToSetup={onNavigateToSetup} />}
 
@@ -1345,37 +1345,23 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
 
       {/* Board columns */}
       {showBoard && (
-        <div className={cx('flex h-[calc(100vh-280px)] snap-x snap-mandatory gap-5 overflow-x-auto pb-4 sm:snap-none sm:grid sm:overflow-x-visible sm:pb-0 lg:h-[calc(100vh-220px)]', columns.length >= 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3 lg:grid-cols-3')}>
+        <div className={cx('flex min-h-0 flex-1 snap-x snap-mandatory gap-5 overflow-x-auto pb-4 sm:snap-none sm:grid sm:overflow-x-visible sm:pb-0', columns.length >= 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3 lg:grid-cols-3')}>
           {columns.map((col) => (
             <div
               key={col.key}
-              className="flex w-[85vw] shrink-0 snap-center flex-col border border-secondary bg-secondary dark:bg-primary overflow-hidden sm:w-auto sm:shrink"
+              className="flex w-[85vw] shrink-0 snap-center flex-col bg-secondary dark:bg-primary overflow-hidden sm:w-auto sm:shrink"
               style={{ borderRadius: 'var(--board-col-radius)' }}
             >
-              {/* Column header - fixed */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-secondary shrink-0">
-                <div className="flex items-center gap-2">
-                  <span
-                    className="size-2 rounded-full shrink-0"
-                    style={{
-                      backgroundColor: col.key === 'not_started' ? '#9CA3AF'
-                        : col.key === 'in_progress' ? 'rgb(239 104 32)'
-                        : col.key === 'done' ? '#22C55E'
-                        : '#F59E0B'
-                    }}
-                  />
-                  <span className="text-sm font-semibold text-primary">{col.label}</span>
-                  <span className="text-sm text-quaternary font-normal">{col.tasks.length}</span>
-                </div>
-              </div>
-
-              {/* Cards - scrollable (drop zone) */}
+              {/* Cards - scrollable (drop zone) with bottom fade mask */}
               <div
-                style={{ padding: 'var(--board-col-padding)' }}
-              className={cx(
+                className={cx(
                   'flex-1 overflow-y-auto scrollbar-hide transition-colors',
-                  dragOverColumn === col.key && col.statusMatch !== null && 'bg-tertiary/40 rounded-b-[var(--board-col-radius)]'
+                  dragOverColumn === col.key && col.statusMatch !== null && 'bg-tertiary/40'
                 )}
+                style={{
+                  maskImage: 'linear-gradient(to bottom, black 0%, black calc(100% - 5rem), transparent 100%)',
+                  WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black calc(100% - 5rem), transparent 100%)',
+                }}
                 onDragOver={(e) => {
                   if (col.statusMatch === null) return;
                   e.preventDefault();
@@ -1388,7 +1374,23 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                   handleDrop(col.key);
                 }}
               >
-                <div className="flex flex-col gap-3">
+                {/* Floating sticky header */}
+                <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 backdrop-blur-md bg-secondary/80 dark:bg-primary/80">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="size-2 rounded-full shrink-0"
+                      style={{
+                        backgroundColor: col.key === 'not_started' ? '#9CA3AF'
+                          : col.key === 'in_progress' ? 'rgb(239 104 32)'
+                          : col.key === 'done' ? '#22C55E'
+                          : '#F59E0B'
+                      }}
+                    />
+                    <span className="text-sm font-semibold text-primary">{col.label}</span>
+                    <span className="text-sm text-quaternary font-normal">{col.tasks.length}</span>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-3" style={{ padding: '0.5rem var(--board-col-padding) 5rem' }}>
                   {loading && tasks.length === 0 ? (
                     <>
                       <SkeletonCard />
