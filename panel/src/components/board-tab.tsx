@@ -646,11 +646,11 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const [fixStatus, setFixStatus] = useState<Record<string, { status: string; startedAt?: string; completedAt?: string; error?: string }>>({});
   const [selectedTask, setSelectedTask] = useState<BoardTask | null>(null);
   const [expandedEpics, setExpandedEpics] = useState(() => new Set<string>());
-  // FLIP animation refs for epic expand/collapse — single set of children
+  // Epic expand/collapse animation refs — single set of children
   const childCardRefs = useRef<Map<string, (HTMLDivElement | null)[]>>(new Map());
-  const capturedFlipRectsRef = useRef<Map<string, DOMRect[]>>(new Map());
-  const pendingFlipRef = useRef<string | null>(null);
-  const flipDirectionRef = useRef<'expand' | 'collapse' | null>(null);
+  const pendingExpandRef = useRef<string | null>(null);
+  const collapsingEpicRef = useRef<string | null>(null);
+  const collapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [addingStatus, setAddingStatus] = useState(false);
   const [draggedTask, setDraggedTask] = useState<BoardTask | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
@@ -687,85 +687,87 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   }, [apiBaseUrl]);
 
   const toggleEpic = useCallback((epicId: string) => {
+    // Prevent toggle while collapse animation is in flight
+    if (collapsingEpicRef.current === epicId) return;
+
     const isCurrentlyExpanded = expandedEpics.has(epicId);
-    // Capture current positions of child cards before state change (FLIP: First)
-    const refs = (childCardRefs.current.get(epicId) ?? []).filter((el): el is HTMLDivElement => el !== null);
-    const rects = refs.map(el => el.getBoundingClientRect());
-    if (rects.length > 0) {
-      capturedFlipRectsRef.current.set(epicId, rects);
-      pendingFlipRef.current = epicId;
-      flipDirectionRef.current = isCurrentlyExpanded ? 'collapse' : 'expand';
+
+    if (isCurrentlyExpanded) {
+      // COLLAPSE: cascade fade-out + slide-up on expanded cards, then change state
+      collapsingEpicRef.current = epicId;
+      const refs = (childCardRefs.current.get(epicId) ?? []).filter((el): el is HTMLDivElement => el !== null);
+      const total = refs.length;
+
+      // Reverse cascade: last card animates first
+      refs.forEach((el, i) => {
+        const delay = (total - 1 - i) * 40;
+        el.style.transition = `opacity 200ms ease ${delay}ms, transform 250ms ease ${delay}ms`;
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(-16px) scale(0.97)';
+      });
+
+      const animEnd = Math.max(0, total - 1) * 40 + 280;
+      collapseTimerRef.current = setTimeout(() => {
+        collapsingEpicRef.current = null;
+        collapseTimerRef.current = null;
+        // Clear inline styles before state change so React's collapsed styles take over cleanly
+        refs.forEach(el => {
+          el.style.transition = '';
+          el.style.opacity = '';
+          el.style.transform = '';
+        });
+        setExpandedEpics(prev => {
+          const next = new Set(prev);
+          next.delete(epicId);
+          return next;
+        });
+      }, animEnd);
+    } else {
+      // EXPAND: change state immediately, animate entrance in useLayoutEffect
+      pendingExpandRef.current = epicId;
+      setExpandedEpics(prev => {
+        const next = new Set(prev);
+        next.add(epicId);
+        return next;
+      });
     }
-    setExpandedEpics((prev) => {
-      const next = new Set(prev);
-      if (next.has(epicId)) next.delete(epicId);
-      else next.add(epicId);
-      return next;
-    });
   }, [expandedEpics]);
 
-  // FLIP animation: after expand/collapse, animate child cards from captured positions to new positions
+  // Expand entrance animation: cascade fade-in + slide-down
   useLayoutEffect(() => {
-    const epicId = pendingFlipRef.current;
-    const direction = flipDirectionRef.current;
-    if (!epicId || !direction) return;
-    pendingFlipRef.current = null;
-    flipDirectionRef.current = null;
+    const epicId = pendingExpandRef.current;
+    if (!epicId) return;
+    pendingExpandRef.current = null;
 
-    const capturedRects = capturedFlipRectsRef.current.get(epicId) ?? [];
     const refs = (childCardRefs.current.get(epicId) ?? []).filter((el): el is HTMLDivElement => el !== null);
-    if (!refs.length || !capturedRects.length) return;
+    if (!refs.length) return;
 
-    // Measure new positions (useLayoutEffect fires before paint — layout is at final state)
-    const newRects = refs.map(el => el.getBoundingClientRect());
+    // Initial state: invisible, shifted up
+    refs.forEach(el => {
+      el.style.transition = 'none';
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(-16px) scale(0.97)';
+    });
 
-    if (direction === 'expand') {
-      // Expanding: animate FROM old peek positions TO new list positions
-      refs.forEach((el, i) => {
-        const from = capturedRects[i];
-        const to = newRects[i];
-        if (!from || !to) return;
-        const dx = from.left - to.left;
-        const dy = from.top - to.top;
-        const sx = from.width / to.width;
-        el.style.transition = 'none';
-        el.style.transform = `translate(${dx}px, ${dy}px) scaleX(${sx})`;
-        el.style.opacity = i < 2 ? '1' : '0'; // only first 2 were visible as peeks
-        el.style.zIndex = '';
-      });
-      refs[0].getBoundingClientRect(); // force reflow
-      refs.forEach((el, i) => {
-        const delay = i * 45;
-        el.style.transition = `transform 440ms cubic-bezier(0.34, 1.15, 0.64, 1) ${delay}ms, opacity 300ms ease ${delay}ms`;
+    refs[0].getBoundingClientRect(); // force reflow
+
+    // Animate to final positions with stagger
+    refs.forEach((el, i) => {
+      const delay = i * 50;
+      el.style.transition = `opacity 300ms ease ${delay}ms, transform 350ms cubic-bezier(0.2, 0.9, 0.3, 1) ${delay}ms`;
+      el.style.opacity = '1';
+      el.style.transform = '';
+    });
+
+    // Clean up inline styles after all animations complete
+    const cleanupDelay = (refs.length - 1) * 50 + 400;
+    setTimeout(() => {
+      refs.forEach(el => {
+        el.style.transition = '';
+        el.style.opacity = '';
         el.style.transform = '';
-        el.style.opacity = '1';
       });
-    } else {
-      // Collapsing: animate FROM old list positions TO new peek positions
-      refs.forEach((el, i) => {
-        const from = capturedRects[i];
-        const to = newRects[i];
-        if (!from || !to) return;
-        const dx = from.left - to.left;
-        const dy = from.top - to.top;
-        const sx = from.width / to.width;
-        el.style.transition = 'none';
-        el.style.transform = `translate(${dx}px, ${dy}px) scaleX(${sx})`;
-        el.style.opacity = '1';
-        el.style.zIndex = '40'; // keep above epic card during animation
-      });
-      refs[0].getBoundingClientRect(); // force reflow
-      refs.forEach((el, i) => {
-        const delay = (refs.length - 1 - i) * 35; // reverse cascade: last card first
-        const isPeek = i < 2;
-        el.style.transition = `transform 400ms cubic-bezier(0.4, 0, 0.2, 1) ${delay}ms, opacity ${isPeek ? '0ms' : '250ms'} ease ${delay}ms`;
-        el.style.transform = '';
-        el.style.opacity = isPeek ? '1' : '0';
-        // Clean up z-index after animation
-        const cleanup = () => { el.style.zIndex = ''; el.removeEventListener('transitionend', cleanup); };
-        el.addEventListener('transitionend', cleanup);
-      });
-    }
+    }, cleanupDelay);
   }, [expandedEpics]);
 
   const fetchFixStatus = useCallback(
