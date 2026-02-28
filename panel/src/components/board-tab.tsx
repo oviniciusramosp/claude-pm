@@ -1699,37 +1699,40 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   style={{
                                     zIndex: expanded ? undefined : 10,
                                     marginTop: expanded ? 8 : -6,
-                                    transition: 'margin-top 350ms ease',
+                                    transition: expanded ? 'margin-top 300ms ease' : 'margin-top 250ms ease',
                                   }}
                                 >
                                   {children.map((child, i) => {
                                     const total = children.length;
                                     const isPeek = !expanded && i < 2;
                                     const isHidden = !expanded && i >= 2;
+                                    const peekHeight = i === 0 ? 10 : 6;
                                     return (
                                       <div
                                         key={child.id}
                                         className="overflow-hidden"
                                         style={{
-                                          maxHeight: expanded ? 200 : isPeek ? 10 : 0,
+                                          maxHeight: expanded ? 200 : isPeek ? peekHeight : 0,
                                           transform: expanded
                                             ? 'scale(1)'
                                             : isPeek
-                                              ? `scale(${1 - (i + 1) * 0.04})`
-                                              : 'scale(0.88)',
+                                              ? `scale(${1 - (i + 1) * 0.05})`
+                                              : 'scale(0.85)',
                                           transformOrigin: 'center top',
                                           opacity: expanded ? 1 : isHidden ? 0 : 1,
-                                          marginTop: i === 0 ? 0 : expanded ? 8 : isPeek ? -2 : 0,
+                                          marginTop: i === 0 ? 0 : expanded ? 8 : isPeek ? -1 : 0,
                                           borderRadius: expanded
                                             ? 'var(--board-card-radius)'
                                             : '0 0 var(--board-card-radius) var(--board-card-radius)',
                                           pointerEvents: expanded ? 'auto' : 'none',
                                           zIndex: expanded ? undefined : 20 - i * 5,
-                                          transition: 'max-height 400ms ease, transform 400ms ease, opacity 300ms ease, margin-top 350ms ease, border-radius 300ms ease',
+                                          transition: expanded
+                                            ? 'max-height 350ms ease, transform 350ms ease, opacity 250ms ease, margin-top 300ms ease, border-radius 250ms ease'
+                                            : 'max-height 250ms ease, transform 250ms ease, opacity 200ms ease, margin-top 250ms ease, border-radius 200ms ease',
                                           transitionDelay: expanded
                                             ? `${i * 60}ms`
-                                            : `${Math.max(0, total - 1 - i) * 40}ms`,
-                                          boxShadow: !expanded && isPeek ? '0 2px 4px rgba(0,0,0,0.06)' : undefined,
+                                            : `${Math.max(0, total - 1 - i) * 30}ms`,
+                                          boxShadow: !expanded && isPeek ? '0 1px 2px rgba(0,0,0,0.06)' : undefined,
                                         }}
                                       >
                                         <BoardCard
