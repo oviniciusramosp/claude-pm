@@ -3897,6 +3897,8 @@ ${boardContext || ''}
 **DISCOVERY-FIRST:** For complex features where the implementation approach is unclear, create a Discovery task BEFORE the implementation task. Discovery tasks use \`model: claude-opus-4-6\`.
 
 **INCREMENTAL DELIVERY:** Order tasks so each builds on the previous — Discoveries first, then foundations, then features.
+
+**AI-EXECUTABLE:** Every task must be fully executable by an AI agent without human intervention. Each task must have clear, unambiguous inputs and expected outputs, be completable in a single automated session, require no interactive decisions or human judgment during execution, and be self-contained or explicitly reference what prior task output it depends on.
 </methodology>
 
 <model_selection>
@@ -3925,7 +3927,7 @@ Return ONLY a JSON array with NO additional text or code blocks:
 
 Rules:
 - Return ONLY valid JSON array, no markdown, no code blocks, no explanation.
-- 2-15 tasks maximum.
+- 1-15 tasks maximum.
 - Use imperative task names: "Research X", "Implement Y", "Add Z".
 - Do NOT include any task whose name matches an existing child.
 </instructions>`;

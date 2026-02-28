@@ -150,6 +150,23 @@ function AcDonut({ done, total, label = 'ACs' }: { done: number; total: number; 
   );
 }
 
+function GenerateProgressDonut({ created, total }: { created: number; total: number }) {
+  const size = 12;
+  const stroke = 2;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const progress = total > 0 ? created / total : 0;
+  const dashOffset = circumference * (1 - progress);
+  const allDone = created === total && total > 0;
+
+  return (
+    <svg width={size} height={size} className="-rotate-90 shrink-0">
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={stroke} className="text-current/20" />
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={stroke} strokeDasharray={circumference} strokeDashoffset={dashOffset} strokeLinecap="round" className={allDone ? 'text-utility-success-500' : 'text-utility-brand-500'} />
+    </svg>
+  );
+}
+
 function AddStatusDropdown({ taskId, onAddStatus, disabled }: { taskId: string; onAddStatus: (taskId: string, status: string) => void; disabled?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -1471,7 +1488,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                           )}
                                         >
                                           {generatingEpicId === task.id
-                                            ? <div className="size-3 animate-spin rounded-full border-[1.5px] border-current/25 border-t-current" />
+                                            ? (generateProgress && generateProgress.total > 0
+                                              ? <GenerateProgressDonut created={generateProgress.created} total={generateProgress.total} />
+                                              : <div className="size-3 animate-spin rounded-full border-[1.5px] border-current/25 border-t-current" />)
                                             : <Stars01 className="size-3" />}
                                           <span className="hidden min-[961px]:inline">{generatingEpicId === task.id
                                             ? (generateProgress && generateProgress.total > 0
@@ -1635,7 +1654,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                                 )}
                                               >
                                                 {generatingEpicId === task.id
-                                                  ? <div className="size-3 animate-spin rounded-full border-[1.5px] border-current/25 border-t-current" />
+                                                  ? (generateProgress && generateProgress.total > 0
+                                                    ? <GenerateProgressDonut created={generateProgress.created} total={generateProgress.total} />
+                                                    : <div className="size-3 animate-spin rounded-full border-[1.5px] border-current/25 border-t-current" />)
                                                   : <Stars01 className="size-3" />}
                                                 <span className="hidden min-[961px]:inline">{generatingEpicId === task.id
                                                   ? (generateProgress && generateProgress.total > 0
@@ -1751,7 +1772,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                         )}
                                       >
                                         {generatingEpicId === task.id
-                                          ? <div className="size-3 animate-spin rounded-full border-[1.5px] border-current/25 border-t-current" />
+                                          ? (generateProgress && generateProgress.total > 0
+                                            ? <GenerateProgressDonut created={generateProgress.created} total={generateProgress.total} />
+                                            : <div className="size-3 animate-spin rounded-full border-[1.5px] border-current/25 border-t-current" />)
                                           : <Stars01 className="size-3" />}
                                         <span className="hidden min-[961px]:inline">{generatingEpicId === task.id
                                           ? (generateProgress && generateProgress.total > 0
