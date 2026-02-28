@@ -1,6 +1,6 @@
 // panel/src/components/board-tab.tsx
 
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { CheckCircle, ChevronDown, Columns03, CpuChip01, Folder, FolderPlus, Lightbulb02, Plus, RefreshCw01, Stars01, Target02, Tool01, Users01 } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
@@ -646,11 +646,6 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const [fixStatus, setFixStatus] = useState<Record<string, { status: string; startedAt?: string; completedAt?: string; error?: string }>>({});
   const [selectedTask, setSelectedTask] = useState<BoardTask | null>(null);
   const [expandedEpics, setExpandedEpics] = useState(() => new Set<string>());
-  // Epic expand/collapse animation refs — single set of children
-  const childCardRefs = useRef<Map<string, (HTMLDivElement | null)[]>>(new Map());
-  const pendingExpandRef = useRef<string | null>(null);
-  const collapsingEpicRef = useRef<string | null>(null);
-  const collapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [addingStatus, setAddingStatus] = useState(false);
   const [draggedTask, setDraggedTask] = useState<BoardTask | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
@@ -687,88 +682,13 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   }, [apiBaseUrl]);
 
   const toggleEpic = useCallback((epicId: string) => {
-    // Prevent toggle while collapse animation is in flight
-    if (collapsingEpicRef.current === epicId) return;
-
-    const isCurrentlyExpanded = expandedEpics.has(epicId);
-
-    if (isCurrentlyExpanded) {
-      // COLLAPSE: cascade fade-out + slide-up on expanded cards, then change state
-      collapsingEpicRef.current = epicId;
-      const refs = (childCardRefs.current.get(epicId) ?? []).filter((el): el is HTMLDivElement => el !== null);
-      const total = refs.length;
-
-      // Reverse cascade: last card animates first
-      refs.forEach((el, i) => {
-        const delay = (total - 1 - i) * 40;
-        el.style.transition = `opacity 200ms ease ${delay}ms, transform 250ms ease ${delay}ms`;
-        el.style.opacity = '0';
-        el.style.transform = 'translateY(-16px) scale(0.97)';
-      });
-
-      const animEnd = Math.max(0, total - 1) * 40 + 280;
-      collapseTimerRef.current = setTimeout(() => {
-        collapsingEpicRef.current = null;
-        collapseTimerRef.current = null;
-        // Clear inline styles before state change so React's collapsed styles take over cleanly
-        refs.forEach(el => {
-          el.style.transition = '';
-          el.style.opacity = '';
-          el.style.transform = '';
-        });
-        setExpandedEpics(prev => {
-          const next = new Set(prev);
-          next.delete(epicId);
-          return next;
-        });
-      }, animEnd);
-    } else {
-      // EXPAND: change state immediately, animate entrance in useLayoutEffect
-      pendingExpandRef.current = epicId;
-      setExpandedEpics(prev => {
-        const next = new Set(prev);
-        next.add(epicId);
-        return next;
-      });
-    }
-  }, [expandedEpics]);
-
-  // Expand entrance animation: cascade fade-in + slide-down
-  useLayoutEffect(() => {
-    const epicId = pendingExpandRef.current;
-    if (!epicId) return;
-    pendingExpandRef.current = null;
-
-    const refs = (childCardRefs.current.get(epicId) ?? []).filter((el): el is HTMLDivElement => el !== null);
-    if (!refs.length) return;
-
-    // Initial state: invisible, shifted up
-    refs.forEach(el => {
-      el.style.transition = 'none';
-      el.style.opacity = '0';
-      el.style.transform = 'translateY(-16px) scale(0.97)';
+    setExpandedEpics(prev => {
+      const next = new Set(prev);
+      if (next.has(epicId)) next.delete(epicId);
+      else next.add(epicId);
+      return next;
     });
-
-    refs[0].getBoundingClientRect(); // force reflow
-
-    // Animate to final positions with stagger
-    refs.forEach((el, i) => {
-      const delay = i * 50;
-      el.style.transition = `opacity 300ms ease ${delay}ms, transform 350ms cubic-bezier(0.2, 0.9, 0.3, 1) ${delay}ms`;
-      el.style.opacity = '1';
-      el.style.transform = '';
-    });
-
-    // Clean up inline styles after all animations complete
-    const cleanupDelay = (refs.length - 1) * 50 + 400;
-    setTimeout(() => {
-      refs.forEach(el => {
-        el.style.transition = '';
-        el.style.opacity = '';
-        el.style.transform = '';
-      });
-    }, cleanupDelay);
-  }, [expandedEpics]);
+  }, []);
 
   const fetchFixStatus = useCallback(
     async () => {
@@ -1773,44 +1693,34 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                     }
                                   />
                                 </div>
-                                {/* Children — single set of elements for both peek (collapsed) and list (expanded) */}
-                                <div
-                                  className={cx(
-                                    expanded ? 'flex flex-col gap-2 mt-2' : 'relative',
-                                  )}
-                                  style={!expanded ? { height: 8, marginTop: -2 } : undefined}
-                                >
+                                {/* Children — CSS-transition-driven stacking deck / expanded list */}
+                                <div className="flex flex-col" style={{ marginTop: expanded ? 8 : -2, transition: 'margin-top 350ms ease' }}>
                                   {children.map((child, i) => {
+                                    const total = children.length;
                                     const isPeek = !expanded && i < 2;
+                                    const isHidden = !expanded && i >= 2;
                                     return (
                                       <div
                                         key={child.id}
-                                        ref={(el) => {
-                                          if (!childCardRefs.current.has(task.id)) childCardRefs.current.set(task.id, []);
-                                          childCardRefs.current.get(task.id)![i] = el;
-                                        }}
-                                        className={cx(isPeek && 'shadow-sm')}
-                                        style={expanded ? undefined : isPeek ? {
-                                          position: 'absolute' as const,
-                                          top: i * 4,
-                                          left: 0,
-                                          right: 0,
-                                          height: 12,
-                                          overflow: 'hidden',
-                                          transform: `scaleX(${1 - (i + 1) * 0.06})`,
-                                          transformOrigin: 'center',
+                                        className="overflow-hidden"
+                                        style={{
+                                          maxHeight: expanded ? 200 : isPeek ? 12 : 0,
+                                          transform: expanded
+                                            ? 'scale(1)'
+                                            : isPeek
+                                              ? `scale(${1 - (i + 1) * 0.04})`
+                                              : 'scale(0.88)',
+                                          transformOrigin: 'center top',
+                                          opacity: expanded ? 1 : isHidden ? 0 : 1,
+                                          marginTop: i === 0 ? 0 : expanded ? 8 : isPeek ? -2 : 0,
                                           borderRadius: 'var(--board-card-radius)',
-                                          zIndex: 20 - i * 10,
-                                          pointerEvents: 'none' as const,
-                                        } : {
-                                          position: 'absolute' as const,
-                                          top: 0,
-                                          left: 0,
-                                          right: 0,
-                                          height: 0,
-                                          overflow: 'hidden',
-                                          opacity: 0,
-                                          pointerEvents: 'none' as const,
+                                          pointerEvents: expanded ? 'auto' : 'none',
+                                          zIndex: expanded ? undefined : 30 - i * 5,
+                                          transition: 'max-height 400ms ease, transform 400ms ease, opacity 300ms ease, margin-top 350ms ease',
+                                          transitionDelay: expanded
+                                            ? `${i * 60}ms`
+                                            : `${Math.max(0, total - 1 - i) * 40}ms`,
+                                          boxShadow: !expanded && isPeek ? '0 1px 3px rgba(0,0,0,0.08)' : undefined,
                                         }}
                                       >
                                         <BoardCard
