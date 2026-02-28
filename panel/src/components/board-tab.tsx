@@ -1349,9 +1349,27 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
           {columns.map((col) => (
             <div
               key={col.key}
-              className="flex w-[85vw] shrink-0 snap-center flex-col bg-secondary dark:bg-primary overflow-hidden sm:w-auto sm:shrink"
+              className="relative flex w-[85vw] shrink-0 snap-center flex-col bg-secondary dark:bg-primary overflow-hidden sm:w-auto sm:shrink"
               style={{ borderRadius: 'var(--board-col-radius)' }}
             >
+              {/* Frosted glass header — outside scroll container so backdrop-filter blurs cards */}
+              <div className="absolute top-0 left-0 right-0 z-40 pointer-events-none backdrop-blur-md bg-gradient-to-b from-secondary/80 to-transparent dark:from-primary/80 pb-4">
+                <div className="flex items-center justify-between px-4 py-3 pointer-events-auto">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="size-2 rounded-full shrink-0"
+                      style={{
+                        backgroundColor: col.key === 'not_started' ? '#9CA3AF'
+                          : col.key === 'in_progress' ? 'rgb(239 104 32)'
+                          : col.key === 'done' ? '#22C55E'
+                          : '#F59E0B'
+                      }}
+                    />
+                    <span className="text-sm font-semibold text-primary">{col.label}</span>
+                    <span className="text-sm text-quaternary font-normal">{col.tasks.length}</span>
+                  </div>
+                </div>
+              </div>
               {/* Cards - scrollable (drop zone) with bottom fade mask */}
               <div
                 className={cx(
@@ -1374,25 +1392,8 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                   handleDrop(col.key);
                 }}
               >
-                {/* Floating sticky header — frosted glass gradient */}
-                <div className="sticky top-0 z-40 pointer-events-none backdrop-blur-md bg-gradient-to-b from-secondary/80 to-transparent dark:from-primary/80 pb-4">
-                  <div className="flex items-center justify-between px-4 py-3 pointer-events-auto">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="size-2 rounded-full shrink-0"
-                        style={{
-                          backgroundColor: col.key === 'not_started' ? '#9CA3AF'
-                            : col.key === 'in_progress' ? 'rgb(239 104 32)'
-                            : col.key === 'done' ? '#22C55E'
-                            : '#F59E0B'
-                        }}
-                      />
-                      <span className="text-sm font-semibold text-primary">{col.label}</span>
-                      <span className="text-sm text-quaternary font-normal">{col.tasks.length}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-3" style={{ padding: '0.5rem var(--board-col-padding) 2.5rem' }}>
+                {/* padding-top = height of opaque header content (py-3 × 2 + text-sm ≈ 2.75rem) */}
+                <div className="flex flex-col gap-3" style={{ padding: '2.75rem var(--board-col-padding) 2.5rem' }}>
                   {loading && tasks.length === 0 ? (
                     <>
                       <SkeletonCard />
