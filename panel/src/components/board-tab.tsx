@@ -502,13 +502,13 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
         dragging && 'opacity-50'
       )}
     >
-      {/* Epic gradient overlay — radial from outside bottom-right corner inward */}
+      {/* Epic gradient overlay — radial from outside top-left corner inward */}
       {epic && (
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
             borderRadius: 'inherit',
-            background: 'radial-gradient(circle at 115% 125%, rgba(168, 85, 247, 0.18) 0%, transparent 65%)',
+            background: 'radial-gradient(circle at -15% -25%, rgba(168, 85, 247, 0.1) 0%, transparent 65%)',
           }}
         />
       )}
