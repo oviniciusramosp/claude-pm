@@ -1,6 +1,7 @@
 // panel/src/components/board-tab.tsx
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { CheckCircle, ChevronDown, Columns03, CpuChip01, Folder, FolderPlus, Lightbulb02, Plus, RefreshCw01, Stars01, Target02, Tool01, Users01 } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
@@ -438,9 +439,10 @@ interface BoardCardProps {
   dragging?: boolean;
   fixingTaskType?: string | null;
   isGlobalOperationRunning?: boolean;
+  footer?: ReactNode;
 }
 
-function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStatuses, showAddStatus, onAddStatus, addingStatus, onDragStart, onDragEnd, dragging, fixingTaskType, isGlobalOperationRunning }: BoardCardProps) {
+function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStatuses, showAddStatus, onAddStatus, addingStatus, onDragStart, onDragEnd, dragging, fixingTaskType, isGlobalOperationRunning, footer }: BoardCardProps) {
   const priorityColor = BOARD_PRIORITY_COLORS[task.priority] as any;
   const taskCode = extractTaskCode(task);
   const parentEpic = task.parentId ? allTasks.find((t) => t.id === task.parentId) : null;
@@ -521,6 +523,17 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
           <Badge size="sm" color={priorityColor || 'gray'} className="ring-0 font-mono text-xs">
             {task.priority}
           </Badge>
+        </div>
+      )}
+
+      {/* Footer: Epic actions bar (expand toggle, add, generate, fix) */}
+      {footer && (
+        <div
+          className="mt-3 pt-2.5 border-t border-secondary/40"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          {footer}
         </div>
       )}
 
@@ -1348,59 +1361,76 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                 onDrop={taskIsEpic ? (e) => handleEpicDrop(e, task.id, task.status) : undefined}
                                 onDragEnd={taskIsEpic ? handleEpicDragEnd : undefined}
                                 className={cx(
-                                  'relative flex flex-col gap-1',
+                                  'relative',
                                   taskIsEpic && draggedEpicId === task.id && 'opacity-50 cursor-grabbing'
                                 )}
                               >
-                                {/* Drop indicator line */}
                                 {taskIsEpic && epicDropBeforeId === task.id && (
                                   <div className="absolute -top-1 left-0 right-0 h-0.5 bg-utility-brand-500 z-10 rounded-full" />
                                 )}
-                                {card}
-                                <div className="flex items-center gap-1">
-                                  <Tooltip title="Add task" description={`Create a new task in ${task.name}`}>
-                                    <TooltipTrigger
-                                      onPress={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
-                                      className="flex h-6 items-center gap-1 rounded-sm px-2 text-xs text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10 transition"
-                                    >
-                                      <Plus className="size-3" />
-                                    </TooltipTrigger>
-                                  </Tooltip>
-                                  <div className="flex-1" />
-                                  <Tooltip
-                                    title={generatingEpicId === task.id ? "Generating tasks..." : "Generate tasks"}
-                                    description={generatingEpicId === task.id ? "Using Claude AI to create tasks" : "Auto-generate tasks with Claude AI"}
-                                  >
-                                    <TooltipTrigger
-                                      onPress={() => handleGenerateStories(task.id)}
-                                      isDisabled={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
-                                      className={cx(
-                                        'flex h-6 items-center gap-1 rounded-sm px-2 text-xs transition',
-                                        generatingEpicId === task.id
-                                          ? 'text-brand-secondary bg-utility-brand-50'
-                                          : (generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null)
-                                            ? 'text-quaternary cursor-not-allowed'
-                                            : 'text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10'
-                                      )}
-                                    >
-                                      {generatingEpicId === task.id
-                                        ? <RefreshCw01 className="size-3 animate-spin" />
-                                        : <Stars01 className="size-3" />}
-                                      <span>{generatingEpicId === task.id
-                                        ? (generateProgress && generateProgress.total > 0
-                                          ? (generateProgress.phase === 'planning' ? 'Planning...' : `${generateProgress.created}/${generateProgress.total}`)
-                                          : 'Planning...')
-                                        : 'Generate'}</span>
-                                    </TooltipTrigger>
-                                  </Tooltip>
-                                  <EpicFixDropdown
-                                    epicId={task.id}
-                                    onFix={handleFixEpic}
-                                    isFixing={fixingEpicId === task.id}
-                                    isAnyOperationRunning={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
-                                    currentFixType={fixingEpicId === task.id ? fixingEpicType : null}
-                                  />
-                                </div>
+                                <BoardCard
+                                  task={task}
+                                  epic={taskIsEpic}
+                                  allTasks={tasks}
+                                  onClick={() => setSelectedTask(task)}
+                                  onFix={handleFixTask}
+                                  fixStatus={fixStatus[task.id]}
+                                  allFixStatuses={fixStatus}
+                                  fixingTaskType={fixingTaskId === task.id ? fixingTaskType : null}
+                                  isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
+                                  showAddStatus={isMissingStatus}
+                                  onAddStatus={isMissingStatus ? handleAddStatus : undefined}
+                                  addingStatus={addingStatus}
+                                  onDragStart={() => setDraggedTask(task)}
+                                  onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
+                                  dragging={draggedTask?.id === task.id}
+                                  footer={
+                                    <div className="flex items-center gap-1">
+                                      <Tooltip title="Add task" description={`Create a new task in ${task.name}`}>
+                                        <TooltipTrigger
+                                          onPress={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
+                                          className="flex h-6 w-6 items-center justify-center rounded-md text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10 transition-all duration-200"
+                                        >
+                                          <Plus className="size-3.5" />
+                                        </TooltipTrigger>
+                                      </Tooltip>
+                                      <div className="flex-1" />
+                                      <Tooltip
+                                        title={generatingEpicId === task.id ? "Generating tasks..." : "Generate tasks"}
+                                        description={generatingEpicId === task.id ? "Using Claude AI to create tasks" : "Auto-generate tasks with Claude AI"}
+                                      >
+                                        <TooltipTrigger
+                                          onPress={() => handleGenerateStories(task.id)}
+                                          isDisabled={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
+                                          className={cx(
+                                            'flex h-6 items-center gap-1 rounded-md px-2 text-xs transition-all duration-200',
+                                            generatingEpicId === task.id
+                                              ? 'text-brand-secondary bg-utility-brand-50'
+                                              : (generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null)
+                                                ? 'text-quaternary cursor-not-allowed'
+                                                : 'text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10'
+                                          )}
+                                        >
+                                          {generatingEpicId === task.id
+                                            ? <RefreshCw01 className="size-3 animate-spin" />
+                                            : <Stars01 className="size-3" />}
+                                          <span>{generatingEpicId === task.id
+                                            ? (generateProgress && generateProgress.total > 0
+                                              ? (generateProgress.phase === 'planning' ? 'Planning...' : `${generateProgress.created}/${generateProgress.total}`)
+                                              : 'Planning...')
+                                            : 'Generate'}</span>
+                                        </TooltipTrigger>
+                                      </Tooltip>
+                                      <EpicFixDropdown
+                                        epicId={task.id}
+                                        onFix={handleFixEpic}
+                                        isFixing={fixingEpicId === task.id}
+                                        isAnyOperationRunning={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
+                                        currentFixType={fixingEpicId === task.id ? fixingEpicType : null}
+                                      />
+                                    </div>
+                                  }
+                                />
                               </div>
                             );
                           }
@@ -1484,113 +1514,126 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                 onDragOver={(e) => handleEpicDragOver(e, task.id, task.status)}
                                 onDrop={(e) => handleEpicDrop(e, task.id, task.status)}
                                 onDragEnd={handleEpicDragEnd}
-                                className={cx(
-                                  'relative flex flex-col gap-2',
-                                  draggedEpicId === task.id && 'opacity-50 cursor-grabbing'
-                                )}
+                                className={cx('relative flex flex-col', draggedEpicId === task.id && 'opacity-50 cursor-grabbing')}
                               >
-                                {/* Drop indicator line */}
                                 {epicDropBeforeId === task.id && (
                                   <div className="absolute -top-1 left-0 right-0 h-0.5 bg-utility-brand-500 z-10 rounded-full" />
                                 )}
-                                <BoardCard
-                                  task={task}
-                                  epic
-                                  allTasks={tasks}
-                                  onClick={() => setSelectedTask(task)}
-                                  onFix={handleFixTask}
-                                  fixStatus={fixStatus[task.id]}
-                                  allFixStatuses={fixStatus}
-                                  fixingTaskType={fixingTaskId === task.id ? fixingTaskType : null}
-                                  isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
-                                  showAddStatus={isMissingStatus}
-                                  onAddStatus={isMissingStatus ? handleAddStatus : undefined}
-                                  addingStatus={addingStatus}
-                                  onDragStart={() => setDraggedTask(task)}
-                                  onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
-                                  dragging={draggedTask?.id === task.id}
-                                />
-                                <div className="flex items-center gap-1">
-                                <Tooltip title={expanded ? "Collapse stories" : "Expand stories"} description={expanded ? "Hide child tasks" : "Show child tasks"}>
-                                  <TooltipTrigger
-                                    onPress={() => toggleEpic(task.id)}
-                                    className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-tertiary hover:text-secondary hover:bg-primary_hover transition"
-                                  >
-                                    <ChevronDown className={cx('size-3 transition-transform', !expanded && '-rotate-90')} />
-                                    <span>{children.length} {children.length === 1 ? 'task' : 'tasks'}</span>
-                                  </TooltipTrigger>
-                                </Tooltip>
-                                {(col.key === 'not_started' || col.key === 'missing_status') && (
-                                  <>
-                                  <Tooltip title="Add task" description={`Create a new task in ${task.name}`}>
-                                    <TooltipTrigger
-                                      onPress={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
-                                      className="flex h-6 items-center gap-1 rounded-sm px-2 text-xs text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10 transition"
-                                    >
-                                      <Plus className="size-3" />
-                                    </TooltipTrigger>
-                                  </Tooltip>
-                                  <div className="flex-1" />
-                                  <Tooltip
-                                    title={generatingEpicId === task.id ? "Generating tasks..." : "Generate tasks"}
-                                    description={generatingEpicId === task.id ? "Using Claude AI to create tasks" : "Auto-generate tasks with Claude AI"}
-                                  >
-                                    <TooltipTrigger
-                                      onPress={() => handleGenerateStories(task.id)}
-                                      isDisabled={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
-                                      className={cx(
-                                        'flex h-6 items-center gap-1 rounded-sm px-2 text-xs transition',
-                                        generatingEpicId === task.id
-                                          ? 'text-brand-secondary bg-utility-brand-50'
-                                          : (generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null)
-                                            ? 'text-quaternary cursor-not-allowed'
-                                            : 'text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10'
-                                      )}
-                                    >
-                                      {generatingEpicId === task.id
-                                        ? <RefreshCw01 className="size-3 animate-spin" />
-                                        : <Stars01 className="size-3" />}
-                                      <span>{generatingEpicId === task.id
-                                        ? (generateProgress && generateProgress.total > 0
-                                          ? (generateProgress.phase === 'planning' ? 'Planning...' : `${generateProgress.created}/${generateProgress.total}`)
-                                          : 'Planning...')
-                                        : 'Generate'}</span>
-                                    </TooltipTrigger>
-                                  </Tooltip>
-                                  <EpicFixDropdown
-                                    epicId={task.id}
-                                    onFix={handleFixEpic}
-                                    isFixing={fixingEpicId === task.id}
-                                    isAnyOperationRunning={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
-                                    currentFixType={fixingEpicId === task.id ? fixingEpicType : null}
+                                {/* Epic card with action footer inside */}
+                                <div className="relative z-30">
+                                  <BoardCard
+                                    task={task}
+                                    epic
+                                    allTasks={tasks}
+                                    onClick={() => setSelectedTask(task)}
+                                    onFix={handleFixTask}
+                                    fixStatus={fixStatus[task.id]}
+                                    allFixStatuses={fixStatus}
+                                    fixingTaskType={fixingTaskId === task.id ? fixingTaskType : null}
+                                    isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
+                                    showAddStatus={isMissingStatus}
+                                    onAddStatus={isMissingStatus ? handleAddStatus : undefined}
+                                    addingStatus={addingStatus}
+                                    onDragStart={() => setDraggedTask(task)}
+                                    onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
+                                    dragging={draggedTask?.id === task.id}
+                                    footer={
+                                      <div className="flex items-center gap-1">
+                                        <Tooltip title={expanded ? "Collapse stories" : "Expand stories"} description={expanded ? "Hide child tasks" : "Show child tasks"}>
+                                          <TooltipTrigger
+                                            onPress={() => toggleEpic(task.id)}
+                                            className="flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10 transition-all duration-200"
+                                          >
+                                            <ChevronDown className={cx('size-3 transition-transform duration-200', !expanded && '-rotate-90')} />
+                                            <span>{children.length} {children.length === 1 ? 'task' : 'tasks'}</span>
+                                          </TooltipTrigger>
+                                        </Tooltip>
+                                        {(col.key === 'not_started' || col.key === 'missing_status') && (
+                                          <>
+                                            <Tooltip title="Add task" description={`Create a new task in ${task.name}`}>
+                                              <TooltipTrigger
+                                                onPress={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
+                                                className="flex h-6 w-6 items-center justify-center rounded-md text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10 transition-all duration-200"
+                                              >
+                                                <Plus className="size-3.5" />
+                                              </TooltipTrigger>
+                                            </Tooltip>
+                                            <div className="flex-1" />
+                                            <Tooltip
+                                              title={generatingEpicId === task.id ? "Generating tasks..." : "Generate tasks"}
+                                              description={generatingEpicId === task.id ? "Using Claude AI to create tasks" : "Auto-generate tasks with Claude AI"}
+                                            >
+                                              <TooltipTrigger
+                                                onPress={() => handleGenerateStories(task.id)}
+                                                isDisabled={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
+                                                className={cx(
+                                                  'flex h-6 items-center gap-1 rounded-md px-2 text-xs transition-all duration-200',
+                                                  generatingEpicId === task.id
+                                                    ? 'text-brand-secondary bg-utility-brand-50'
+                                                    : (generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null)
+                                                      ? 'text-quaternary cursor-not-allowed'
+                                                      : 'text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10'
+                                                )}
+                                              >
+                                                {generatingEpicId === task.id
+                                                  ? <RefreshCw01 className="size-3 animate-spin" />
+                                                  : <Stars01 className="size-3" />}
+                                                <span>{generatingEpicId === task.id
+                                                  ? (generateProgress && generateProgress.total > 0
+                                                    ? (generateProgress.phase === 'planning' ? 'Planning...' : `${generateProgress.created}/${generateProgress.total}`)
+                                                    : 'Planning...')
+                                                  : 'Generate'}</span>
+                                              </TooltipTrigger>
+                                            </Tooltip>
+                                            <EpicFixDropdown
+                                              epicId={task.id}
+                                              onFix={handleFixEpic}
+                                              isFixing={fixingEpicId === task.id}
+                                              isAnyOperationRunning={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
+                                              currentFixType={fixingEpicId === task.id ? fixingEpicType : null}
+                                            />
+                                          </>
+                                        )}
+                                      </div>
+                                    }
                                   />
+                                </div>
+                                {/* Stack peek cards (visible when collapsed, hidden when expanded) */}
+                                {!expanded && (
+                                  <>
+                                    <div className="relative z-20 -mt-2 mx-2 h-3 rounded-xl bg-primary border border-secondary shadow-xs" />
+                                    {children.length >= 2 && (
+                                      <div className="relative z-10 -mt-1.5 mx-4 h-2.5 rounded-xl bg-secondary border border-secondary shadow-xs" />
+                                    )}
                                   </>
                                 )}
-                              </div>
-                                {expanded && (
-                                  <div className="ml-4 border-l border-secondary pl-4 flex flex-col gap-3">
-                                    {children.map((child) => (
-                                      <BoardCard
-                                        key={child.id}
-                                        task={child}
-                                        epic={false}
-                                        allTasks={tasks}
-                                        onClick={() => setSelectedTask(child)}
-                                        onFix={handleFixTask}
-                                        fixStatus={fixStatus[child.id]}
-                                        allFixStatuses={fixStatus}
-                                        fixingTaskType={fixingTaskId === child.id ? fixingTaskType : null}
-                                        isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
-                                        showAddStatus={isMissingStatus}
-                                        onAddStatus={isMissingStatus ? handleAddStatus : undefined}
-                                        addingStatus={addingStatus}
-                                        onDragStart={() => setDraggedTask(child)}
-                                        onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
-                                        dragging={draggedTask?.id === child.id}
-                                      />
-                                    ))}
+                                {/* Expanded children with smooth CSS grid animation */}
+                                <div className={cx('grid transition-all duration-300 ease-out', expanded ? 'grid-rows-[1fr] mt-2' : 'grid-rows-[0fr]')}>
+                                  <div className="overflow-hidden">
+                                    <div className="flex flex-col gap-2">
+                                      {children.map((child) => (
+                                        <BoardCard
+                                          key={child.id}
+                                          task={child}
+                                          epic={false}
+                                          allTasks={tasks}
+                                          onClick={() => setSelectedTask(child)}
+                                          onFix={handleFixTask}
+                                          fixStatus={fixStatus[child.id]}
+                                          allFixStatuses={fixStatus}
+                                          fixingTaskType={fixingTaskId === child.id ? fixingTaskType : null}
+                                          isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
+                                          showAddStatus={isMissingStatus}
+                                          onAddStatus={isMissingStatus ? handleAddStatus : undefined}
+                                          addingStatus={addingStatus}
+                                          onDragStart={() => setDraggedTask(child)}
+                                          onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
+                                          dragging={draggedTask?.id === child.id}
+                                        />
+                                      ))}
+                                    </div>
                                   </div>
-                                )}
+                                </div>
                               </div>
                             );
                           }
@@ -1598,69 +1641,70 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                           const showAddButton = (col.key === 'not_started' || col.key === 'missing_status') && taskIsEpic;
                           if (showAddButton) {
                             return (
-                              <div key={task.id} className="flex flex-col gap-1">
-                                <BoardCard
-                                  task={task}
-                                  epic={taskIsEpic}
-                                  allTasks={tasks}
-                                  onClick={() => setSelectedTask(task)}
-                                  onFix={handleFixTask}
-                                  fixStatus={fixStatus[task.id]}
-                                  allFixStatuses={fixStatus}
-                                  fixingTaskType={fixingTaskId === task.id ? fixingTaskType : null}
-                                  isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
-                                  showAddStatus={isMissingStatus}
-                                  onAddStatus={isMissingStatus ? handleAddStatus : undefined}
-                                  addingStatus={addingStatus}
-                                  onDragStart={() => setDraggedTask(task)}
-                                  onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
-                                  dragging={draggedTask?.id === task.id}
-                                />
-                                <div className="flex items-center gap-1">
-                                  <Tooltip title="Add task" description={`Create a new task in ${task.name}`}>
-                                    <TooltipTrigger
-                                      onPress={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
-                                      className="flex h-6 items-center gap-1 rounded-sm px-2 text-xs text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10 transition"
+                              <BoardCard
+                                key={task.id}
+                                task={task}
+                                epic={taskIsEpic}
+                                allTasks={tasks}
+                                onClick={() => setSelectedTask(task)}
+                                onFix={handleFixTask}
+                                fixStatus={fixStatus[task.id]}
+                                allFixStatuses={fixStatus}
+                                fixingTaskType={fixingTaskId === task.id ? fixingTaskType : null}
+                                isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
+                                showAddStatus={isMissingStatus}
+                                onAddStatus={isMissingStatus ? handleAddStatus : undefined}
+                                addingStatus={addingStatus}
+                                onDragStart={() => setDraggedTask(task)}
+                                onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
+                                dragging={draggedTask?.id === task.id}
+                                footer={
+                                  <div className="flex items-center gap-1">
+                                    <Tooltip title="Add task" description={`Create a new task in ${task.name}`}>
+                                      <TooltipTrigger
+                                        onPress={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
+                                        className="flex h-6 w-6 items-center justify-center rounded-md text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10 transition-all duration-200"
+                                      >
+                                        <Plus className="size-3.5" />
+                                      </TooltipTrigger>
+                                    </Tooltip>
+                                    <div className="flex-1" />
+                                    <Tooltip
+                                      title={generatingEpicId === task.id ? "Generating tasks..." : "Generate tasks"}
+                                      description={generatingEpicId === task.id ? "Using Claude AI to create tasks" : "Auto-generate tasks with Claude AI"}
                                     >
-                                      <Plus className="size-3" />
-                                    </TooltipTrigger>
-                                  </Tooltip>
-                                  <div className="flex-1" />
-                                  <Tooltip
-                                    title={generatingEpicId === task.id ? "Generating tasks..." : "Generate tasks"}
-                                    description={generatingEpicId === task.id ? "Using Claude AI to create tasks" : "Auto-generate tasks with Claude AI"}
-                                  >
-                                    <TooltipTrigger
-                                      onPress={() => handleGenerateStories(task.id)}
-                                      isDisabled={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
-                                      className={cx(
-                                        'flex h-6 items-center gap-1 rounded-sm px-2 text-xs transition',
-                                        generatingEpicId === task.id
-                                          ? 'text-brand-secondary bg-utility-brand-50'
-                                          : (generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null)
-                                            ? 'text-quaternary cursor-not-allowed'
-                                            : 'text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10'
-                                      )}
-                                    >
-                                      {generatingEpicId === task.id
-                                        ? <RefreshCw01 className="size-3 animate-spin" />
-                                        : <Stars01 className="size-3" />}
-                                      <span>{generatingEpicId === task.id
-                                        ? (generateProgress && generateProgress.total > 0
-                                          ? (generateProgress.phase === 'planning' ? 'Planning...' : `${generateProgress.created}/${generateProgress.total}`)
-                                          : 'Planning...')
-                                        : 'Generate'}</span>
-                                    </TooltipTrigger>
-                                  </Tooltip>
-                                  <EpicFixDropdown
-                                    epicId={task.id}
-                                    onFix={handleFixEpic}
-                                    isFixing={fixingEpicId === task.id}
-                                    isAnyOperationRunning={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
-                                    currentFixType={fixingEpicId === task.id ? fixingEpicType : null}
-                                  />
-                                </div>
-                              </div>
+                                      <TooltipTrigger
+                                        onPress={() => handleGenerateStories(task.id)}
+                                        isDisabled={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
+                                        className={cx(
+                                          'flex h-6 items-center gap-1 rounded-md px-2 text-xs transition-all duration-200',
+                                          generatingEpicId === task.id
+                                            ? 'text-brand-secondary bg-utility-brand-50'
+                                            : (generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null)
+                                              ? 'text-quaternary cursor-not-allowed'
+                                              : 'text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10'
+                                        )}
+                                      >
+                                        {generatingEpicId === task.id
+                                          ? <RefreshCw01 className="size-3 animate-spin" />
+                                          : <Stars01 className="size-3" />}
+                                        <span>{generatingEpicId === task.id
+                                          ? (generateProgress && generateProgress.total > 0
+                                            ? (generateProgress.phase === 'planning' ? 'Planning...' : `${generateProgress.created}/${generateProgress.total}`)
+                                            : 'Planning...')
+                                          : 'Generate'}</span>
+                                      </TooltipTrigger>
+                                    </Tooltip>
+                                    <EpicFixDropdown
+                                      epicId={task.id}
+                                      onFix={handleFixEpic}
+                                      isFixing={fixingEpicId === task.id}
+                                      isAnyOperationRunning={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
+                                      currentFixType={fixingEpicId === task.id ? fixingEpicType : null}
+                                    />
+                                  </div>
+                                }
+                              />
                             );
                           }
                           return (
