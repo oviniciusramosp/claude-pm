@@ -27,6 +27,7 @@ const envFilePath = path.join(cwd, '.env');
 const panelDistPath = path.join(cwd, 'panel', 'dist');
 const panelPort = Number(process.env.PANEL_PORT || 4100);
 const DEFAULT_CLAUDE_COMMAND = 'claude --print';
+const PANEL_DEFAULT_MODEL = 'claude-sonnet-4-6';
 
 const MAX_CHAT_MESSAGE_CHARS = 12000;
 const MAX_CHAT_LOG_CHARS = 8000;
@@ -1247,7 +1248,7 @@ function runClaudePromptViaApi(prompt, model, customTimeoutMs) {
     }
 
     const workdir = path.resolve(cwd, process.env.CLAUDE_WORKDIR || '.');
-    const timeoutMs = customTimeoutMs || 120000;
+    const timeoutMs = customTimeoutMs || null;
 
     // Strip env vars that trigger Claude Code's nested-session detection.
     // Also remove CLAUDE_CODE_OAUTH_TOKEN so the CLI authenticates via its
@@ -1278,13 +1279,15 @@ function runClaudePromptViaApi(prompt, model, customTimeoutMs) {
       resolve(payload);
     }
 
-    const timer = setTimeout(() => {
-      try { child.kill('SIGTERM'); } catch { /* ignore */ }
-      const err = new Error(`Claude prompt timed out after ${timeoutMs}ms`);
-      err.stderr = stderr.trim() || null;
-      err.stdout = stdout.trim() || null;
-      finish(err);
-    }, timeoutMs);
+    const timer = timeoutMs
+      ? setTimeout(() => {
+          try { child.kill('SIGTERM'); } catch { /* ignore */ }
+          const err = new Error(`Claude prompt timed out after ${timeoutMs}ms`);
+          err.stderr = stderr.trim() || null;
+          err.stdout = stdout.trim() || null;
+          finish(err);
+        }, timeoutMs)
+      : null;
 
     child.stdout.on('data', (chunk) => { stdout += String(chunk); });
     child.stderr.on('data', (chunk) => { stderr += String(chunk); });
@@ -2392,7 +2395,7 @@ Rules:
 - "reason" is a brief explanation (max 15 words) of why that model fits
 - Return valid JSON only, no extra text`;
 
-  const { reply } = await runClaudePromptViaApi(prompt, 'claude-sonnet-4-5-20250929', 120000);
+  const { reply } = await runClaudePromptViaApi(prompt, PANEL_DEFAULT_MODEL);
 
   const text = String(reply || '').trim();
   const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
@@ -2405,7 +2408,7 @@ Rules:
     throw new Error('Claude did not return valid JSON for model assignment');
   }
 
-  const validModels = ['claude-opus-4-6', 'claude-sonnet-4-5-20250929', 'claude-haiku-4-5-20251001'];
+  const validModels = ['claude-opus-4-6', PANEL_DEFAULT_MODEL, 'claude-haiku-4-5-20251001'];
   if (!parsed.model || !validModels.includes(parsed.model)) {
     throw new Error(`Invalid model returned: ${parsed.model}`);
   }
@@ -2446,7 +2449,7 @@ Rules:
 - If current agents are already correct, return the same agents
 - Return valid JSON only, no extra text`;
 
-  const { reply } = await runClaudePromptViaApi(prompt, 'claude-sonnet-4-5-20250929', 120000);
+  const { reply } = await runClaudePromptViaApi(prompt, PANEL_DEFAULT_MODEL);
 
   const text = String(reply || '').trim();
   const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
@@ -2549,7 +2552,7 @@ async function fixTaskAll(client, task, env, boardConfig) {
       const hasAcs = /^\s*-\s*\[[ xX]\]/m.test(taskContent);
       if (hasAcs) {
         const prompt = buildFixTaskPrompt(task.id, task.name, taskContent, task._filePath);
-        await runClaudePromptViaApi(prompt, env.CLAUDE_DEFAULT_MODEL || 'claude-sonnet-4-5-20250929', 180000);
+        await runClaudePromptViaApi(prompt, env.CLAUDE_DEFAULT_MODEL || PANEL_DEFAULT_MODEL);
         results.push({ changes: 1, total: 1, failed: 0, message: 'ACs verified' });
       } else {
         results.push({ changes: 0, total: 1, failed: 0, message: 'No ACs to verify' });
@@ -2700,7 +2703,7 @@ app.post('/api/board/fix-task', async (req, res) => {
 
     // Generate unique group ID for progressive log tracking
     const groupId = `ac-fix-${taskId}-${Date.now()}`;
-    const claudeModel = task.model || env.CLAUDE_DEFAULT_MODEL || 'claude-sonnet-4-5-20250929';
+    const claudeModel = task.model || env.CLAUDE_DEFAULT_MODEL || PANEL_DEFAULT_MODEL;
     const startTime = Date.now();
 
     // Emit progressive log: start
@@ -3445,7 +3448,7 @@ Now examine the codebase and update the task file with accurate AC completion st
 
 app.post('/api/claude/chat', async (req, res) => {
   const message = String(req.body?.message || '').trim();
-  const model = req.body?.model || 'claude-sonnet-4-5-20250929';
+  const model = req.body?.model || PANEL_DEFAULT_MODEL;
 
   if (!message) {
     res.status(400).json({ ok: false, message: 'Message is required.' });
@@ -3918,7 +3921,7 @@ app.post('/api/board/review-task', async (req, res) => {
     }
 
     const prompt = buildReviewTaskPrompt({ name: name.trim(), priority, type, status, model, agents, body: body.trim(), boardContext });
-    const selectedModel = reviewModel || 'claude-sonnet-4-5-20250929';
+    const selectedModel = reviewModel || PANEL_DEFAULT_MODEL;
     const { reply } = await runClaudePromptViaApi(prompt, selectedModel);
     const parsed = parseReviewResponse(reply);
 
@@ -4020,7 +4023,7 @@ function parseStoryPlanResponse(reply) {
       name: s.name.trim(),
       priority: ['P0', 'P1', 'P2', 'P3'].includes(s.priority) ? s.priority : 'P1',
       type: ['Discovery', 'UserStory', 'Bug', 'Chore'].includes(s.type) ? s.type : 'UserStory',
-      model: s.model || 'claude-sonnet-4-5-20250929',
+      model: s.model || PANEL_DEFAULT_MODEL,
       brief: s.brief || '',
       dependsOn: Array.isArray(s.dependsOn) ? s.dependsOn : []
     }))
@@ -4320,7 +4323,7 @@ function parseFixEpicStoriesResponse(reply) {
       name: s.name.trim(),
       priority: ['P0', 'P1', 'P2', 'P3'].includes(s.priority) ? s.priority : 'P1',
       type: s.type || 'UserStory',
-      model: s.model || 'claude-sonnet-4-5-20250929',
+      model: s.model || PANEL_DEFAULT_MODEL,
       agents: Array.isArray(s.agents) ? s.agents : [],
       body: s.body
     });
@@ -4424,7 +4427,7 @@ app.post('/api/board/generate-stories', async (req, res) => {
       });
       let planReply;
       try {
-        ({ reply: planReply } = await runClaudePromptViaApi(planPrompt, 'claude-sonnet-4-5-20250929', 120000));
+        ({ reply: planReply } = await runClaudePromptViaApi(planPrompt, PANEL_DEFAULT_MODEL));
       } catch (planErr) {
         pushLog('error', LOG_SOURCE.claude, `Phase 1 (planning) failed for "${epicName}": ${planErr.message}`, {
           stderr: planErr.stderr || null,
@@ -4453,7 +4456,7 @@ app.post('/api/board/generate-stories', async (req, res) => {
             position: i
           });
 
-          const { reply: storyReply } = await runClaudePromptViaApi(storyPrompt, 'claude-sonnet-4-5-20250929', 90000);
+          const { reply: storyReply } = await runClaudePromptViaApi(storyPrompt, PANEL_DEFAULT_MODEL);
           const storyBody = parseSingleStoryBodyResponse(storyReply);
 
           const taskFields = {
@@ -4461,7 +4464,7 @@ app.post('/api/board/generate-stories', async (req, res) => {
             priority: outline.priority,
             type: outline.type || 'UserStory',
             status: 'Not Started',
-            model: outline.model || (outline.type === 'Discovery' ? 'claude-opus-4-6' : 'claude-sonnet-4-5-20250929')
+            model: outline.model || (outline.type === 'Discovery' ? 'claude-opus-4-6' : PANEL_DEFAULT_MODEL)
           };
 
           const fileName = generateStoryFileName(epicId, existingChildren.length + i, outline.name);
@@ -4545,7 +4548,7 @@ Rules:
 - "reason" is a brief explanation (max 15 words) of why that model fits
 - Return valid JSON only, no extra text`;
 
-  const { reply } = await runClaudePromptViaApi(prompt, 'claude-sonnet-4-5-20250929', 120000);
+  const { reply } = await runClaudePromptViaApi(prompt, PANEL_DEFAULT_MODEL);
 
   const text = String(reply || '').trim();
   const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
@@ -4562,7 +4565,7 @@ Rules:
     throw new Error('Expected a JSON array for model assignment');
   }
 
-  const validModels = ['claude-opus-4-6', 'claude-sonnet-4-5-20250929', 'claude-haiku-4-5-20251001'];
+  const validModels = ['claude-opus-4-6', PANEL_DEFAULT_MODEL, 'claude-haiku-4-5-20251001'];
   let fixed = 0;
   let failed = 0;
 
@@ -4628,7 +4631,7 @@ Rules:
 - If a task's current agents are already correct, assign the same agents
 - Return valid JSON only, no extra text`;
 
-  const { reply } = await runClaudePromptViaApi(prompt, 'claude-sonnet-4-5-20250929', 120000);
+  const { reply } = await runClaudePromptViaApi(prompt, PANEL_DEFAULT_MODEL);
 
   const text = String(reply || '').trim();
   const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
@@ -4761,7 +4764,7 @@ async function fixEpicStoriesLogic(client, epicId, children, epicMarkdown) {
   }
 
   const prompt = buildFixEpicStoriesPrompt({ epicName, stories: allStories });
-  const { reply } = await runClaudePromptViaApi(prompt, 'claude-sonnet-4-5-20250929');
+  const { reply } = await runClaudePromptViaApi(prompt, PANEL_DEFAULT_MODEL);
   const fixedStories = parseFixEpicStoriesResponse(reply);
 
   const matchedPairs = [];
@@ -4876,7 +4879,7 @@ async function fixEpicAcs(client, children, env) {
 
     try {
       pushLog('info', LOG_SOURCE.panel, `  Verifying "${child.name}" (${checked}/${checked + unchecked} ACs, status: ${status})...`);
-      await runClaudePromptViaApi(prompt, env.CLAUDE_DEFAULT_MODEL || 'claude-sonnet-4-5-20250929', 180000);
+      await runClaudePromptViaApi(prompt, env.CLAUDE_DEFAULT_MODEL || PANEL_DEFAULT_MODEL);
       verified++;
       pushLog('info', LOG_SOURCE.panel, `  AC verification complete for "${child.name}"`);
     } catch (err) {
@@ -5132,7 +5135,7 @@ app.post('/api/board/fix-epic-stories', async (req, res) => {
       stories: allStories
     });
 
-    const { reply } = await runClaudePromptViaApi(prompt, 'claude-sonnet-4-5-20250929');
+    const { reply } = await runClaudePromptViaApi(prompt, PANEL_DEFAULT_MODEL);
     const fixedStories = parseFixEpicStoriesResponse(reply);
 
     // Phase 1: Update content for each story
@@ -5332,7 +5335,7 @@ async function autoCompactMessages(session, logger) {
 
   try {
     const compactPrompt = buildCompactionPrompt(toCompact, session.plan);
-    const { reply: summary } = await runClaudePromptViaApi(compactPrompt, 'claude-haiku-4-5-20251001', 30000);
+    const { reply: summary } = await runClaudePromptViaApi(compactPrompt, 'claude-haiku-4-5-20251001');
     const trimmedSummary = String(summary || '').trim();
 
     if (!trimmedSummary || trimmedSummary.length < 50) {
@@ -6467,7 +6470,7 @@ app.post('/api/ideas/generate-epics', async (req, res) => {
             section.section, section.index, epicSections.length, plan, boardContext
           );
           pushLog('info', LOG_SOURCE.panel, `Agent started: Epic ${section.index} — ${section.name}`);
-          return runClaudePromptViaApi(prompt, 'claude-sonnet-4-5-20250929', 120000);
+          return runClaudePromptViaApi(prompt, PANEL_DEFAULT_MODEL);
         })
       );
 
@@ -6498,7 +6501,7 @@ app.post('/api/ideas/generate-epics', async (req, res) => {
       const prompt = plan
         ? buildPlanToEpicsPrompt(plan, session.messages, boardContext)
         : buildIdeasToEpicsPrompt(session.messages, boardContext);
-      const { reply } = await runClaudePromptViaApi(prompt, 'claude-opus-4-6', 180000);
+      const { reply } = await runClaudePromptViaApi(prompt, 'claude-opus-4-6');
       epics = parseIdeasToEpicsResponse(reply);
     }
 
@@ -6537,7 +6540,7 @@ app.post('/api/ideas/generate-epics', async (req, res) => {
     try {
       const workdir = path.resolve(cwd, env.CLAUDE_WORKDIR || '.');
       const contextPrompt = buildProjectContextPrompt(plan || '', session.messages);
-      const { reply: contextReply } = await runClaudePromptViaApi(contextPrompt, 'claude-opus-4-6', 120000);
+      const { reply: contextReply } = await runClaudePromptViaApi(contextPrompt, 'claude-opus-4-6');
       const projectContext = String(contextReply || '').trim();
       if (projectContext) {
         claudeMdAction = await writeProjectContextToClaudeMd(projectContext, workdir);
