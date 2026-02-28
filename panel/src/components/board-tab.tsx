@@ -1736,10 +1736,10 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                           boxShadow: !expanded && isPeek ? '0 1px 2px rgba(0,0,0,0.06)' : undefined,
                                         }}
                                       >
-                                        {/* Pull card up when collapsed so its own rounded top hides above the clip edge */}
+                                        {/* Slide card up when collapsed so only its bottom edge peeks out */}
                                         <div style={{
-                                          marginTop: expanded ? 0 : isPeek ? -12 : 0,
-                                          transition: expanded ? 'margin-top 350ms ease' : 'margin-top 250ms ease',
+                                          transform: expanded ? 'translateY(0)' : isPeek ? `translateY(calc(-100% + ${peekHeight}px))` : 'translateY(-100%)',
+                                          transition: expanded ? 'transform 350ms ease' : 'transform 250ms ease',
                                         }}>
                                           <BoardCard
                                             task={child}
