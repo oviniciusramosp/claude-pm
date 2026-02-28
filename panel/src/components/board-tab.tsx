@@ -1694,7 +1694,14 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   />
                                 </div>
                                 {/* Children — CSS-transition-driven stacking deck / expanded list */}
-                                <div className="flex flex-col" style={{ marginTop: expanded ? 8 : -2, transition: 'margin-top 350ms ease' }}>
+                                <div
+                                  className="relative flex flex-col"
+                                  style={{
+                                    zIndex: expanded ? undefined : 10,
+                                    marginTop: expanded ? 8 : -6,
+                                    transition: 'margin-top 350ms ease',
+                                  }}
+                                >
                                   {children.map((child, i) => {
                                     const total = children.length;
                                     const isPeek = !expanded && i < 2;
@@ -1704,7 +1711,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                         key={child.id}
                                         className="overflow-hidden"
                                         style={{
-                                          maxHeight: expanded ? 200 : isPeek ? 12 : 0,
+                                          maxHeight: expanded ? 200 : isPeek ? 10 : 0,
                                           transform: expanded
                                             ? 'scale(1)'
                                             : isPeek
@@ -1713,14 +1720,16 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                           transformOrigin: 'center top',
                                           opacity: expanded ? 1 : isHidden ? 0 : 1,
                                           marginTop: i === 0 ? 0 : expanded ? 8 : isPeek ? -2 : 0,
-                                          borderRadius: 'var(--board-card-radius)',
+                                          borderRadius: expanded
+                                            ? 'var(--board-card-radius)'
+                                            : '0 0 var(--board-card-radius) var(--board-card-radius)',
                                           pointerEvents: expanded ? 'auto' : 'none',
-                                          zIndex: expanded ? undefined : 30 - i * 5,
-                                          transition: 'max-height 400ms ease, transform 400ms ease, opacity 300ms ease, margin-top 350ms ease',
+                                          zIndex: expanded ? undefined : 20 - i * 5,
+                                          transition: 'max-height 400ms ease, transform 400ms ease, opacity 300ms ease, margin-top 350ms ease, border-radius 300ms ease',
                                           transitionDelay: expanded
                                             ? `${i * 60}ms`
                                             : `${Math.max(0, total - 1 - i) * 40}ms`,
-                                          boxShadow: !expanded && isPeek ? '0 1px 3px rgba(0,0,0,0.08)' : undefined,
+                                          boxShadow: !expanded && isPeek ? '0 2px 4px rgba(0,0,0,0.06)' : undefined,
                                         }}
                                       >
                                         <BoardCard
