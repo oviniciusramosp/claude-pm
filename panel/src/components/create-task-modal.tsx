@@ -1,7 +1,7 @@
 // panel/src/components/create-task-modal.tsx
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Beaker01, CornerUpLeft, CpuChip01, File06, Folder, Stars01, Target02, Zap } from '@untitledui/icons';
+import { AlertTriangle, Beaker01, CornerUpLeft, CpuChip01, Folder, Stars01, Target02, Zap } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
@@ -100,7 +100,7 @@ const STATUS_OPTIONS: SelectOption[] = [
 ];
 
 const inputClasses = 'w-full rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary shadow-xs focus:border-brand-solid focus:outline-none focus:ring-1 focus:ring-brand-solid';
-const labelClasses = 'block text-sm font-medium text-secondary mb-1';
+const labelClasses = 'block text-xs uppercase tracking-wider font-semibold text-tertiary mb-2';
 
 export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreated, tasks, defaultEpicId, onShowErrorDetail }: CreateTaskModalProps) {
   const [name, setName] = useState('');
@@ -423,17 +423,16 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
       <Modal className="sm:max-w-xl">
         <Dialog>
           <div
-            className="w-full rounded-xl border border-secondary bg-primary shadow-2xl"
+            className="w-full rounded-2xl bg-primary shadow-2xl"
             onKeyDown={(e) => { if (!saving && !reviewing) handleModalKeyDown(e, handleCreate); }}
           >
             {/* Header */}
             <div className="flex items-center gap-2 border-b border-secondary px-6 py-4">
-              <Icon icon={File06} className="size-5 text-tertiary" />
               <h3 className="text-lg font-semibold text-primary">New Task</h3>
             </div>
 
             {/* Form */}
-            <div className="max-h-[60vh] overflow-y-auto px-6 py-5 space-y-4">
+            <div className="max-h-[60vh] overflow-y-auto px-6 py-5 space-y-5">
               {/* Name */}
               <div>
                 <label className={labelClasses}>Name *</label>
@@ -610,7 +609,7 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
             )}
 
             {/* Footer */}
-            <div className="flex justify-end gap-2 border-t border-secondary px-6 py-3">
+            <div className="flex justify-end gap-2 border-t border-secondary px-6 py-4">
               <Button size="md" color="secondary" onPress={handleCloseAttempt} isDisabled={saving}>
                 Cancel
               </Button>

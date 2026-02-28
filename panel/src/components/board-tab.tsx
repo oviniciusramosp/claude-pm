@@ -1,7 +1,7 @@
 // panel/src/components/board-tab.tsx
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle, ChevronDown, Columns03, CpuChip01, Folder, FolderPlus, Lightbulb02, Plus, RefreshCw01, Stars01, Target02, Tool01, Users01 } from '@untitledui/icons';
+import { CheckCircle, ChevronDown, CpuChip01, Folder, FolderPlus, Lightbulb02, Plus, RefreshCw01, Stars01, Target02, Tool01, Users01 } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { Tooltip, TooltipTrigger } from './base/tooltip/tooltip';
@@ -10,7 +10,6 @@ import { Icon } from './icon';
 import {
   BOARD_COLUMNS,
   BOARD_PRIORITY_COLORS,
-  BOARD_TYPE_COLORS,
   BOARD_POLL_INTERVAL_MS
 } from '../constants';
 import { TaskDetailModal } from './task-detail-modal';
@@ -43,12 +42,6 @@ interface BoardError {
   httpStatus: number | null;
 }
 
-const COLUMN_HEADER_COLORS: Record<string, string> = {
-  missing_status: 'bg-utility-warning-50 text-utility-warning-700',
-  not_started: 'bg-utility-gray-50 text-utility-gray-700',
-  in_progress: 'bg-utility-brand-50 text-utility-brand-700',
-  done: 'bg-utility-success-50 text-utility-success-700'
-};
 
 function isEpic(task: BoardTask, allTasks: BoardTask[]): boolean {
   if (task.type?.toLowerCase() === 'epic') return true;
@@ -116,14 +109,6 @@ function extractTaskCode(task: BoardTask): string | null {
   return null;
 }
 
-function formatModelName(model: string): string | null {
-  if (!model) return null;
-  const match = model.match(/claude-(\w+)-(\d+)-(\d+)/);
-  if (match) {
-    return `${match[1].charAt(0).toUpperCase()}${match[1].slice(1)} ${match[2]}.${match[3]}`;
-  }
-  return model;
-}
 
 function AcDonut({ done, total, label = 'ACs' }: { done: number; total: number; label?: string }) {
   const size = 20;
@@ -381,7 +366,7 @@ function TaskFixDropdown({
             'transition-opacity rounded-md p-1.5 shadow-sm',
             isAnyOperationRunning
               ? 'bg-utility-gray-100 border border-utility-gray-200 cursor-not-allowed opacity-60'
-              : 'bg-utility-brand-50 hover:bg-utility-brand-100 border border-utility-brand-200',
+              : 'hover:bg-secondary',
             isFixing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
           )}
         >
@@ -457,12 +442,9 @@ interface BoardCardProps {
 
 function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStatuses, showAddStatus, onAddStatus, addingStatus, onDragStart, onDragEnd, dragging, fixingTaskType, isGlobalOperationRunning }: BoardCardProps) {
   const priorityColor = BOARD_PRIORITY_COLORS[task.priority] as any;
-  const typeColor = BOARD_TYPE_COLORS[task.type] as any;
   const taskCode = extractTaskCode(task);
-  const modelLabel = formatModelName(task.model);
   const parentEpic = task.parentId ? allTasks.find((t) => t.id === task.parentId) : null;
   const parentEpicCode = parentEpic ? extractTaskCode(parentEpic) : null;
-  const parentEpicInProgress = parentEpic && parentEpic.status.toLowerCase() === 'in progress';
 
   const isFixing = fixStatus?.status === 'running';
 
@@ -484,10 +466,8 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
       onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; onDragStart?.(); }}
       onDragEnd={() => onDragEnd?.()}
       className={cx(
-        'group relative cursor-pointer rounded-lg border bg-primary p-2.5 shadow-xs transition hover:shadow-md hover:border-brand-solid sm:p-3',
-        epic ? 'border-l-4 border-l-utility-purple-500 border-secondary'
-          : parentEpicInProgress ? 'border-utility-brand-200'
-          : 'border-secondary',
+        'group relative cursor-pointer rounded-xl bg-primary p-4 shadow-sm transition-all duration-200 ease-out hover:shadow-lg',
+        epic && 'border-l-2 border-l-purple-300',
         dragging && 'opacity-50'
       )}
     >
@@ -506,10 +486,14 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
 
       {/* Row 2: Title + AC chart + Fix button */}
       <div className="flex items-start gap-2">
-        <p className="text-xs font-medium text-primary flex-1 min-w-0 sm:text-sm">
-          {taskCode && <span className="text-tertiary font-mono mr-2">{taskCode}</span>}
-          {task.name}
-        </p>
+        <div className="flex-1 min-w-0">
+          {taskCode && (
+            <div className="text-[11px] text-quaternary font-mono tracking-wide mb-0.5">{taskCode}</div>
+          )}
+          <p className="text-sm font-medium text-primary">
+            {task.name}
+          </p>
+        </div>
         <div className="flex items-center gap-2 shrink-0">
           {onFix && !epic && (
             <TaskFixDropdown
@@ -531,50 +515,25 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
         </div>
       )}
 
-      {/* Row 3: Type + Priority */}
-      {(task.type || task.priority) && (
+      {/* Row 3: Priority only */}
+      {task.priority && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          {task.type && (
-            <Badge size="sm" color={typeColor || 'gray'} className="ring-0 font-mono text-[10px]">
-              {task.type}
-            </Badge>
-          )}
-          {task.priority && (
-            <Badge size="sm" color={priorityColor || 'gray'} className="ring-0 font-mono text-[10px]">
-              {task.priority}
-            </Badge>
-          )}
+          <Badge size="sm" color={priorityColor || 'gray'} className="ring-0 font-mono text-xs">
+            {task.priority}
+          </Badge>
         </div>
       )}
 
-      {/* Row 4: Agents + Model (only for non-Epic tasks) */}
-      {!epic && (task.agents.length > 0 || modelLabel) && (
-        <div className="mt-2 flex items-center gap-3 text-xs text-tertiary">
-          {task.agents.length > 0 && (
-            <div className="flex items-center gap-1 min-w-0">
-              <Icon icon={Users01} className="size-3 shrink-0" />
-              <span className="truncate">{task.agents.join(', ')}</span>
-            </div>
-          )}
-          {modelLabel && (
-            <div className="flex items-center gap-1 min-w-0">
-              <Icon icon={CpuChip01} className="size-3 shrink-0" />
-              <span className="truncate">{modelLabel}</span>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
 
 function SkeletonCard() {
   return (
-    <div className="animate-pulse rounded-lg border border-secondary bg-primary p-3">
+    <div className="animate-pulse rounded-xl bg-primary p-4 shadow-sm">
       <div className="h-4 w-3/4 rounded bg-quaternary" />
-      <div className="mt-2 flex gap-2">
+      <div className="mt-3 flex gap-2">
         <div className="h-5 w-8 rounded-full bg-quaternary" />
-        <div className="h-5 w-16 rounded-full bg-quaternary" />
       </div>
     </div>
   );
@@ -1157,12 +1116,11 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
       {!setupComplete && <SetupRequiredBanner onNavigateToSetup={onNavigateToSetup} />}
 
       {/* Header */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2 min-w-0">
-          <Icon icon={Columns03} className="size-5 shrink-0 text-tertiary" />
-          <h2 className="truncate text-lg font-semibold text-primary">Board</h2>
+          <h2 className="truncate text-2xl font-bold text-primary tracking-tight">Board</h2>
         </div>
-        <div className="flex items-center gap-1 shrink-0 sm:gap-2">
+        <div className="flex items-center gap-2 shrink-0 sm:gap-3">
           <Tooltip title="Idea to Epics" description="Brainstorm product ideas with Claude and generate Epics">
             <TooltipTrigger
               onPress={() => setIdeaModalOpen(true)}
@@ -1242,7 +1200,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
 
       {/* Error state */}
       {showErrorBanner && (
-        <div className="rounded-lg border border-dashed border-error-primary bg-utility-error-50 p-8 text-center">
+        <div className="rounded-xl bg-utility-error-50 p-8 text-center">
           <p className="text-sm font-medium text-error-primary">{boardError.message}</p>
           <div className="mt-3 flex items-center justify-center gap-2">
             <Button size="sm" color="secondary" onPress={() => fetchBoard()}>
@@ -1257,30 +1215,34 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
 
       {/* Board columns */}
       {showBoard && (
-        <div className={cx('flex h-[calc(100vh-280px)] snap-x snap-mandatory gap-4 overflow-x-auto pb-4 sm:snap-none sm:grid sm:overflow-x-visible sm:pb-0 lg:h-[calc(100vh-220px)]', columns.length >= 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3 lg:grid-cols-3')}>
+        <div className={cx('flex h-[calc(100vh-280px)] snap-x snap-mandatory gap-5 overflow-x-auto pb-4 sm:snap-none sm:grid sm:overflow-x-visible sm:pb-0 lg:h-[calc(100vh-220px)]', columns.length >= 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3 lg:grid-cols-3')}>
           {columns.map((col) => (
             <div
               key={col.key}
-              className="flex w-[85vw] shrink-0 snap-center flex-col rounded-lg border border-secondary bg-primary shadow-xs overflow-hidden sm:w-auto sm:shrink"
+              className="flex w-[85vw] shrink-0 snap-center flex-col rounded-2xl border border-secondary bg-secondary overflow-hidden sm:w-auto sm:shrink"
             >
               {/* Column header - fixed */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-secondary shrink-0">
-                <span
-                  className={cx(
-                    'inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold',
-                    COLUMN_HEADER_COLORS[col.key]
-                  )}
-                >
-                  {col.label}
-                </span>
-                <span className="text-xs font-medium text-quaternary">{col.tasks.length}</span>
+                <div className="flex items-center gap-2">
+                  <span
+                    className="size-2 rounded-full shrink-0"
+                    style={{
+                      backgroundColor: col.key === 'not_started' ? '#9CA3AF'
+                        : col.key === 'in_progress' ? 'rgb(239 104 32)'
+                        : col.key === 'done' ? '#22C55E'
+                        : '#F59E0B'
+                    }}
+                  />
+                  <span className="text-sm font-semibold text-primary">{col.label}</span>
+                  <span className="text-sm text-quaternary font-normal">{col.tasks.length}</span>
+                </div>
               </div>
 
               {/* Cards - scrollable (drop zone) */}
               <div
                 className={cx(
-                  'flex-1 overflow-y-auto p-4 transition-colors',
-                  dragOverColumn === col.key && col.statusMatch !== null && 'bg-utility-brand-50/30 ring-2 ring-inset ring-brand-solid rounded-b-lg'
+                  'flex-1 overflow-y-auto scrollbar-hide p-4 transition-colors',
+                  dragOverColumn === col.key && col.statusMatch !== null && 'bg-tertiary/40 rounded-b-2xl'
                 )}
                 onDragOver={(e) => {
                   if (col.statusMatch === null) return;
@@ -1294,14 +1256,14 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                   handleDrop(col.key);
                 }}
               >
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-3">
                   {loading && tasks.length === 0 ? (
                     <>
                       <SkeletonCard />
                       <SkeletonCard />
                     </>
                   ) : col.tasks.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-secondary p-4 text-center text-sm text-quaternary">
+                    <div className="py-8 text-center text-sm text-quaternary">
                       No tasks
                     </div>
                   ) : (
@@ -1555,7 +1517,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                 )}
                               </div>
                                 {expanded && (
-                                  <div className="ml-2 border-l-2 border-utility-purple-200 pl-2 flex flex-col gap-2">
+                                  <div className="ml-4 border-l border-secondary pl-4 flex flex-col gap-3">
                                     {children.map((child) => (
                                       <BoardCard
                                         key={child.id}

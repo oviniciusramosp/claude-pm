@@ -1,7 +1,7 @@
 // panel/src/components/commit-detail-modal.tsx
 
 import { useCallback, useEffect, useState } from 'react';
-import { Clock, Copy01, GitCommit, User01, X } from '@untitledui/icons';
+import { Clock, Copy01, User01, X } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
@@ -83,14 +83,13 @@ export function CommitDetailModal({ open, onClose, commit, apiBaseUrl, showToast
       <Modal className="sm:max-w-2xl">
         <Dialog>
           <div
-            className="w-full rounded-xl border border-secondary bg-primary shadow-2xl"
+            className="w-full rounded-2xl bg-primary shadow-2xl"
             onKeyDown={(e) => handleModalKeyDown(e, onClose)}
           >
             {/* Header */}
             <div className="flex items-start justify-between gap-3 border-b border-secondary px-6 py-4">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <Icon icon={GitCommit} className="size-5 shrink-0 text-tertiary" />
                   <h3 className="m-0 truncate text-lg font-semibold text-primary">
                     {commit?.subject || 'Commit'}
                   </h3>
@@ -98,23 +97,23 @@ export function CommitDetailModal({ open, onClose, commit, apiBaseUrl, showToast
                 {commit && (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     {commit.conventional && (
-                      <Badge size="sm" color={(typeColor || 'gray') as any} className="ring-0 font-mono text-[10px]">
+                      <Badge size="sm" color={(typeColor || 'gray') as any} className="ring-0 font-mono text-xs">
                         {commit.conventional.type}
                         {commit.conventional.scope ? `(${commit.conventional.scope})` : ''}
                       </Badge>
                     )}
                     {commit.isAutomation && (
-                      <Badge size="sm" color="brand" className="ring-0 font-mono text-[10px]">Automation</Badge>
+                      <Badge size="sm" color="brand" className="ring-0 font-mono text-xs">Automation</Badge>
                     )}
                     {commit.taskId && (
-                      <Badge size="sm" color="gray" className="ring-0 font-mono text-[10px]">{commit.taskId}</Badge>
+                      <Badge size="sm" color="gray" className="ring-0 font-mono text-xs">{commit.taskId}</Badge>
                     )}
                   </div>
                 )}
               </div>
               <button
                 type="button"
-                className="shrink-0 rounded-sm p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary"
+                className="shrink-0 rounded-full p-1.5 text-tertiary transition bg-secondary hover:bg-tertiary hover:text-secondary"
                 onClick={onClose}
                 aria-label="Close"
               >
@@ -154,7 +153,7 @@ export function CommitDetailModal({ open, onClose, commit, apiBaseUrl, showToast
                   {commit.refs.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                       {commit.refs.map((ref, i) => (
-                        <Badge key={i} size="sm" color={ref.startsWith('tag:') ? 'orange' : 'indigo'} className="ring-0 font-mono text-[10px]">
+                        <Badge key={i} size="sm" color={ref.startsWith('tag:') ? 'orange' : 'indigo'} className="ring-0 font-mono text-xs">
                           {ref}
                         </Badge>
                       ))}
@@ -195,7 +194,7 @@ export function CommitDetailModal({ open, onClose, commit, apiBaseUrl, showToast
             </div>
 
             {/* Footer */}
-            <div className="flex justify-end border-t border-secondary px-6 py-3">
+            <div className="flex justify-end border-t border-secondary px-6 py-4">
               <Button size="md" color="secondary" onPress={onClose}>
                 Close
               </Button>

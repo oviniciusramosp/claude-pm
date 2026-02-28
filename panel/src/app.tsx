@@ -225,9 +225,9 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
     setMode(isDark ? 'light' : 'dark');
   }, [isDark, setMode]);
 
-  const showToast = useCallback((message: string, color: 'success' | 'warning' | 'danger' | 'neutral' = 'success') => {
+  const showToast = useCallback((message: string, color: 'success' | 'warning' | 'danger' | 'neutral' = 'success', duration: number | null = 30000) => {
     const id = `toast-${Date.now()}-${Math.random()}`;
-    setToasts((prev) => [...prev, { id, message, color }]);
+    setToasts((prev) => [...prev, { id, message, color, duration }]);
 
     if (color === 'danger') {
       setCollectedErrors((prev) => [...prev, {

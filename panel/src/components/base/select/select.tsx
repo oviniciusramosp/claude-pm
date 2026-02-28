@@ -199,7 +199,7 @@ export function Select({
       {isOpen && (
         <div
           ref={dropdownRef}
-          className="absolute top-full left-0 z-50 mt-1 w-full min-w-[200px] max-h-64 overflow-y-auto rounded-lg border border-secondary bg-primary shadow-lg"
+          className="absolute top-full left-0 z-50 mt-1 w-full min-w-[200px] max-h-64 overflow-y-auto rounded-xl bg-primary shadow-xl"
           role="listbox"
         >
           {options.map((option, index) => {

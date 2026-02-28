@@ -58,6 +58,8 @@ export interface Toast {
   id: string;
   message: string;
   color: 'success' | 'warning' | 'danger' | 'neutral';
+  /** Duration in ms before auto-dismiss. null = persist forever. Default: 30000 */
+  duration?: number | null;
 }
 
 export type ToastState = Toast[];

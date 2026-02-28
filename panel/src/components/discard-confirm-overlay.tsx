@@ -33,7 +33,7 @@ export function DiscardConfirmOverlay({ open, reviewing, onKeepEditing, onDiscar
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className="rounded-xl border border-secondary bg-primary p-6 shadow-2xl max-w-sm outline-hidden"
+        className="rounded-2xl bg-primary p-8 shadow-2xl max-w-sm outline-hidden"
         onClick={(e) => {
           // Prevent clicks on the dialog from closing it
           e.stopPropagation();

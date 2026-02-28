@@ -259,10 +259,10 @@ export const LOG_SOURCE_META: Record<string, LogSourceMeta> = {
 };
 
 export const TOAST_TONE_CLASSES: Record<string, string> = {
-  neutral: 'border-secondary bg-primary text-secondary',
-  success: 'border-transparent bg-utility-success-50 text-success-primary',
-  warning: 'border-transparent bg-utility-warning-50 text-warning-primary',
-  danger: 'border-transparent bg-utility-error-50 text-error-primary'
+  neutral: 'border-white/10 bg-white/10 text-secondary backdrop-blur-md',
+  success: 'border-white/10 bg-utility-success-50/80 text-success-primary backdrop-blur-md',
+  warning: 'border-white/10 bg-utility-warning-50/80 text-warning-primary backdrop-blur-md',
+  danger: 'border-white/10 bg-utility-error-50/80 text-error-primary backdrop-blur-md'
 };
 
 export const PROCESS_ACTION_BUTTON_CLASS = 'w-24 justify-center';
@@ -276,16 +276,16 @@ export const BOARD_COLUMNS = [
 
 export const BOARD_PRIORITY_COLORS: Record<string, string> = {
   P0: 'error',
-  P1: 'warning',
-  P2: 'blue',
+  P1: 'gray',
+  P2: 'gray',
   P3: 'gray'
 };
 
 export const BOARD_TYPE_COLORS: Record<string, string> = {
   Epic: 'purple',
-  UserStory: 'brand',
+  UserStory: 'gray',
   Defect: 'error',
-  Discovery: 'indigo'
+  Discovery: 'gray'
 };
 
 export const BOARD_POLL_INTERVAL_MS = 30_000;

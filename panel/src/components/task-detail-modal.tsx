@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { marked } from 'marked';
-import { AlertTriangle, Beaker01, CornerUpLeft, CpuChip01, Edit05, File06, Folder, Stars01, Target02, Trash01, Users01, X, Zap } from '@untitledui/icons';
+import { AlertTriangle, Beaker01, CornerUpLeft, CpuChip01, Edit05, Folder, Stars01, Target02, Trash01, Users01, X, Zap } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
@@ -59,7 +59,7 @@ const STATUS_OPTIONS: SelectOption[] = [
 ];
 
 const inputClasses = 'w-full rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary shadow-xs focus:border-brand-solid focus:outline-none focus:ring-1 focus:ring-brand-solid';
-const labelClasses = 'block text-sm font-medium text-secondary mb-1';
+const labelClasses = 'block text-xs uppercase tracking-wider font-semibold text-tertiary mb-2';
 
 // --- Frontmatter parser (client-side, mirrors src/local/frontmatter.js) ---
 function parseFrontmatter(content: string): { frontmatter: Record<string, string>; body: string } {
@@ -500,7 +500,7 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
       <Modal className="sm:max-w-2xl">
         <Dialog>
           <div
-            className="w-full rounded-xl border border-secondary bg-primary shadow-2xl"
+            className="w-full rounded-2xl bg-primary shadow-2xl"
             onKeyDown={(e) => {
               if (editing) {
                 if (!saving && !reviewing) handleModalKeyDown(e, handleSave);
@@ -513,7 +513,6 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
             <div className="flex items-start justify-between gap-3 border-b border-secondary px-6 py-4">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <Icon icon={File06} className="size-5 shrink-0 text-tertiary" />
                   <h3 className="m-0 truncate text-lg font-semibold text-primary">
                     {editing ? editName || 'Task' : (task?.name || 'Task')}
                   </h3>
@@ -521,17 +520,17 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                 {!editing && task && (task.priority || task.type || task.status) && (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     {task.priority && (
-                      <Badge size="sm" color={(priorityColor || 'gray') as any} className="ring-0 font-mono text-[10px]">
+                      <Badge size="sm" color={(priorityColor || 'gray') as any} className="ring-0 font-mono text-xs">
                         {task.priority}
                       </Badge>
                     )}
                     {task.type && (
-                      <Badge size="sm" color={(typeColor || 'gray') as any} className="ring-0 font-mono text-[10px]">
+                      <Badge size="sm" color={(typeColor || 'gray') as any} className="ring-0 font-mono text-xs">
                         {task.type}
                       </Badge>
                     )}
                     {task.status && (
-                      <Badge size="sm" color="gray" className="ring-0 font-mono text-[10px]">
+                      <Badge size="sm" color="gray" className="ring-0 font-mono text-xs">
                         {task.status}
                       </Badge>
                     )}
@@ -556,7 +555,7 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
               </div>
               <button
                 type="button"
-                className="shrink-0 rounded-sm p-2 text-tertiary transition hover:bg-primary_hover hover:text-secondary"
+                className="shrink-0 rounded-full p-1.5 text-tertiary transition bg-secondary hover:bg-tertiary hover:text-secondary"
                 onClick={handleCloseAttempt}
                 aria-label="Close"
               >
@@ -579,7 +578,7 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
               )}
 
               {!loading && !error && editing && (
-                <div className="space-y-4">
+                <div className="space-y-5">
                   {/* Name */}
                   <div>
                     <label className={labelClasses}>Name *</label>
@@ -727,7 +726,7 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
             )}
 
             {/* Footer */}
-            <div className="flex items-center border-t border-secondary px-6 py-3">
+            <div className="flex items-center border-t border-secondary px-6 py-4">
               {/* Left side: Delete */}
               {!editing && !loading && (
                 <div className="flex items-center gap-2">
