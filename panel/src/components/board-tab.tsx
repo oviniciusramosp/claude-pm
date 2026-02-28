@@ -1608,7 +1608,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   </>
                                 )}
                                 {/* Expanded children with smooth CSS grid animation */}
-                                <div className={cx('grid transition-all duration-300 ease-out', expanded ? 'grid-rows-[1fr] mt-2' : 'grid-rows-[0fr]')}>
+                                <div className={cx('grid transition-all duration-500 ease-in-out', expanded ? 'grid-rows-[1fr] mt-2' : 'grid-rows-[0fr]')}>
                                   <div className="overflow-hidden">
                                     <div className="flex flex-col gap-2">
                                       {children.map((child) => (
