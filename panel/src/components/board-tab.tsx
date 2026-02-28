@@ -473,23 +473,26 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
         dragging && 'opacity-50'
       )}
     >
-      {/* Row 1: Epic reference (only for child tasks) */}
+      {/* Row 1: Epic reference + task code on same line (only for child tasks) */}
       {parentEpic && (
-        <div className="flex items-center gap-2 mb-2">
-          <div className="flex items-center gap-1 text-xs text-tertiary truncate min-w-0">
+        <Tooltip title={parentEpic.name} placement="top">
+          <TooltipTrigger className="flex items-center gap-1 mb-2 text-[11px] text-quaternary font-mono tracking-wide cursor-default">
             <Icon icon={Folder} className="size-3 shrink-0" />
-            <span className="truncate">
-              {parentEpicCode && <span className="font-mono mr-1">{parentEpicCode}</span>}
-              {parentEpic.name}
-            </span>
-          </div>
-        </div>
+            {parentEpicCode && <span>{parentEpicCode}</span>}
+            {taskCode && (
+              <>
+                <span className="opacity-40">|</span>
+                <span>{taskCode}</span>
+              </>
+            )}
+          </TooltipTrigger>
+        </Tooltip>
       )}
 
       {/* Row 2: Title + AC chart + Fix button */}
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
-          {taskCode && (
+          {!parentEpic && taskCode && (
             <div className="text-[11px] text-quaternary font-mono tracking-wide mb-0.5">{taskCode}</div>
           )}
           <p className="text-sm font-medium text-primary">
