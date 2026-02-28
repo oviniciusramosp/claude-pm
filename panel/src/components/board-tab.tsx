@@ -120,6 +120,12 @@ function formatModelName(model: string): string {
   return model;
 }
 
+const PRIORITY_INLINE_COLORS: Record<string, string> = {
+  P0: 'text-utility-error-600',
+  P1: 'text-utility-warning-600',
+  P2: 'text-utility-blue-600',
+};
+
 function AcDonut({ done, total, label = 'ACs' }: { done: number; total: number; label?: string }) {
   const size = 20;
   const stroke = 2.5;
@@ -482,7 +488,21 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
         dragging && 'opacity-50'
       )}
     >
-      {/* Row 1: Epic reference + task code + priority on same line (only for child tasks) */}
+      {/* Row 1: Epic code + priority (epic cards) */}
+      {epic && taskCode && (
+        <div className="flex items-center gap-1 mb-2 text-[11px] text-quaternary font-mono tracking-wide">
+          <Icon icon={Folder} className="size-3 shrink-0" />
+          <span>{taskCode}</span>
+          {task.priority && (
+            <>
+              <span className="opacity-40">·</span>
+              <span className={PRIORITY_INLINE_COLORS[task.priority] || ''}>{task.priority}</span>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Row 1: Epic reference + task code + priority (child task cards) */}
       {parentEpic && (
         <Tooltip title={parentEpic.name} placement="top">
           <TooltipTrigger className="flex items-center gap-1 mb-2 text-[11px] text-quaternary font-mono tracking-wide cursor-default">
@@ -490,14 +510,14 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
             {parentEpicCode && <span>{parentEpicCode}</span>}
             {taskCode && (
               <>
-                <span className="opacity-40">|</span>
+                <span className="opacity-40">/</span>
                 <span>{taskCode}</span>
               </>
             )}
             {task.priority && (
               <>
                 <span className="opacity-40">·</span>
-                <span>{task.priority}</span>
+                <span className={PRIORITY_INLINE_COLORS[task.priority] || ''}>{task.priority}</span>
               </>
             )}
           </TooltipTrigger>
@@ -507,18 +527,28 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
       {/* Row 2: Title + AC chart + Fix button */}
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
-          {!parentEpic && taskCode && (
+          {!parentEpic && !epic && taskCode && (
             <div className="text-[11px] text-quaternary font-mono tracking-wide mb-0.5">{taskCode}</div>
           )}
           <p className="text-sm font-medium text-primary">
             {task.name}
           </p>
           {/* Agents + model below task name */}
-          {!epic && (task.agents?.length > 0 || task.model) && (
-            <div className="mt-0.5 flex items-center gap-1 text-[11px] text-quaternary truncate">
-              {task.agents?.length > 0 && <span>{task.agents.join(', ')}</span>}
-              {task.agents?.length > 0 && task.model && <span className="opacity-40">·</span>}
-              {task.model && <span className="font-mono">{formatModelName(task.model)}</span>}
+          {(task.agents?.length > 0 || task.model) && (
+            <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-quaternary truncate">
+              {task.agents?.length > 0 && (
+                <>
+                  <Icon icon={Users01} className="size-3 shrink-0" />
+                  <span>{task.agents.map(a => a.charAt(0).toUpperCase() + a.slice(1)).join(', ')}</span>
+                </>
+              )}
+              {task.agents?.length > 0 && task.model && <span className="opacity-30 mx-0.5">·</span>}
+              {task.model && (
+                <>
+                  <Icon icon={CpuChip01} className="size-3 shrink-0" />
+                  <span>{formatModelName(task.model)}</span>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -543,8 +573,8 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
         </div>
       )}
 
-      {/* Row 3: Priority badge (standalone tasks only — child tasks show priority inline in Row 1) */}
-      {!parentEpic && task.priority && (
+      {/* Row 3: Priority badge (standalone tasks only — child tasks and epics show priority inline in Row 1) */}
+      {!parentEpic && !epic && task.priority && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <Badge size="sm" color={priorityColor || 'gray'} className="ring-0 font-mono text-xs">
             {task.priority}
