@@ -1353,7 +1353,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
               style={{ borderRadius: 'var(--board-col-radius)' }}
             >
               {/* Frosted glass header — outside scroll container so backdrop-filter blurs cards */}
-              <div className="absolute top-0 left-0 right-0 z-40 pointer-events-none backdrop-blur-md bg-gradient-to-b from-black/5 to-transparent dark:from-primary/80 py-4">
+              <div className="absolute top-0 left-0 right-0 z-40 pointer-events-none backdrop-blur-md bg-gradient-to-b from-black/5 to-transparent dark:from-primary/80">
                 <div className="flex items-center justify-between px-4 py-3 pointer-events-auto">
                   <div className="flex items-center gap-2">
                     <span
@@ -1392,8 +1392,8 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                   handleDrop(col.key);
                 }}
               >
-                {/* padding-top = outer py-4 (1rem) + inner py-3 (0.75rem) + text-sm (1.25rem) + inner py-3 (0.75rem) = 3.75rem */}
-                <div className="flex flex-col gap-3" style={{ padding: '3.75rem var(--board-col-padding) 2.5rem' }}>
+                {/* padding-top = inner py-3 × 2 + text-sm ≈ 2.75rem */}
+                <div className="flex flex-col gap-3" style={{ padding: '2.75rem var(--board-col-padding) 2.5rem' }}>
                   {loading && tasks.length === 0 ? (
                     <>
                       <SkeletonCard />
