@@ -1607,7 +1607,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                 onDragOver={(e) => handleEpicDragOver(e, task.id, task.status)}
                                 onDrop={(e) => handleEpicDrop(e, task.id, task.status)}
                                 onDragEnd={handleEpicDragEnd}
-                                className={cx('relative flex flex-col', draggedEpicId === task.id && 'opacity-50 cursor-grabbing')}
+                                className={cx('relative flex flex-col isolate', draggedEpicId === task.id && 'opacity-50 cursor-grabbing')}
                               >
                                 {epicDropBeforeId === task.id && (
                                   <div className="absolute -top-1 left-0 right-0 h-0.5 bg-utility-brand-500 z-10 rounded-full" />
@@ -1695,7 +1695,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                 </div>
                                 {/* Children — stacking deck (collapsed) / normal list (expanded) */}
                                 <div
-                                  className="relative flex flex-col"
+                                  className="flex flex-col"
                                   style={{ marginTop: expanded ? 8 : 0, transition: 'margin-top 300ms ease' }}
                                 >
                                   {children.map((child, i) => {
@@ -1708,41 +1708,51 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                         style={{
                                           position: 'relative',
                                           zIndex: expanded ? undefined : -(i + 1),
-                                          transform: expanded
-                                            ? 'scale(1)'
-                                            : isPeek
-                                              ? `scale(${0.95 - i * 0.05})`
-                                              : 'scale(0.85)',
-                                          transformOrigin: 'center top',
+                                          maxHeight: expanded ? 300 : isPeek ? 8 : 0,
+                                          overflow: isHidden ? 'hidden' : 'visible',
                                           opacity: expanded ? 1 : isHidden ? 0 : 1,
-                                          marginTop: expanded ? (i === 0 ? 0 : 8) : isPeek ? -4 : 0,
-                                          height: expanded ? undefined : isHidden ? 0 : undefined,
+                                          marginTop: expanded ? (i === 0 ? 0 : 8) : 0,
                                           pointerEvents: expanded ? 'auto' : 'none',
                                           transition: expanded
-                                            ? 'transform 350ms ease, opacity 250ms ease, margin-top 300ms ease, height 300ms ease'
-                                            : 'transform 250ms ease, opacity 200ms ease, margin-top 250ms ease, height 250ms ease',
+                                            ? 'max-height 350ms ease, opacity 250ms ease, margin-top 300ms ease'
+                                            : 'max-height 250ms ease, opacity 200ms ease, margin-top 250ms ease',
                                           transitionDelay: expanded
                                             ? `${i * 60}ms`
                                             : `${Math.max(0, total - 1 - i) * 30}ms`,
                                         }}
                                       >
-                                        <BoardCard
-                                          task={child}
-                                          epic={false}
-                                          allTasks={tasks}
-                                          onClick={() => setSelectedTask(child)}
-                                          onFix={handleFixTask}
-                                          fixStatus={fixStatus[child.id]}
-                                          allFixStatuses={fixStatus}
-                                          fixingTaskType={fixingTaskId === child.id ? fixingTaskType : null}
-                                          isGlobalOperationRunning={!expanded || fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
-                                          showAddStatus={isMissingStatus}
-                                          onAddStatus={isMissingStatus ? handleAddStatus : undefined}
-                                          addingStatus={addingStatus}
-                                          onDragStart={() => setDraggedTask(child)}
-                                          onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
-                                          dragging={draggedTask?.id === child.id}
-                                        />
+                                        <div style={{
+                                          transform: expanded
+                                            ? 'scale(1) translateY(0)'
+                                            : isPeek
+                                              ? `scale(${0.95 - i * 0.05}) translateY(calc(-100% + 8px))`
+                                              : 'scale(0.85) translateY(-100%)',
+                                          transformOrigin: 'center top',
+                                          transition: expanded
+                                            ? 'transform 350ms ease'
+                                            : 'transform 250ms ease',
+                                          transitionDelay: expanded
+                                            ? `${i * 60}ms`
+                                            : `${Math.max(0, total - 1 - i) * 30}ms`,
+                                        }}>
+                                          <BoardCard
+                                            task={child}
+                                            epic={false}
+                                            allTasks={tasks}
+                                            onClick={() => setSelectedTask(child)}
+                                            onFix={handleFixTask}
+                                            fixStatus={fixStatus[child.id]}
+                                            allFixStatuses={fixStatus}
+                                            fixingTaskType={fixingTaskId === child.id ? fixingTaskType : null}
+                                            isGlobalOperationRunning={!expanded || fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
+                                            showAddStatus={isMissingStatus}
+                                            onAddStatus={isMissingStatus ? handleAddStatus : undefined}
+                                            addingStatus={addingStatus}
+                                            onDragStart={() => setDraggedTask(child)}
+                                            onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
+                                            dragging={draggedTask?.id === child.id}
+                                          />
+                                        </div>
                                       </div>
                                     );
                                   })}
