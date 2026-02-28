@@ -1,7 +1,7 @@
 // panel/src/components/board-tab.tsx
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle, ChevronDown, CpuChip01, Folder, FolderPlus, Lightbulb02, Plus, RefreshCw01, Stars01, Target02, Tool01, Users01 } from '@untitledui/icons';
+import { CheckCircle, ChevronDown, Columns03, CpuChip01, Folder, FolderPlus, Lightbulb02, Plus, RefreshCw01, Stars01, Target02, Tool01, Users01 } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { Tooltip, TooltipTrigger } from './base/tooltip/tooltip';
@@ -1118,6 +1118,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2 min-w-0">
+          <Icon icon={Columns03} className="size-5 shrink-0 text-tertiary" />
           <h2 className="truncate text-2xl font-bold text-primary tracking-tight">Board</h2>
         </div>
         <div className="flex items-center gap-2 shrink-0 sm:gap-3">
@@ -1318,7 +1319,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   <Tooltip title="Add task" description={`Create a new task in ${task.name}`}>
                                     <TooltipTrigger
                                       onPress={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
-                                      className="flex h-6 items-center gap-1 rounded-sm px-2 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
+                                      className="flex h-6 items-center gap-1 rounded-sm px-2 text-xs text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10 transition"
                                     >
                                       <Plus className="size-3" />
                                     </TooltipTrigger>
@@ -1337,7 +1338,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                           ? 'text-brand-secondary bg-utility-brand-50'
                                           : (generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null)
                                             ? 'text-quaternary cursor-not-allowed'
-                                            : 'text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50'
+                                            : 'text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10'
                                       )}
                                     >
                                       {generatingEpicId === task.id
@@ -1478,7 +1479,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   <Tooltip title="Add task" description={`Create a new task in ${task.name}`}>
                                     <TooltipTrigger
                                       onPress={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
-                                      className="flex h-6 items-center gap-1 rounded-sm px-2 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
+                                      className="flex h-6 items-center gap-1 rounded-sm px-2 text-xs text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10 transition"
                                     >
                                       <Plus className="size-3" />
                                     </TooltipTrigger>
@@ -1497,7 +1498,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                           ? 'text-brand-secondary bg-utility-brand-50'
                                           : (generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null)
                                             ? 'text-quaternary cursor-not-allowed'
-                                            : 'text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50'
+                                            : 'text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10'
                                       )}
                                     >
                                       {generatingEpicId === task.id
@@ -1569,7 +1570,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   <Tooltip title="Add task" description={`Create a new task in ${task.name}`}>
                                     <TooltipTrigger
                                       onPress={() => { setCreateDefaultEpicId(task.id); setCreateModalOpen(true); }}
-                                      className="flex h-6 items-center gap-1 rounded-sm px-2 text-xs text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50 transition"
+                                      className="flex h-6 items-center gap-1 rounded-sm px-2 text-xs text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10 transition"
                                     >
                                       <Plus className="size-3" />
                                     </TooltipTrigger>
@@ -1588,7 +1589,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                           ? 'text-brand-secondary bg-utility-brand-50'
                                           : (generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null)
                                             ? 'text-quaternary cursor-not-allowed'
-                                            : 'text-tertiary hover:text-brand-secondary hover:bg-utility-brand-50'
+                                            : 'text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10'
                                       )}
                                     >
                                       {generatingEpicId === task.id

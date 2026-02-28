@@ -130,7 +130,7 @@ export function CommitDetailModal({ open, onClose, commit, apiBaseUrl, showToast
                     <div className="flex items-center gap-2 text-sm text-secondary">
                       <button
                         type="button"
-                        className="flex items-center gap-1.5 rounded-sm font-mono text-xs text-tertiary transition hover:text-brand-primary"
+                        className="flex items-center gap-1.5 rounded-sm font-mono text-xs text-tertiary transition hover:text-primary"
                         onClick={copyHash}
                         title="Click to copy full hash"
                       >
