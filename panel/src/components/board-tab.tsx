@@ -1473,7 +1473,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                           {generatingEpicId === task.id
                                             ? <RefreshCw01 className="size-3 animate-spin" />
                                             : <Stars01 className="size-3" />}
-                                          <span className="hidden">{generatingEpicId === task.id
+                                          <span className="hidden min-[961px]:inline">{generatingEpicId === task.id
                                             ? (generateProgress && generateProgress.total > 0
                                               ? (generateProgress.phase === 'planning' ? 'Planning...' : `${generateProgress.created}/${generateProgress.total}`)
                                               : 'Planning...')
@@ -1637,7 +1637,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                                 {generatingEpicId === task.id
                                                   ? <RefreshCw01 className="size-3 animate-spin" />
                                                   : <Stars01 className="size-3" />}
-                                                <span>{generatingEpicId === task.id
+                                                <span className="hidden min-[961px]:inline">{generatingEpicId === task.id
                                                   ? (generateProgress && generateProgress.total > 0
                                                     ? (generateProgress.phase === 'planning' ? 'Planning...' : `${generateProgress.created}/${generateProgress.total}`)
                                                     : 'Planning...')
@@ -1753,7 +1753,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                         {generatingEpicId === task.id
                                           ? <RefreshCw01 className="size-3 animate-spin" />
                                           : <Stars01 className="size-3" />}
-                                        <span>{generatingEpicId === task.id
+                                        <span className="hidden min-[961px]:inline">{generatingEpicId === task.id
                                           ? (generateProgress && generateProgress.total > 0
                                             ? (generateProgress.phase === 'planning' ? 'Planning...' : `${generateProgress.created}/${generateProgress.total}`)
                                             : 'Planning...')
