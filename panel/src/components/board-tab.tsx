@@ -502,15 +502,18 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
         dragging && 'opacity-50'
       )}
     >
-      {/* Epic gradient overlay — radial from outside top-left corner inward */}
+      {/* Epic gradient overlay — radial from outside top-left corner, opacity differs by theme */}
       {epic && (
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            borderRadius: 'inherit',
-            background: 'radial-gradient(circle at -15% -25%, rgba(168, 85, 247, 0.1) 0%, transparent 65%)',
-          }}
-        />
+        <>
+          <div
+            className="absolute inset-0 pointer-events-none dark:hidden"
+            style={{ borderRadius: 'inherit', background: 'radial-gradient(circle at -15% -25%, rgba(168, 85, 247, 0.2) 0%, transparent 65%)' }}
+          />
+          <div
+            className="absolute inset-0 pointer-events-none hidden dark:block"
+            style={{ borderRadius: 'inherit', background: 'radial-gradient(circle at -15% -25%, rgba(168, 85, 247, 0.1) 0%, transparent 65%)' }}
+          />
+        </>
       )}
       {/* Donut chart — absolute top-right, does not affect row height */}
       {progressTotal > 0 && (
@@ -1362,7 +1365,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
               style={{ borderRadius: 'var(--board-col-radius)' }}
             >
               {/* Frosted glass header — outside scroll container so backdrop-filter blurs cards */}
-              <div className="absolute top-0 left-0 right-0 z-40 pointer-events-none backdrop-blur-md bg-gradient-to-b from-transparent to-transparent dark:from-primary/80">
+              <div className="absolute top-0 left-0 right-0 z-20 pointer-events-none backdrop-blur-md bg-gradient-to-b from-transparent to-transparent dark:from-primary/80">
                 <div className="flex items-center justify-between px-4 py-3 pointer-events-auto">
                   <div className="flex items-center gap-2">
                     <span
