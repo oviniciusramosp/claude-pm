@@ -986,6 +986,26 @@ Prefer concise, human-readable lines such as:
 - `SUCCESS - Moved to Done: "S1.1 - Task Name"`
 - `SUCCESS - AC completed: AC-3`
 
+### Feed vs Debug Errors
+
+**Feed / Toast** → short, human-readable messages only.
+**Debug Errors modal** → full technical detail (stderr, stdout, exitCode, signal, stack).
+
+Use `pushLog(level, source, message, extra)` where `extra` carries the technical fields. The frontend automatically routes any `level=error` entry to the Debug Errors modal. The `extra` fields `{ stderr, stdout, exitCode, signal, stack }` are rendered as separate structured sections in the modal — they never appear in the Feed message itself.
+
+```js
+// CORRECT — short message in Feed, full stderr in Debug Errors
+pushLog('error', LOG_SOURCE.claude, 'Phase 1 (planning) failed: timed out', {
+  stderr: err.stderr || null,
+  exitCode: err.exitCode || null
+});
+
+// WRONG — embeds detail noise into the Feed
+pushLog('error', LOG_SOURCE.claude, `Phase 1 failed: ${err.message} | stderr: ${stderrSnippet}`);
+```
+
+Errors thrown by `runClaudePromptViaApi` carry structured fields (`err.stderr`, `err.stdout`, `err.exitCode`, `err.signal`) that callers should forward as `extra` to `pushLog`.
+
 ## Project Structure
 ```
 Product Manager/

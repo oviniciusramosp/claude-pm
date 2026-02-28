@@ -1225,10 +1225,10 @@ function runClaudePromptViaApi(prompt, model, customTimeoutMs) {
 
     const timer = setTimeout(() => {
       try { child.kill('SIGTERM'); } catch { /* ignore */ }
-      const stderrLines = stderr.trim().split('\n').map((l) => l.trim()).filter(Boolean);
-      const stderrSnippet = stderrLines.slice(-5).join(' | ');
-      const detail = stderrSnippet ? ` | stderr: ${stderrSnippet}` : '';
-      finish(new Error(`Claude prompt timed out after ${timeoutMs}ms${detail}`));
+      const err = new Error(`Claude prompt timed out after ${timeoutMs}ms`);
+      err.stderr = stderr.trim() || null;
+      err.stdout = stdout.trim() || null;
+      finish(err);
     }, timeoutMs);
 
     child.stdout.on('data', (chunk) => { stdout += String(chunk); });
@@ -1237,10 +1237,12 @@ function runClaudePromptViaApi(prompt, model, customTimeoutMs) {
 
     child.on('close', (code, signal) => {
       if (code !== 0) {
-        const raw = String(stderr || stdout || 'No output');
-        const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
-        const summary = lines.slice(0, 5).join(' | ') || 'No output';
-        finish(new Error(`Claude command failed (exit=${code}, signal=${signal || 'none'}): ${summary}`));
+        const err = new Error(`Claude command failed (exit=${code}${signal ? `, signal=${signal}` : ''})`);
+        err.stderr = String(stderr || '').trim() || null;
+        err.stdout = String(stdout || '').trim() || null;
+        err.exitCode = code;
+        err.signal = signal || null;
+        finish(err);
         return;
       }
       finish(null, { reply: String(stdout || stderr || '').trim(), workdir });
@@ -4354,7 +4356,7 @@ app.post('/api/board/generate-stories', async (req, res) => {
       const boardContext = await buildBoardContext(client, epicId);
 
       // Phase 1: Generate story plan (outlines only — fast call)
-      pushLog('info', LOG_SOURCE.panel, `Planning stories for "${epicName}" (timeout: 60s, model: claude-sonnet-4-5-20250929)...`);
+      pushLog('info', LOG_SOURCE.panel, `Planning stories for "${epicName}"...`);
       const planPrompt = buildStoryPlanPrompt({
         epicName,
         epicBody: epicBody.trim(),
@@ -4365,7 +4367,12 @@ app.post('/api/board/generate-stories', async (req, res) => {
       try {
         ({ reply: planReply } = await runClaudePromptViaApi(planPrompt, 'claude-sonnet-4-5-20250929', 60000));
       } catch (planErr) {
-        pushLog('error', LOG_SOURCE.claude, `Phase 1 (planning) failed for "${epicName}": ${planErr.message}`);
+        pushLog('error', LOG_SOURCE.claude, `Phase 1 (planning) failed for "${epicName}": ${planErr.message}`, {
+          stderr: planErr.stderr || null,
+          stdout: planErr.stdout || null,
+          exitCode: planErr.exitCode || null,
+          signal: planErr.signal || null
+        });
         planErr._loggedByPhase1 = true;
         throw planErr;
       }
@@ -4373,13 +4380,12 @@ app.post('/api/board/generate-stories', async (req, res) => {
 
       generateStoriesState.total = storyPlan.length;
       generateStoriesState.phase = 'generating';
-      pushLog('info', LOG_SOURCE.panel, `Story plan ready: ${storyPlan.length} tasks for "${epicName}". Generating one by one (timeout: 90s each)...`);
+      pushLog('info', LOG_SOURCE.panel, `Story plan ready: ${storyPlan.length} tasks for "${epicName}". Generating one by one...`);
 
       // Phase 2: Generate each story body individually
       for (let i = 0; i < storyPlan.length; i++) {
         const outline = storyPlan[i];
         try {
-          pushLog('info', LOG_SOURCE.panel, `Generating story ${i + 1}/${storyPlan.length}: "${outline.name}" (model: ${outline.model || 'claude-sonnet-4-5-20250929'})...`);
           const storyPrompt = buildSingleStoryBodyPrompt({
             outline,
             epicName,
@@ -4407,7 +4413,12 @@ app.post('/api/board/generate-stories', async (req, res) => {
         } catch (err) {
           generateStoriesState.failed++;
           generateStoriesState.errors.push(outline.name);
-          pushLog('warn', LOG_SOURCE.panel, `Failed to create story "${outline.name}": ${err.message}`);
+          pushLog('error', LOG_SOURCE.claude, `Failed to create story "${outline.name}": ${err.message}`, {
+            stderr: err.stderr || null,
+            stdout: err.stdout || null,
+            exitCode: err.exitCode || null,
+            signal: err.signal || null
+          });
         }
       }
 
@@ -4417,11 +4428,14 @@ app.post('/api/board/generate-stories', async (req, res) => {
       const summary = `Generated ${generateStoriesState.created}/${storyPlan.length} tasks${typeBreakdown} for "${epicName}"${generateStoriesState.failed > 0 ? ` (${generateStoriesState.failed} failed)` : ''}`;
       pushLog('success', LOG_SOURCE.claude, summary);
     } catch (error) {
-      // Phase 1 errors are already logged above with full context; this catches
-      // unexpected errors outside the per-story loop (board I/O, parse failures, etc.)
-      const alreadyLogged = error._loggedByPhase1;
-      if (!alreadyLogged) {
-        pushLog('error', LOG_SOURCE.claude, `Story generation failed (${generateStoriesState.phase || 'setup'}): ${error.message}`);
+      if (!error._loggedByPhase1) {
+        pushLog('error', LOG_SOURCE.claude, `Story generation failed (${generateStoriesState.phase || 'setup'}): ${error.message}`, {
+          stderr: error.stderr || null,
+          stdout: error.stdout || null,
+          exitCode: error.exitCode || null,
+          signal: error.signal || null,
+          stack: error.stack || null
+        });
       }
       generateStoriesState.failed++;
     } finally {
