@@ -394,21 +394,19 @@ function TaskFixDropdown({
           onPress={() => { if (!isAnyOperationRunning) setIsOpen(!isOpen); }}
           isDisabled={isAnyOperationRunning}
           className={cx(
-            'flex h-6 w-6 items-center justify-center rounded-md transition-all duration-200',
-            isAnyOperationRunning
-              ? 'text-quaternary cursor-not-allowed opacity-60'
-              : 'text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10',
+            'flex h-6 items-center gap-0.5 rounded-sm px-2 text-xs transition',
+            isFixing
+              ? 'text-utility-warning-600 bg-utility-warning-50'
+              : isAnyOperationRunning
+                ? 'text-quaternary cursor-not-allowed'
+                : 'text-tertiary hover:text-utility-warning-600 hover:bg-utility-warning-50',
             isFixing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
           )}
         >
-          {isFixing ? (
-            <RefreshCw01 className="size-3.5 text-utility-brand-600 animate-spin" />
-          ) : (
-            <span className="flex items-center gap-0.5">
-              <Tool01 className={cx('size-3.5', isAnyOperationRunning ? 'text-utility-gray-400' : 'text-utility-brand-600')} />
-              <ChevronDown className={cx('size-2.5 transition-transform', isOpen && 'rotate-180')} />
-            </span>
-          )}
+          {isFixing
+            ? <RefreshCw01 className="size-3 animate-spin" />
+            : <Tool01 className="size-3" />}
+          <ChevronDown className={cx('size-2.5 transition-transform', isOpen && 'rotate-180')} />
         </TooltipTrigger>
       </Tooltip>
       {isOpen && (
