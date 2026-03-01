@@ -121,7 +121,8 @@ function formatModelName(model: string): string {
 const PRIORITY_INLINE_COLORS: Record<string, string> = {
   P0: 'text-utility-error-600',
   P1: 'text-utility-warning-600',
-  P2: 'text-utility-blue-600',
+  P2: 'text-utility-yellow-600',
+  P3: 'text-utility-success-600',
 };
 
 function AcDonut({ done, total, label = 'ACs' }: { done: number; total: number; label?: string }) {
@@ -524,7 +525,7 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
       {epic && taskCode && (
         /* Epic card */
         <div className="flex items-center gap-1 mb-2 text-[11px] text-quaternary font-mono tracking-wide">
-          <Icon icon={Folder} className="size-3 shrink-0" />
+          <Icon icon={Folder} className="size-3 shrink-0 text-utility-purple-600" />
           <span>{taskCode}</span>
           {task.priority && (
             <>
@@ -539,7 +540,7 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
         <div className="mb-2">
           <Tooltip title={parentEpic.name} placement="top">
             <TooltipTrigger className="flex items-center gap-1 text-[11px] text-quaternary font-mono tracking-wide cursor-default">
-              <Icon icon={Folder} className="size-3 shrink-0" />
+              <Icon icon={Folder} className="size-3 shrink-0 text-utility-purple-600" />
               {parentEpicCode && <span>{parentEpicCode}</span>}
               {taskCode && (
                 <>
@@ -574,6 +575,10 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
           <p className="text-sm font-medium text-primary">
             {task.name}
           </p>
+          {/* Divider */}
+          {(task.agents?.length > 0 || task.model) && (
+            <div className="mt-2 border-t border-secondary/40" />
+          )}
           {/* Agents row */}
           {task.agents?.length > 0 && (
             <div className="mt-2 flex items-center gap-1.5 text-[11px] text-quaternary w-full">
@@ -1092,14 +1097,73 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
     };
   }, []);
 
+  // Poll generation status until completion — shared by handleGenerateStories and mount resume
+  const startPollingGeneration = useCallback((epicId: string) => {
+    const pollStatus = async () => {
+      try {
+        const statusRes = await fetch(`${apiBaseUrl}/api/board/generate-stories/status`);
+        const status = await statusRes.json().catch(() => ({}));
+        setGenerateProgress({
+          created: status.created || 0,
+          total: status.total || 0,
+          phase: status.phase || null
+        });
+
+        if (status.running) {
+          generatePollRef.current = setTimeout(pollStatus, 1500);
+        } else {
+          const failed = status.failed || 0;
+          const created = status.created || 0;
+          const total = status.total || 0;
+          const msg = failed > 0
+            ? `Generated ${created} of ${total} stories (${failed} failed)`
+            : `Generated ${created} stories`;
+          showToast(msg, failed > 0 ? 'warning' : 'success');
+          setExpandedEpics((prev) => {
+            const next = new Set(prev);
+            next.add(epicId);
+            return next;
+          });
+          await fetchBoard(true);
+          setGeneratingEpicId(null);
+          setGenerateProgress(null);
+        }
+      } catch {
+        setGeneratingEpicId(null);
+        setGenerateProgress(null);
+      }
+    };
+
+    pollStatus();
+  }, [apiBaseUrl, showToast, fetchBoard, setExpandedEpics]);
+
+  // On mount: if a generation is already running on the server, resume the progress UI
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiBaseUrl}/api/board/generate-stories/status`);
+        const status = await res.json().catch(() => ({}));
+        if (!cancelled && status.running && status.epicId) {
+          setGeneratingEpicId(status.epicId);
+          setGenerateProgress({
+            created: status.created || 0,
+            total: status.total || 0,
+            phase: status.phase || null
+          });
+          startPollingGeneration(status.epicId);
+        }
+      } catch {
+        // ignore — server may not be reachable yet
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleGenerateStories = useCallback(async (epicId: string) => {
     setGeneratingEpicId(epicId);
     setGenerateProgress({ created: 0, total: 0, phase: 'planning' });
-
-    const stopGenerating = () => {
-      setGeneratingEpicId(null);
-      setGenerateProgress(null);
-    };
 
     try {
       const response = await fetch(`${apiBaseUrl}/api/board/generate-stories`, {
@@ -1110,50 +1174,19 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         showToast(payload?.message || 'Failed to generate stories', 'danger');
-        stopGenerating();
+        setGeneratingEpicId(null);
+        setGenerateProgress(null);
         return;
       }
 
       // Backend responds immediately; poll status until done
-      const pollStatus = async () => {
-        try {
-          const statusRes = await fetch(`${apiBaseUrl}/api/board/generate-stories/status`);
-          const status = await statusRes.json().catch(() => ({}));
-          setGenerateProgress({
-            created: status.created || 0,
-            total: status.total || 0,
-            phase: status.phase || null
-          });
-
-          if (status.running) {
-            generatePollRef.current = setTimeout(pollStatus, 1500);
-          } else {
-            const failed = status.failed || 0;
-            const created = status.created || 0;
-            const total = status.total || 0;
-            const msg = failed > 0
-              ? `Generated ${created} of ${total} stories (${failed} failed)`
-              : `Generated ${created} stories`;
-            showToast(msg, failed > 0 ? 'warning' : 'success');
-            setExpandedEpics((prev) => {
-              const next = new Set(prev);
-              next.add(epicId);
-              return next;
-            });
-            await fetchBoard(true);
-            stopGenerating();
-          }
-        } catch {
-          stopGenerating();
-        }
-      };
-
-      pollStatus();
+      startPollingGeneration(epicId);
     } catch (err: any) {
       showToast(err.message || 'Failed to generate stories', 'danger');
-      stopGenerating();
+      setGeneratingEpicId(null);
+      setGenerateProgress(null);
     }
-  }, [apiBaseUrl, showToast, fetchBoard]);
+  }, [apiBaseUrl, showToast, startPollingGeneration]);
 
   const handleFixEpic = useCallback(async (epicId: string, fixType: string) => {
     setFixingEpicId(epicId);
