@@ -3,13 +3,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { marked } from 'marked';
 import { AlertTriangle, Beaker01, CornerUpLeft, CpuChip01, Edit05, Folder, Stars01, Target02, Trash01, Users01, X, Zap } from '@untitledui/icons';
-import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
+import { cx } from '@/utils/cx';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
 import { DiscardConfirmOverlay } from './discard-confirm-overlay';
 import { Select, type SelectOption } from '@/components/base/select/select';
-import { BOARD_PRIORITY_COLORS, BOARD_TYPE_COLORS, CLAUDE_TASK_MODELS } from '../constants';
+import { BOARD_PRIORITY_COLORS, CLAUDE_TASK_MODELS } from '../constants';
 import { handleModalKeyDown } from '@/utils/modal-keyboard';
 import type { BoardTask } from '../types';
 
@@ -110,6 +110,19 @@ function extractStoryCode(taskId: string): string | null {
   if (match) return `S${match[1]}.${match[2]}`;
   return null;
 }
+
+const PRIORITY_INLINE_COLORS: Record<string, string> = {
+  P0: 'text-utility-error-600',
+  P1: 'text-utility-warning-600',
+  P2: 'text-utility-yellow-600',
+  P3: 'text-utility-success-600',
+};
+
+const STATUS_DOT_COLORS: Record<string, string> = {
+  'Not Started': 'bg-gray-400',
+  'In Progress': 'bg-utility-brand-500',
+  'Done': 'bg-utility-success-500',
+};
 
 // --- Component ---
 interface TaskDetailModalProps {
@@ -507,9 +520,6 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
     ? marked.parse(markdownBody, { async: false, gfm: true, breaks: true }) as string
     : '';
 
-  const priorityColor = task ? BOARD_PRIORITY_COLORS[task.priority] : undefined;
-  const typeColor = task ? BOARD_TYPE_COLORS[task.type] : undefined;
-
   return (
     <>
     <ModalOverlay isOpen={open} onOpenChange={(nextOpen) => { if (!nextOpen) handleCloseAttempt(); }} isDismissable={!saving && !deleting}>
@@ -528,45 +538,51 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
             {/* Header */}
             <div className="flex items-start justify-between gap-3 border-b border-secondary px-6 py-4">
               <div className="min-w-0 flex-1">
-                {!editing && task && (task.priority || task.type || task.status) && (
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {task.parentId && (
-                        <div className="flex items-center gap-1 text-[11px] font-mono text-utility-purple-600">
-                          <Icon icon={Folder} className="size-3 shrink-0" />
-                          <span>Epic {extractEpicNumber(task.parentId) ?? ''}</span>
-                        </div>
-                      )}
-                      {task.type && task.type.toLowerCase() === 'epic' ? (
-                        <div className="flex items-center gap-1 text-[11px] font-mono text-utility-purple-600">
-                          <Icon icon={Folder} className="size-3 shrink-0" />
-                          <span>Epic {extractEpicNumber(task.id) ?? ''}</span>
-                        </div>
-                      ) : task.type ? (
-                        <Badge size="sm" color={(typeColor || 'gray') as any} className="ring-0 font-mono text-xs">
-                          {task.type}
-                        </Badge>
-                      ) : null}
-                      {task.priority && (
-                        <Badge size="sm" color={(priorityColor || 'gray') as any} className="ring-0 font-mono text-xs">
-                          {task.priority}
-                        </Badge>
-                      )}
-                      {task.status && (
-                        <Badge size="sm" color="gray" className="ring-0 font-mono text-xs">
-                          {task.status}
-                        </Badge>
-                      )}
-                    </div>
-                    {task.parentId && extractStoryCode(task.id) && (
-                      <span className="shrink-0 font-mono text-[11px] text-quaternary">
-                        {extractStoryCode(task.id)}
-                      </span>
+                {!editing && task && (
+                  <div className="mb-2 flex items-center gap-1.5 text-[11px] font-mono text-quaternary tracking-wide">
+                    {/* Epic card */}
+                    {task.type?.toLowerCase() === 'epic' ? (
+                      <>
+                        <Icon icon={Folder} className="size-3 shrink-0 text-utility-purple-600" />
+                        <span className="text-utility-purple-600">Epic {extractEpicNumber(task.id) ?? ''}</span>
+                      </>
+                    ) : (
+                      <>
+                        {/* Child task: parent epic ref */}
+                        {task.parentId && (
+                          <>
+                            <Icon icon={Folder} className="size-3 shrink-0 text-utility-purple-600" />
+                            <span className="text-utility-purple-600">Epic {extractEpicNumber(task.parentId) ?? ''}</span>
+                            <span className="opacity-40">/</span>
+                          </>
+                        )}
+                        {/* Type + optional story code */}
+                        {task.type && (
+                          <span>
+                            {task.type}{task.parentId && extractStoryCode(task.id) ? ` ${extractStoryCode(task.id)}` : ''}
+                          </span>
+                        )}
+                      </>
+                    )}
+                    {/* Priority */}
+                    {task.priority && (
+                      <>
+                        <span className="opacity-40">•</span>
+                        <span className={PRIORITY_INLINE_COLORS[task.priority] || ''}>{task.priority}</span>
+                      </>
+                    )}
+                    {/* Status */}
+                    {task.status && (
+                      <>
+                        <span className="opacity-40">•</span>
+                        <span className={cx('inline-block size-1.5 shrink-0 rounded-full', STATUS_DOT_COLORS[task.status] || 'bg-gray-400')} />
+                        <span>{task.status}</span>
+                      </>
                     )}
                   </div>
                 )}
                 <div className="flex items-center gap-2">
-                  <h3 className="m-0 truncate text-xl font-semibold text-primary">
+                  <h3 className="m-0 truncate text-2xl font-semibold text-primary">
                     {editing ? editName || 'Task' : (task?.name || 'Task')}
                   </h3>
                 </div>
