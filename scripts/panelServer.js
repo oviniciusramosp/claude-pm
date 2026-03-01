@@ -210,18 +210,56 @@ const claudeChatState = {
 const reviewTaskState = {
   running: false
 };
-const generateStoriesState = {
-  running: false,
-  epicId: null,
-  epicName: null,
-  created: 0,
-  total: 0,
-  failed: 0,
-  phase: null, // 'planning' | 'generating'
-  errors: [],
-  plan: null,      // saved Phase 1 result — preserved across runs for resume
-  canResume: false // true when Phase 1 succeeded but Phase 2 had failures
-};
+// Map from epicId -> session state — allows multiple epics to generate concurrently
+const generateStoriesSessions = new Map();
+
+function getGenerateSession(epicId) {
+  if (!generateStoriesSessions.has(epicId)) {
+    generateStoriesSessions.set(epicId, {
+      running: false,
+      epicId,
+      epicName: null,
+      created: 0,
+      total: 0,
+      failed: 0,
+      phase: null, // 'planning' | 'generating'
+      errors: [],
+      plan: null,      // saved Phase 1 result — preserved across runs for resume
+      canResume: false // true when Phase 1 succeeded but Phase 2 had failures
+    });
+  }
+  return generateStoriesSessions.get(epicId);
+}
+// ── Generate Stories — Disk Persistence ───────────────────────────────
+// Plan files survive process restarts, allowing Phase 2 to resume without re-running Phase 1.
+const GENERATE_PLANS_DIR = path.join(path.dirname(new URL(import.meta.url).pathname), '../.data/generate-stories');
+
+async function loadGeneratePlan(epicId) {
+  const safeName = epicId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const filePath = path.join(GENERATE_PLANS_DIR, `${safeName}.json`);
+  try {
+    const raw = await fs.readFile(filePath, 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+async function saveGeneratePlan(epicId, data) {
+  await fs.mkdir(GENERATE_PLANS_DIR, { recursive: true });
+  const safeName = epicId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const filePath = path.join(GENERATE_PLANS_DIR, `${safeName}.json`);
+  const tmpPath = filePath + '.tmp';
+  await fs.writeFile(tmpPath, JSON.stringify(data, null, 2), 'utf8');
+  await fs.rename(tmpPath, filePath);
+}
+
+async function deleteGeneratePlan(epicId) {
+  const safeName = epicId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const filePath = path.join(GENERATE_PLANS_DIR, `${safeName}.json`);
+  try { await fs.unlink(filePath); } catch { /* file may not exist */ }
+}
+
 const fixEpicStoriesState = {
   running: false
 };
@@ -4349,18 +4387,37 @@ function parseFixEpicStoriesResponse(reply) {
   return normalized;
 }
 
-app.get('/api/board/generate-stories/status', (_req, res) => {
-  res.json({
-    running: generateStoriesState.running,
-    epicId: generateStoriesState.epicId,
-    epicName: generateStoriesState.epicName,
-    created: generateStoriesState.created,
-    total: generateStoriesState.total,
-    failed: generateStoriesState.failed,
-    phase: generateStoriesState.phase,
-    errors: [...generateStoriesState.errors],
-    canResume: generateStoriesState.canResume
-  });
+app.get('/api/board/generate-stories/status', async (req, res) => {
+  const { epicId } = req.query;
+  if (epicId) {
+    // Return session for a specific epic
+    const session = generateStoriesSessions.get(epicId);
+    if (!session) {
+      // Check disk for a saved plan from a previous process
+      const diskPlan = await loadGeneratePlan(epicId);
+      if (diskPlan?.canResume && Array.isArray(diskPlan?.plan)) {
+        res.json({ running: false, epicId, created: diskPlan.created || 0, total: diskPlan.plan.length, failed: diskPlan.failed || 0, phase: null, errors: diskPlan.errors || [], canResume: true });
+      } else {
+        res.json({ running: false, epicId, created: 0, total: 0, failed: 0, phase: null, errors: [], canResume: false });
+      }
+      return;
+    }
+    // If session is idle and has no plan, check disk (covers restart with session map entry present)
+    if (!session.plan && !session.running) {
+      const diskPlan = await loadGeneratePlan(epicId);
+      if (diskPlan?.canResume && Array.isArray(diskPlan?.plan)) {
+        session.plan = diskPlan.plan;
+        session.canResume = true;
+        session.epicName = diskPlan.epicName;
+        session.errors = diskPlan.errors || [];
+      }
+    }
+    res.json({ ...session, errors: [...session.errors] });
+  } else {
+    // Return all active sessions — used by frontend on mount to resume any in-progress generations
+    const sessions = Array.from(generateStoriesSessions.values()).map((s) => ({ ...s, errors: [...s.errors] }));
+    res.json({ sessions });
+  }
 });
 
 app.post('/api/board/generate-stories', async (req, res) => {
@@ -4371,21 +4428,32 @@ app.post('/api/board/generate-stories', async (req, res) => {
     return;
   }
 
-  if (generateStoriesState.running) {
-    res.status(409).json({ ok: false, message: 'Story generation is already in progress. Please wait.' });
+  const session = getGenerateSession(epicId);
+
+  if (session.running) {
+    res.status(409).json({ ok: false, message: 'Story generation is already in progress for this epic. Please wait.' });
     return;
   }
 
+  // Load from disk if in-memory has no plan (handles process restarts)
+  if (!session.plan && !session.running) {
+    const diskPlan = await loadGeneratePlan(epicId);
+    if (diskPlan?.canResume && Array.isArray(diskPlan?.plan)) {
+      session.plan = diskPlan.plan;
+      session.canResume = true;
+      session.epicName = diskPlan.epicName;
+      session.errors = diskPlan.errors || [];
+    }
+  }
+
   // Check if we can resume from a saved Phase 1 plan (same epic, phase 1 already done)
-  const isResuming = generateStoriesState.canResume &&
-                     generateStoriesState.epicId === epicId &&
-                     generateStoriesState.plan !== null;
+  const isResuming = session.canResume && session.plan !== null;
 
   // Initialize state and respond immediately so the client never times out
-  Object.assign(generateStoriesState, {
+  Object.assign(session, {
     running: true,
     epicId,
-    epicName: isResuming ? generateStoriesState.epicName : null,
+    epicName: isResuming ? session.epicName : null,
     created: 0,
     total: 0,
     failed: 0,
@@ -4393,7 +4461,7 @@ app.post('/api/board/generate-stories', async (req, res) => {
     errors: [],
     canResume: false
   });
-  if (!isResuming) generateStoriesState.plan = null;
+  if (!isResuming) session.plan = null;
 
   pushLog('info', LOG_SOURCE.panel, isResuming
     ? `Resuming story generation for Epic: "${epicId}" (reusing Phase 1 plan)`
@@ -4429,7 +4497,7 @@ app.post('/api/board/generate-stories', async (req, res) => {
 
       const { frontmatter: epicFields, body: epicBody } = parseFrontmatter(epicMarkdown);
       const epicName = (epicFields && epicFields.name) || epicId;
-      generateStoriesState.epicName = epicName;
+      session.epicName = epicName;
 
       if (!epicBody || epicBody.trim().length < 20) {
         pushLog('error', LOG_SOURCE.panel, `Story generation failed: Epic "${epicName}" has no description or description is too short.`);
@@ -4444,11 +4512,11 @@ app.post('/api/board/generate-stories', async (req, res) => {
 
       if (isResuming) {
         // Reuse saved Phase 1 plan — skip Phase 1 entirely
-        storyPlan = generateStoriesState.plan;
+        storyPlan = session.plan;
         const existingNames = new Set(existingChildren.map((c) => c.name.toLowerCase().trim()));
         storiesToGenerate = storyPlan.filter((s) => !existingNames.has(s.name.toLowerCase().trim()));
-        generateStoriesState.total = storiesToGenerate.length;
-        generateStoriesState.phase = 'generating';
+        session.total = storiesToGenerate.length;
+        session.phase = 'generating';
         if (storiesToGenerate.length === 0) {
           pushLog('success', LOG_SOURCE.panel, `All stories already exist for "${epicName}". Nothing to resume.`);
           return;
@@ -4478,10 +4546,21 @@ app.post('/api/board/generate-stories', async (req, res) => {
           throw planErr;
         }
         storyPlan = parseStoryPlanResponse(planReply);
-        generateStoriesState.plan = storyPlan; // save plan for potential resume
+        session.plan = storyPlan; // save plan for potential resume
+        // Persist plan to disk so it survives process restarts
+        await saveGeneratePlan(epicId, {
+          epicId,
+          epicName: session.epicName,
+          plan: storyPlan,
+          canResume: true,
+          created: 0,
+          failed: 0,
+          errors: [],
+          savedAt: new Date().toISOString()
+        });
         storiesToGenerate = storyPlan;
-        generateStoriesState.total = storyPlan.length;
-        generateStoriesState.phase = 'generating';
+        session.total = storyPlan.length;
+        session.phase = 'generating';
         pushLog('info', LOG_SOURCE.panel, `Story plan ready: ${storyPlan.length} tasks for "${epicName}". Generating one by one...`);
       }
 
@@ -4512,11 +4591,11 @@ app.post('/api/board/generate-stories', async (req, res) => {
           const fileName = generateStoryFileName(epicId, existingChildren.length + i, outline.name);
           await client.createTask(taskFields, storyBody, { epicId, fileName });
 
-          generateStoriesState.created++;
-          pushLog('success', LOG_SOURCE.claude, `Story created (${generateStoriesState.created}/${generateStoriesState.total}): "${outline.name}"`);
+          session.created++;
+          pushLog('success', LOG_SOURCE.claude, `Story created (${session.created}/${session.total}): "${outline.name}"`);
         } catch (err) {
-          generateStoriesState.failed++;
-          generateStoriesState.errors.push(outline.name);
+          session.failed++;
+          session.errors.push(outline.name);
           pushLog('error', LOG_SOURCE.claude, `Failed to create story "${outline.name}": ${err.message}`, {
             stderr: err.stderr || null,
             stdout: err.stdout || null,
@@ -4529,11 +4608,11 @@ app.post('/api/board/generate-stories', async (req, res) => {
       const discoveryCount = storiesToGenerate.filter((s) => s.type === 'Discovery').length;
       const storyCount = storiesToGenerate.filter((s) => s.type !== 'Discovery').length;
       const typeBreakdown = discoveryCount > 0 ? ` (${discoveryCount} Discovery, ${storyCount} UserStory)` : '';
-      const summary = `Generated ${generateStoriesState.created}/${generateStoriesState.total} tasks${typeBreakdown} for "${epicName}"${generateStoriesState.failed > 0 ? ` (${generateStoriesState.failed} failed)` : ''}`;
+      const summary = `Generated ${session.created}/${session.total} tasks${typeBreakdown} for "${epicName}"${session.failed > 0 ? ` (${session.failed} failed)` : ''}`;
       pushLog('success', LOG_SOURCE.claude, summary);
     } catch (error) {
       if (!error._loggedByPhase1) {
-        pushLog('error', LOG_SOURCE.claude, `Story generation failed (${generateStoriesState.phase || 'setup'}): ${error.message}`, {
+        pushLog('error', LOG_SOURCE.claude, `Story generation failed (${session.phase || 'setup'}): ${error.message}`, {
           stderr: error.stderr || null,
           stdout: error.stdout || null,
           exitCode: error.exitCode || null,
@@ -4541,16 +4620,31 @@ app.post('/api/board/generate-stories', async (req, res) => {
           stack: error.stack || null
         });
       }
-      generateStoriesState.failed++;
+      session.failed++;
     } finally {
-      generateStoriesState.running = false;
-      generateStoriesState.phase = null;
+      session.running = false;
+      session.phase = null;
       // Preserve plan for resume if Phase 2 had failures; clear on full success or Phase 1 failure
-      if (generateStoriesState.failed > 0 && generateStoriesState.plan !== null) {
-        generateStoriesState.canResume = true;
+      if (session.failed > 0 && session.plan !== null) {
+        session.canResume = true;
+        // Update disk state so resume survives a process restart
+        await saveGeneratePlan(epicId, {
+          epicId,
+          epicName: session.epicName,
+          plan: session.plan,
+          canResume: true,
+          created: session.created,
+          failed: session.failed,
+          errors: session.errors,
+          savedAt: new Date().toISOString()
+        });
       } else {
-        generateStoriesState.canResume = false;
-        generateStoriesState.plan = null;
+        session.canResume = false;
+        session.plan = null;
+        // Clean up disk file on full success or Phase 1 failure (nothing to resume)
+        await deleteGeneratePlan(epicId);
+        // Session is complete with no resume data — remove from map to free memory
+        generateStoriesSessions.delete(epicId);
       }
     }
   })();
