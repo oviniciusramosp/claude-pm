@@ -3,11 +3,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { marked } from 'marked';
 import { AlertTriangle, Beaker01, CornerUpLeft, CpuChip01, Edit05, Folder, Stars01, Target02, Trash01, Users01, X, Zap } from '@untitledui/icons';
+import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
-import { cx } from '@/utils/cx';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
-import { Tooltip, TooltipTrigger } from './base/tooltip/tooltip';
 import { DiscardConfirmOverlay } from './discard-confirm-overlay';
 import { Select, type SelectOption } from '@/components/base/select/select';
 import { BOARD_PRIORITY_COLORS, CLAUDE_TASK_MODELS } from '../constants';
@@ -119,10 +118,10 @@ const PRIORITY_INLINE_COLORS: Record<string, string> = {
   P3: 'text-utility-success-600',
 };
 
-const STATUS_DOT_COLORS: Record<string, string> = {
-  'Not Started': 'bg-gray-400',
-  'In Progress': 'bg-utility-brand-500',
-  'Done': 'bg-utility-success-500',
+const STATUS_BADGE_COLORS: Record<string, string> = {
+  'Not Started': 'gray',
+  'In Progress': 'brand',
+  'Done': 'success',
 };
 
 // --- Component ---
@@ -574,33 +573,34 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                     )}
                   </div>
                 )}
-                <div className="flex items-start gap-2">
-                  {!editing && task?.status && (
-                    <Tooltip title={task.status} placement="top">
-                      <TooltipTrigger>
-                        <span className={cx('mt-3 inline-block size-2 shrink-0 rounded-full', STATUS_DOT_COLORS[task.status] || 'bg-gray-400')} />
-                      </TooltipTrigger>
-                    </Tooltip>
-                  )}
-                  <h3 className="m-0 text-2xl font-semibold text-primary">
-                    {editing ? editName || 'Task' : (task?.name || 'Task')}
-                  </h3>
-                </div>
-                {!editing && task && (task.model || task.agents.length > 0) && (
-                  <div className="mt-3 flex flex-col gap-2">
-                    {task.model && (
-                      <div className="flex items-center gap-2 text-xs text-tertiary">
-                        <Icon icon={CpuChip01} className="size-4 shrink-0" />
-                        <span>{task.model}</span>
-                      </div>
-                    )}
-                    {task.agents.length > 0 && (
-                      <div className="flex items-center gap-2 text-xs text-tertiary">
-                        <Icon icon={Users01} className="size-4 shrink-0" />
-                        <span>{task.agents.join(', ')}</span>
-                      </div>
-                    )}
+                <h3 className="m-0 text-2xl font-semibold text-primary">
+                  {editing ? editName || 'Task' : (task?.name || 'Task')}
+                </h3>
+                {!editing && task?.status && (
+                  <div className="mt-2">
+                    <Badge size="sm" color={(STATUS_BADGE_COLORS[task.status] || 'gray') as any} className="ring-0">
+                      {task.status}
+                    </Badge>
                   </div>
+                )}
+                {!editing && task && (task.model || task.agents.length > 0) && (
+                  <>
+                    {!isEpic && <div className="mt-3 border-t border-secondary/40" />}
+                    <div className="mt-3 flex flex-col gap-2">
+                      {task.model && (
+                        <div className="flex items-center gap-2 text-xs text-tertiary">
+                          <Icon icon={CpuChip01} className="size-4 shrink-0" />
+                          <span>{task.model}</span>
+                        </div>
+                      )}
+                      {task.agents.length > 0 && (
+                        <div className="flex items-center gap-2 text-xs text-tertiary">
+                          <Icon icon={Users01} className="size-4 shrink-0" />
+                          <span>{task.agents.join(', ')}</span>
+                        </div>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
               <button
