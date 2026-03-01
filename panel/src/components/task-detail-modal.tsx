@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { marked } from 'marked';
 import { AlertTriangle, Beaker01, CornerUpLeft, CpuChip01, Edit05, Folder, Stars01, Target02, Trash01, Users01, X, Zap } from '@untitledui/icons';
-import { BadgeWithDot } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
@@ -118,10 +117,10 @@ const PRIORITY_INLINE_COLORS: Record<string, string> = {
   P3: 'text-utility-success-600',
 };
 
-const STATUS_BADGE_COLORS: Record<string, string> = {
-  'Not Started': 'gray',
-  'In Progress': 'warning',
-  'Done': 'success',
+const STATUS_STYLES: Record<string, { dot: string; classes: string }> = {
+  'Not Started': { dot: '#9CA3AF',          classes: 'bg-utility-gray-50 text-utility-gray-700 ring-1 ring-utility-gray-200' },
+  'In Progress': { dot: 'rgb(239 104 32)',   classes: 'bg-utility-warning-50 text-utility-warning-700 ring-1 ring-utility-warning-200' },
+  'Done':        { dot: '#22C55E',           classes: 'bg-utility-success-50 text-utility-success-700 ring-1 ring-utility-success-200' },
 };
 
 // --- Component ---
@@ -578,9 +577,15 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                 </h3>
                 {!editing && task?.status && (
                   <div className="mt-2">
-                    <BadgeWithDot size="sm" color={(STATUS_BADGE_COLORS[task.status] || 'gray') as any} className="ring-0">
-                      {task.status}
-                    </BadgeWithDot>
+                    {(() => {
+                      const s = STATUS_STYLES[task.status] || STATUS_STYLES['Not Started'];
+                      return (
+                        <span className={`inline-flex items-center gap-1 rounded-full py-0.5 pl-2 pr-2 text-xs font-medium ${s.classes}`}>
+                          <span className="inline-block size-1.5 shrink-0 rounded-full" style={{ backgroundColor: s.dot }} />
+                          {task.status}
+                        </span>
+                      );
+                    })()}
                   </div>
                 )}
                 {!editing && task && (task.model || task.agents.length > 0) && (
