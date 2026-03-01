@@ -120,7 +120,7 @@ const PRIORITY_INLINE_COLORS: Record<string, string> = {
 
 const STATUS_BADGE_COLORS: Record<string, string> = {
   'Not Started': 'gray',
-  'In Progress': 'brand',
+  'In Progress': 'warning',
   'Done': 'success',
 };
 
