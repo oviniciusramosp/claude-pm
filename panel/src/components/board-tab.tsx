@@ -1702,7 +1702,6 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   style={{ marginTop: expanded ? 8 : 0, transition: 'margin-top 300ms ease' }}
                                 >
                                   {children.map((child, i) => {
-                                    const total = children.length;
                                     const isPeek = !expanded && i < 2;
                                     const isHidden = !expanded && i >= 2;
                                     return (
@@ -1721,7 +1720,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                             : 'max-height 250ms ease, opacity 200ms ease, margin-top 250ms ease',
                                           transitionDelay: expanded
                                             ? `${i * 60}ms`
-                                            : `${Math.max(0, total - 1 - i) * 30}ms`,
+                                            : `${Math.max(0, 2 - i) * 30}ms`,
                                         }}
                                       >
                                         <div style={{
@@ -1736,7 +1735,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                             : 'transform 250ms ease',
                                           transitionDelay: expanded
                                             ? `${i * 60}ms`
-                                            : `${Math.max(0, total - 1 - i) * 30}ms`,
+                                            : `${Math.max(0, 2 - i) * 30}ms`,
                                         }}>
                                           <BoardCard
                                             task={child}
