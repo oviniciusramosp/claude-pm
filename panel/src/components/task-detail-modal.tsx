@@ -578,7 +578,7 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                   {!editing && task?.status && (
                     <Tooltip title={task.status} placement="top">
                       <TooltipTrigger>
-                        <span className={cx('mt-2 inline-block size-2 shrink-0 rounded-full', STATUS_DOT_COLORS[task.status] || 'bg-gray-400')} />
+                        <span className={cx('mt-3 inline-block size-2 shrink-0 rounded-full', STATUS_DOT_COLORS[task.status] || 'bg-gray-400')} />
                       </TooltipTrigger>
                     </Tooltip>
                   )}
