@@ -3992,10 +3992,14 @@ app.post('/api/board/review-task', async (req, res) => {
  * Phase 1: Ask Claude for story outlines only (no full bodies).
  * Fast call that returns a plan: [{name, priority, type, model, brief, dependsOn}]
  */
-function buildStoryPlanPrompt({ epicName, epicBody, existingChildren, boardContext }) {
+function buildStoryPlanPrompt({ epicName, epicBody, existingChildren, boardContext, epicAgents }) {
   const childList = existingChildren.length > 0
     ? existingChildren.map((c) => `- ${c.name}`).join('\n')
     : '(none)';
+
+  const agentsList = epicAgents
+    ? (Array.isArray(epicAgents) ? epicAgents.join(', ') : String(epicAgents))
+    : null;
 
   return `You are a technical architect planning the task breakdown for an Epic.
 
@@ -4026,11 +4030,17 @@ ${boardContext || ''}
 - **claude-haiku-4-5-20251001** — Simple/mechanical tasks: config changes, dependency installs, boilerplate.
 </model_selection>
 
+${agentsList ? `<available_agents>
+The following agents are defined for this Epic: ${agentsList}
+Assign the most appropriate agent(s) to each task as a comma-separated string (e.g., "frontend" or "frontend, design").
+Only assign agents that make sense for the task. Leave agents empty ("") if none apply.
+</available_agents>` : ''}
+
 <instructions>
 1. Analyze the Epic and identify all distinct tasks needed.
 2. Order tasks: Discoveries first, then foundational tasks, then features.
 3. Cap at 15 tasks total. Do NOT include tasks from <existing_children>.
-4. For each task, provide: name, priority, type, model, a brief one-sentence summary, and dependsOn (list of other task names this task requires to be done first).
+4. For each task, provide: name, priority, type, model, a brief one-sentence summary, dependsOn (list of other task names this task requires to be done first)${agentsList ? ', and agents (comma-separated string from the available agents list)' : ''}.
 
 Return ONLY a JSON array with NO additional text or code blocks:
 [
@@ -4040,7 +4050,7 @@ Return ONLY a JSON array with NO additional text or code blocks:
     "type": "Discovery|UserStory|Bug|Chore",
     "model": "claude-opus-4-6|claude-sonnet-4-5-20250929|claude-haiku-4-5-20251001",
     "brief": "One sentence describing what this task implements or researches.",
-    "dependsOn": ["Name of prerequisite task"]
+    "dependsOn": ["Name of prerequisite task"]${agentsList ? ',\n    "agents": "agent1, agent2"' : ''}
   }
 ]
 
@@ -4048,7 +4058,7 @@ Rules:
 - Return ONLY valid JSON array, no markdown, no code blocks, no explanation.
 - 1-15 tasks maximum.
 - Use imperative task names: "Research X", "Implement Y", "Add Z".
-- Do NOT include any task whose name matches an existing child.
+- Do NOT include any task whose name matches an existing child.${agentsList ? '\n- Assign agents only from the available_agents list.' : ''}
 </instructions>`;
 }
 
@@ -4076,7 +4086,8 @@ function parseStoryPlanResponse(reply) {
       type: ['Discovery', 'UserStory', 'Bug', 'Chore'].includes(s.type) ? s.type : 'UserStory',
       model: s.model || PANEL_DEFAULT_MODEL,
       brief: s.brief || '',
-      dependsOn: Array.isArray(s.dependsOn) ? s.dependsOn : []
+      dependsOn: Array.isArray(s.dependsOn) ? s.dependsOn : [],
+      agents: s.agents && typeof s.agents === 'string' && s.agents.trim() ? s.agents.trim() : null
     }))
     .slice(0, 15);
 }
@@ -4530,7 +4541,8 @@ app.post('/api/board/generate-stories', async (req, res) => {
           epicName,
           epicBody: epicBody.trim(),
           existingChildren: existingChildren.map((c) => ({ name: c.name })),
-          boardContext
+          boardContext,
+          epicAgents: epicFields && epicFields.agents ? epicFields.agents : null
         });
         let planReply;
         try {
@@ -4585,7 +4597,8 @@ app.post('/api/board/generate-stories', async (req, res) => {
             priority: outline.priority,
             type: outline.type || 'UserStory',
             status: 'Not Started',
-            model: outline.model || (outline.type === 'Discovery' ? 'claude-opus-4-6' : PANEL_DEFAULT_MODEL)
+            model: outline.model || (outline.type === 'Discovery' ? 'claude-opus-4-6' : PANEL_DEFAULT_MODEL),
+            ...(outline.agents ? { agents: outline.agents } : {})
           };
 
           const fileName = generateStoryFileName(epicId, existingChildren.length + i, outline.name);
