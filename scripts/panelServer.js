@@ -218,7 +218,9 @@ const generateStoriesState = {
   total: 0,
   failed: 0,
   phase: null, // 'planning' | 'generating'
-  errors: []
+  errors: [],
+  plan: null,      // saved Phase 1 result — preserved across runs for resume
+  canResume: false // true when Phase 1 succeeded but Phase 2 had failures
 };
 const fixEpicStoriesState = {
   running: false
@@ -4345,7 +4347,8 @@ app.get('/api/board/generate-stories/status', (_req, res) => {
     total: generateStoriesState.total,
     failed: generateStoriesState.failed,
     phase: generateStoriesState.phase,
-    errors: [...generateStoriesState.errors]
+    errors: [...generateStoriesState.errors],
+    canResume: generateStoriesState.canResume
   });
 });
 
@@ -4362,19 +4365,28 @@ app.post('/api/board/generate-stories', async (req, res) => {
     return;
   }
 
+  // Check if we can resume from a saved Phase 1 plan (same epic, phase 1 already done)
+  const isResuming = generateStoriesState.canResume &&
+                     generateStoriesState.epicId === epicId &&
+                     generateStoriesState.plan !== null;
+
   // Initialize state and respond immediately so the client never times out
   Object.assign(generateStoriesState, {
     running: true,
     epicId,
-    epicName: null,
+    epicName: isResuming ? generateStoriesState.epicName : null,
     created: 0,
     total: 0,
     failed: 0,
-    phase: 'planning',
-    errors: []
+    phase: isResuming ? 'generating' : 'planning',
+    errors: [],
+    canResume: false
   });
+  if (!isResuming) generateStoriesState.plan = null;
 
-  pushLog('info', LOG_SOURCE.panel, `Starting story generation for Epic: "${epicId}"`);
+  pushLog('info', LOG_SOURCE.panel, isResuming
+    ? `Resuming story generation for Epic: "${epicId}" (reusing Phase 1 plan)`
+    : `Starting story generation for Epic: "${epicId}"`);
   res.json({ ok: true, started: true });
 
   // Run generation in background
@@ -4415,38 +4427,57 @@ app.post('/api/board/generate-stories', async (req, res) => {
 
       const allTasks = await client.listTasks();
       const existingChildren = allTasks.filter((t) => t.parentId === epicId);
-      const boardContext = await buildBoardContext(client, epicId);
 
-      // Phase 1: Generate story plan (outlines only — fast call)
-      pushLog('info', LOG_SOURCE.panel, `Planning stories for "${epicName}"...`);
-      const planPrompt = buildStoryPlanPrompt({
-        epicName,
-        epicBody: epicBody.trim(),
-        existingChildren: existingChildren.map((c) => ({ name: c.name })),
-        boardContext
-      });
-      let planReply;
-      try {
-        ({ reply: planReply } = await runClaudePromptViaApi(planPrompt, PANEL_DEFAULT_MODEL));
-      } catch (planErr) {
-        pushLog('error', LOG_SOURCE.claude, `Phase 1 (planning) failed for "${epicName}": ${planErr.message}`, {
-          stderr: planErr.stderr || null,
-          stdout: planErr.stdout || null,
-          exitCode: planErr.exitCode || null,
-          signal: planErr.signal || null
+      let storyPlan;
+      let storiesToGenerate;
+
+      if (isResuming) {
+        // Reuse saved Phase 1 plan — skip Phase 1 entirely
+        storyPlan = generateStoriesState.plan;
+        const existingNames = new Set(existingChildren.map((c) => c.name.toLowerCase().trim()));
+        storiesToGenerate = storyPlan.filter((s) => !existingNames.has(s.name.toLowerCase().trim()));
+        generateStoriesState.total = storiesToGenerate.length;
+        generateStoriesState.phase = 'generating';
+        if (storiesToGenerate.length === 0) {
+          pushLog('success', LOG_SOURCE.panel, `All stories already exist for "${epicName}". Nothing to resume.`);
+          return;
+        }
+        pushLog('info', LOG_SOURCE.panel, `Resuming: ${storiesToGenerate.length} of ${storyPlan.length} stories remaining for "${epicName}". Generating one by one...`);
+      } else {
+        // Phase 1: Generate story plan (outlines only — fast call)
+        const boardContext = await buildBoardContext(client, epicId);
+        pushLog('info', LOG_SOURCE.panel, `Planning stories for "${epicName}"...`);
+        const planPrompt = buildStoryPlanPrompt({
+          epicName,
+          epicBody: epicBody.trim(),
+          existingChildren: existingChildren.map((c) => ({ name: c.name })),
+          boardContext
         });
-        planErr._loggedByPhase1 = true;
-        throw planErr;
+        let planReply;
+        try {
+          ({ reply: planReply } = await runClaudePromptViaApi(planPrompt, PANEL_DEFAULT_MODEL));
+        } catch (planErr) {
+          pushLog('error', LOG_SOURCE.claude, `Phase 1 (planning) failed for "${epicName}": ${planErr.message}`, {
+            stderr: planErr.stderr || null,
+            stdout: planErr.stdout || null,
+            exitCode: planErr.exitCode || null,
+            signal: planErr.signal || null
+          });
+          planErr._loggedByPhase1 = true;
+          throw planErr;
+        }
+        storyPlan = parseStoryPlanResponse(planReply);
+        generateStoriesState.plan = storyPlan; // save plan for potential resume
+        storiesToGenerate = storyPlan;
+        generateStoriesState.total = storyPlan.length;
+        generateStoriesState.phase = 'generating';
+        pushLog('info', LOG_SOURCE.panel, `Story plan ready: ${storyPlan.length} tasks for "${epicName}". Generating one by one...`);
       }
-      const storyPlan = parseStoryPlanResponse(planReply);
-
-      generateStoriesState.total = storyPlan.length;
-      generateStoriesState.phase = 'generating';
-      pushLog('info', LOG_SOURCE.panel, `Story plan ready: ${storyPlan.length} tasks for "${epicName}". Generating one by one...`);
 
       // Phase 2: Generate each story body individually
-      for (let i = 0; i < storyPlan.length; i++) {
-        const outline = storyPlan[i];
+      // existingChildren.length already reflects previously created stories when resuming
+      for (let i = 0; i < storiesToGenerate.length; i++) {
+        const outline = storiesToGenerate[i];
         try {
           const storyPrompt = buildSingleStoryBodyPrompt({
             outline,
@@ -4471,7 +4502,7 @@ app.post('/api/board/generate-stories', async (req, res) => {
           await client.createTask(taskFields, storyBody, { epicId, fileName });
 
           generateStoriesState.created++;
-          pushLog('success', LOG_SOURCE.claude, `Story created (${generateStoriesState.created}/${storyPlan.length}): "${outline.name}"`);
+          pushLog('success', LOG_SOURCE.claude, `Story created (${generateStoriesState.created}/${generateStoriesState.total}): "${outline.name}"`);
         } catch (err) {
           generateStoriesState.failed++;
           generateStoriesState.errors.push(outline.name);
@@ -4484,10 +4515,10 @@ app.post('/api/board/generate-stories', async (req, res) => {
         }
       }
 
-      const discoveryCount = storyPlan.filter((s) => s.type === 'Discovery').length;
-      const storyCount = storyPlan.filter((s) => s.type !== 'Discovery').length;
+      const discoveryCount = storiesToGenerate.filter((s) => s.type === 'Discovery').length;
+      const storyCount = storiesToGenerate.filter((s) => s.type !== 'Discovery').length;
       const typeBreakdown = discoveryCount > 0 ? ` (${discoveryCount} Discovery, ${storyCount} UserStory)` : '';
-      const summary = `Generated ${generateStoriesState.created}/${storyPlan.length} tasks${typeBreakdown} for "${epicName}"${generateStoriesState.failed > 0 ? ` (${generateStoriesState.failed} failed)` : ''}`;
+      const summary = `Generated ${generateStoriesState.created}/${generateStoriesState.total} tasks${typeBreakdown} for "${epicName}"${generateStoriesState.failed > 0 ? ` (${generateStoriesState.failed} failed)` : ''}`;
       pushLog('success', LOG_SOURCE.claude, summary);
     } catch (error) {
       if (!error._loggedByPhase1) {
@@ -4503,6 +4534,13 @@ app.post('/api/board/generate-stories', async (req, res) => {
     } finally {
       generateStoriesState.running = false;
       generateStoriesState.phase = null;
+      // Preserve plan for resume if Phase 2 had failures; clear on full success or Phase 1 failure
+      if (generateStoriesState.failed > 0 && generateStoriesState.plan !== null) {
+        generateStoriesState.canResume = true;
+      } else {
+        generateStoriesState.canResume = false;
+        generateStoriesState.plan = null;
+      }
     }
   })();
 });
