@@ -489,11 +489,11 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
     }
   }, [task, apiBaseUrl, isEpic, deleteEpicFolder, showToast, onDeleted, onClose]);
 
-  // Extract body without frontmatter for display
+  // Extract body without frontmatter for display, stripping the leading h1 title
   const markdownBody = useMemo(() => {
     if (!markdown) return '';
     const { body } = parseFrontmatter(markdown);
-    return body;
+    return body.replace(/^#[^\n]*\n?/, '').trimStart();
   }, [markdown]);
 
   const renderedHtml = markdownBody
