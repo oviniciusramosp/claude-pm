@@ -1040,9 +1040,11 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
     const [draggedEpic] = reordered.splice(draggedIndex, 1);
 
     // Determine insert position based on drop zone
+    // After splice, indices shift down by 1 when dragged item was before target
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const midpoint = rect.top + rect.height / 2;
-    const insertIndex = e.clientY < midpoint ? targetIndex : targetIndex + 1;
+    const adjustedTarget = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
+    const insertIndex = e.clientY < midpoint ? adjustedTarget : adjustedTarget + 1;
 
     reordered.splice(insertIndex, 0, draggedEpic);
 
@@ -1764,9 +1766,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                           const taskIsEpic = isEpic(task, tasks);
                           const showAddButton = (col.key === 'not_started' || col.key === 'missing_status') && taskIsEpic;
                           if (showAddButton) {
-                            return (
+                            const card = (
                               <BoardCard
-                                key={task.id}
+                                key={taskIsEpic ? undefined : task.id}
                                 task={task}
                                 epic={taskIsEpic}
                                 allTasks={tasks}
@@ -1831,6 +1833,66 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   </div>
                                 }
                               />
+                            );
+                            if (taskIsEpic) {
+                              return (
+                                <div
+                                  key={task.id}
+                                  draggable
+                                  onDragStart={(e) => handleEpicDragStart(e, task.id)}
+                                  onDragOver={(e) => handleEpicDragOver(e, task.id, task.status)}
+                                  onDrop={(e) => handleEpicDrop(e, task.id, task.status)}
+                                  onDragEnd={handleEpicDragEnd}
+                                  className={cx(
+                                    'relative',
+                                    draggedEpicId === task.id && 'opacity-50 cursor-grabbing'
+                                  )}
+                                >
+                                  {epicDropBeforeId === task.id && (
+                                    <div className="absolute -top-1 left-0 right-0 h-0.5 bg-utility-brand-500 z-10 rounded-full" />
+                                  )}
+                                  {card}
+                                </div>
+                              );
+                            }
+                            return card;
+                          }
+                          if (taskIsEpic) {
+                            return (
+                              <div
+                                key={task.id}
+                                draggable
+                                onDragStart={(e) => handleEpicDragStart(e, task.id)}
+                                onDragOver={(e) => handleEpicDragOver(e, task.id, task.status)}
+                                onDrop={(e) => handleEpicDrop(e, task.id, task.status)}
+                                onDragEnd={handleEpicDragEnd}
+                                className={cx(
+                                  'relative',
+                                  draggedEpicId === task.id && 'opacity-50 cursor-grabbing'
+                                )}
+                              >
+                                {epicDropBeforeId === task.id && (
+                                  <div className="absolute -top-1 left-0 right-0 h-0.5 bg-utility-brand-500 z-10 rounded-full" />
+                                )}
+                                <BoardCard
+                                  key={task.id}
+                                  task={task}
+                                  epic
+                                  allTasks={tasks}
+                                  onClick={() => setSelectedTask(task)}
+                                  onFix={handleFixTask}
+                                  fixStatus={fixStatus[task.id]}
+                                  allFixStatuses={fixStatus}
+                                  fixingTaskType={fixingTaskId === task.id ? fixingTaskType : null}
+                                  isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
+                                  showAddStatus={isMissingStatus}
+                                  onAddStatus={isMissingStatus ? handleAddStatus : undefined}
+                                  addingStatus={addingStatus}
+                                  onDragStart={() => setDraggedTask(task)}
+                                  onDragEnd={() => { setDraggedTask(null); setDragOverColumn(null); }}
+                                  dragging={draggedTask?.id === task.id}
+                                />
+                              </div>
                             );
                           }
                           return (
