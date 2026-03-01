@@ -95,6 +95,15 @@ function serializeFrontmatter(fields: Record<string, string>): string {
   return lines.join('\n');
 }
 
+function extractEpicNumber(taskId: string): string | null {
+  const id = taskId.split('/')[0];
+  const eMatch = id.match(/^E(\d+)/i);
+  if (eMatch) return eMatch[1];
+  const epicMatch = id.match(/^Epic-?(\d+)/i);
+  if (epicMatch) return epicMatch[1];
+  return null;
+}
+
 // --- Component ---
 interface TaskDetailModalProps {
   open: boolean;
@@ -512,23 +521,23 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
             {/* Header */}
             <div className="flex items-start justify-between gap-3 border-b border-secondary px-6 py-4">
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="m-0 truncate text-lg font-semibold text-primary">
-                    {editing ? editName || 'Task' : (task?.name || 'Task')}
-                  </h3>
-                </div>
                 {!editing && task && (task.priority || task.type || task.status) && (
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
                     {task.priority && (
                       <Badge size="sm" color={(priorityColor || 'gray') as any} className="ring-0 font-mono text-xs">
                         {task.priority}
                       </Badge>
                     )}
-                    {task.type && (
+                    {task.type && task.type.toLowerCase() === 'epic' ? (
+                      <div className="flex items-center gap-1 text-[11px] font-mono text-utility-purple-600">
+                        <Icon icon={Folder} className="size-3 shrink-0" />
+                        <span>Epic {extractEpicNumber(task.id) ?? ''}</span>
+                      </div>
+                    ) : task.type ? (
                       <Badge size="sm" color={(typeColor || 'gray') as any} className="ring-0 font-mono text-xs">
                         {task.type}
                       </Badge>
-                    )}
+                    ) : null}
                     {task.status && (
                       <Badge size="sm" color="gray" className="ring-0 font-mono text-xs">
                         {task.status}
@@ -536,6 +545,11 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                     )}
                   </div>
                 )}
+                <div className="flex items-center gap-2">
+                  <h3 className="m-0 truncate text-lg font-semibold text-primary">
+                    {editing ? editName || 'Task' : (task?.name || 'Task')}
+                  </h3>
+                </div>
                 {!editing && task && (task.model || task.agents.length > 0) && (
                   <div className="mt-3 flex flex-col gap-2">
                     {task.model && (
