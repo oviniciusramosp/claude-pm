@@ -236,6 +236,17 @@ const fixTaskState = {
 const ideaChatState = {
   running: false
 };
+const generateEpicsState = {
+  running: false,
+  sessionId: null,     // session that triggered this run
+  created: 0,
+  total: 0,
+  failed: 0,
+  phase: null,         // 'planning' | 'generating'
+  errors: [],          // names of failed epics
+  plan: null,          // saved Phase 1 result for resume
+  canResume: false     // true when Phase 1 succeeded but Phase 2 had failures
+};
 
 // In-memory session store for Idea to Epics brainstorming
 const ideaSessions = new Map(); // sessionId -> { messages: [], plan: '', createdAt: number }
@@ -5745,40 +5756,86 @@ async function deleteBrainstormLog(boardDir) {
 }
 
 /**
- * Split a plan document into individual Epic sections.
- * Returns an array of { index, name, section } objects.
+ * Phase 1: Generate an Epic plan (list of outlines) from a brainstorm session.
+ * Returns a JSON array of { name, priority, folderName, brief }.
  */
-function splitPlanIntoEpicSections(plan) {
-  const lines = plan.split('\n');
-  const epics = [];
-  let currentEpic = null;
+function buildEpicPlanPrompt({ plan, messages, existingEpicNames, boardContext }) {
+  const existingList = existingEpicNames.length > 0
+    ? existingEpicNames.map((n) => `- ${n}`).join('\n')
+    : '(none)';
 
-  for (const line of lines) {
-    // Match "## Epic N: Name" or "## Epic N — Name" headers
-    const headerMatch = line.match(/^##\s+Epic\s+(\d+)\s*[:—–-]\s*(.+)$/i);
-    if (headerMatch) {
-      if (currentEpic) {
-        epics.push(currentEpic);
-      }
-      currentEpic = {
-        index: parseInt(headerMatch[1], 10),
-        name: headerMatch[2].trim(),
-        section: line + '\n'
-      };
-    } else if (currentEpic) {
-      currentEpic.section += line + '\n';
-    }
+  // Include recent conversation messages for context when there is no plan
+  const recentMessages = messages
+    .filter((m) => m.role !== 'system')
+    .slice(-10)
+    .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+    .join('\n\n');
+
+  const inputBlock = plan
+    ? `<plan>\n${plan}\n</plan>`
+    : `<conversation>\n${recentMessages}\n</conversation>`;
+
+  return `You are a technical architect planning the Epic breakdown for a software project.
+
+${inputBlock}
+
+<existing_epics>
+${existingList}
+</existing_epics>
+
+${boardContext || ''}
+
+<instructions>
+Analyze the ${plan ? 'plan' : 'conversation'} and identify all distinct Epics needed to deliver the described product.
+
+Return ONLY a JSON array with NO additional text or code blocks:
+[
+  {
+    "name": "Authentication System",
+    "priority": "P0|P1|P2|P3",
+    "folderName": "E01-Authentication-System",
+    "brief": "One sentence describing what this Epic delivers."
   }
-  if (currentEpic) {
-    epics.push(currentEpic);
-  }
-  return epics;
+]
+
+Rules:
+- Return ONLY valid JSON array, no markdown, no code blocks, no explanation.
+- 1-15 Epics maximum.
+- folderName MUST follow the pattern E{NN}-{Slug}: NN is zero-padded sequential index (01, 02, 03, ...), Slug is PascalCase words separated by hyphens derived from the Epic name (e.g., Authentication-System).
+- The index in folderName must match the position in the array (first Epic = E01, second = E02, etc.).
+- Do NOT include any Epic whose name matches an existing epic.
+- Order Epics logically: foundational infrastructure first, then features, then polish.
+- ALL output (name, folderName, brief) MUST be in English.
+</instructions>`;
 }
 
-/**
- * Build a prompt to generate a SINGLE Epic from its plan section.
- * Used for parallel epic generation.
- */
+function parseEpicPlanResponse(reply) {
+  const text = String(reply || '').trim();
+  const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  const jsonStr = codeBlockMatch ? codeBlockMatch[1].trim() : text;
+
+  let plan;
+  try {
+    plan = JSON.parse(jsonStr);
+  } catch {
+    throw new Error('Claude did not return valid JSON for epic plan. Raw: ' + text.slice(0, 500));
+  }
+
+  if (!Array.isArray(plan)) {
+    throw new Error('Expected a JSON array for epic plan but got: ' + typeof plan);
+  }
+
+  return plan
+    .filter((e) => e.name && typeof e.name === 'string')
+    .map((e, i) => ({
+      name: e.name.trim(),
+      priority: ['P0', 'P1', 'P2', 'P3'].includes(e.priority) ? e.priority : 'P1',
+      folderName: (e.folderName || '').trim() || `E${String(i + 1).padStart(2, '0')}-${slugFromTitle(e.name)}`,
+      brief: e.brief || ''
+    }))
+    .slice(0, 15);
+}
+
 function buildSingleEpicPrompt(epicSection, epicIndex, totalEpics, fullPlan, boardContext) {
   return `You are a technical architect preparing work packages for an AI coding assistant (Claude Code). Convert ONE section of a plan document into a structured Epic optimized for automated execution.
 
@@ -5871,259 +5928,6 @@ LANGUAGE: ALL output (name, folderName, body) MUST be written in English, regard
 </output_format>`;
 }
 
-function buildPlanToEpicsPrompt(plan, messages, boardContext) {
-  // Budget: conversation is secondary context — keep only recent messages within ~4000 tokens
-  const MAX_CONV_TOKENS = 4000;
-  let messagesToInclude = messages;
-  const totalTokens = estimateTokens(messages.map(m => m.content).join('\n'));
-
-  if (totalTokens > MAX_CONV_TOKENS) {
-    messagesToInclude = [];
-    let budget = MAX_CONV_TOKENS;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msgTokens = estimateTokens(messages[i].content);
-      if (budget - msgTokens < 0 && messagesToInclude.length > 0) break;
-      messagesToInclude.unshift(messages[i]);
-      budget -= msgTokens;
-    }
-  }
-
-  const conversationBlock = messagesToInclude
-    .map((m) => `[${m.role === 'user' ? 'User' : 'Assistant'}]\n${m.content}`)
-    .join('\n\n');
-
-  return `You are a technical architect converting a finalized plan document into structured Epics optimized for automated execution by an AI coding assistant (Claude Code).
-
-<role>
-Parse the plan document below and convert each Epic section into a structured Epic.
-The plan document is the PRIMARY source of truth. The conversation is provided as secondary context only.
-
-PRINCIPLES:
-- Focus on actionable implementation detail — omit narrative, motivation, and UX prose
-- Each Epic = a cohesive feature area that can be developed independently
-- Epics should be ordered for linear, incremental implementation (foundations first)
-- Since AI implements the code, features are built in their FINAL versions (no MVP or phased releases)
-- Only automated tests are used (NEVER manual testing or manual QA)
-- Flag areas that need research with "(needs Discovery)" in Scope or Technical Approach sections
-- Do NOT create user stories or tasks — ONLY the Epic structure
-- Each scope item must map directly to 1+ executable child tasks
-- Include specific technical details (file types, frameworks, APIs) so task generation can reference them
-</role>
-
-${boardContext || ''}
-
-<plan>
-${plan}
-</plan>
-
-<conversation_context>
-${conversationBlock}
-</conversation_context>
-
-<output_format>
-Your output MUST use the following separator-based format to avoid JSON escaping issues with long markdown.
-Each Epic is delimited by "---EPIC---". Within each Epic, the metadata JSON is on one line, followed by "---BODY---", then the full markdown body.
-
-EXAMPLE FORMAT:
----EPIC---
-{"name": "Project Foundation", "folderName": "E01-Project-Foundation", "priority": "P0"}
----BODY---
-# Project Foundation Epic
-
-**Goal**: Set up the project skeleton with build tooling, linting, CI pipeline, and base configuration.
-
-## Scope
-...
-
----EPIC---
-{"name": "Authentication System", "folderName": "E02-Authentication-System", "priority": "P1"}
----BODY---
-# Authentication System Epic
-
-**Goal**: Implement a complete authentication system with login, signup, logout, and session persistence using JWT tokens.
-
-## Scope
-...
-
-RULES FOR FORMAT:
-1. Start each Epic with the line: ---EPIC---
-2. Next line: a single-line JSON object with ONLY "name", "folderName", and "priority"
-3. Next line: ---BODY---
-4. Everything after "---BODY---" until the next "---EPIC---" (or end of output) is the markdown body
-
-Body template for each Epic (use EXACTLY these sections — no others):
-
-# [Epic Name] Epic
-
-**Goal**: [1-2 sentences — WHAT this epic delivers. Concise, technical, no narrative.]
-
-## Scope
-- [Feature/capability 1]: [Concise technical description — what it does, key behaviors]
-- [Feature/capability 2]: [Description] (needs Discovery)
-[Each bullet = one feature area that maps to 1+ executable child tasks. Include technical specifics.]
-
-## Acceptance Criteria
-- [ ] [Technically verifiable condition — checkable by tests, build, or code inspection]
-(5-10 ACs per Epic. Each must be specific and verifiable. Include error handling, edge cases, data validation.)
-
-## Technical Approach
-- [Architecture decisions and patterns to follow]
-- [Key libraries, frameworks, tools to use]
-- [Data flow, state management, API design]
-- [Pseudo-code for key business logic when non-trivial]
-- [Items needing research] (needs Discovery)
-[Implementation guidance that helps generate concrete child tasks]
-
-## Dependencies
-- [Other Epics by name, external services, packages, or "None"]
-
-## Child Tasks
-See individual user story files in this Epic folder.
-
-SECTIONS TO NEVER INCLUDE:
-- ❌ "Motivation & Objectives" — Claude Code doesn't need motivation
-- ❌ "User Experience & Design" — UX details go into individual child tasks
-- ❌ "Open Questions & Risks" — Claude Code executes, it doesn't deliberate
-- ❌ "User Story" / "As a [role], I want..."
-- ❌ "Technical Tasks" with numbered steps
-- ❌ "Tests" with specific test files
-- ❌ "Standard Completion Criteria"
-
-ADDITIONAL RULES:
-- Order Epics by implementation priority (E01 = most foundational)
-- Use E{NN} prefix in folderName, numbered sequentially (E01, E02, E03...)
-- ACs must NOT be generic — they must describe concrete, verifiable behavior
-- Flag complex areas with "(needs Discovery)" suffix
-- NEVER include manual tests — only reference automated testing
-- Dependencies section must reference other Epics by name when applicable
-- LANGUAGE: ALL output (name, folderName, body) MUST be written in English, regardless of the plan's language. If the plan is in another language, translate all content to English while preserving meaning and detail.
-</output_format>`;
-}
-
-function buildIdeasToEpicsPrompt(messages, boardContext) {
-  // Budget: conversation is the only source here — keep within ~6000 tokens
-  const MAX_CONV_TOKENS = 6000;
-  let messagesToInclude = messages;
-  const totalTokens = estimateTokens(messages.map(m => m.content).join('\n'));
-
-  if (totalTokens > MAX_CONV_TOKENS) {
-    messagesToInclude = [];
-    let budget = MAX_CONV_TOKENS;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msgTokens = estimateTokens(messages[i].content);
-      if (budget - msgTokens < 0 && messagesToInclude.length > 0) break;
-      messagesToInclude.unshift(messages[i]);
-      budget -= msgTokens;
-    }
-  }
-
-  const conversationBlock = messagesToInclude
-    .map((m) => `[${m.role === 'user' ? 'User' : 'Assistant'}]\n${m.content}`)
-    .join('\n\n');
-
-  return `You are a technical architect converting a brainstorming session into structured Epics optimized for automated execution by an AI coding assistant (Claude Code).
-
-<role>
-Analyze the COMPLETE brainstorming conversation below and extract all agreed-upon features, organizing them into Epics.
-
-PRINCIPLES:
-- Focus on actionable implementation detail — omit narrative, motivation, and UX prose
-- Each Epic = a cohesive feature area that can be developed independently
-- Epics should be ordered for linear, incremental implementation (foundations first)
-- Since AI implements the code, features are built in their FINAL versions (no MVP or phased releases)
-- Only automated tests are used (NEVER manual testing or manual QA)
-- Flag areas that need research with "(needs Discovery)" in Scope or Technical Approach sections
-- Do NOT create user stories or tasks — ONLY the Epic structure
-- Each scope item must map directly to 1+ executable child tasks
-- Include specific technical details (file types, frameworks, APIs) so task generation can reference them
-</role>
-
-${boardContext || ''}
-
-<brainstorm_session>
-${conversationBlock}
-</brainstorm_session>
-
-<output_format>
-Your output MUST use the following separator-based format to avoid JSON escaping issues with long markdown.
-Each Epic is delimited by "---EPIC---". Within each Epic, the metadata JSON is on one line, followed by "---BODY---", then the full markdown body.
-
-EXAMPLE FORMAT:
----EPIC---
-{"name": "Project Foundation", "folderName": "E01-Project-Foundation", "priority": "P0"}
----BODY---
-# Project Foundation Epic
-
-**Goal**: Set up the project skeleton with build tooling, linting, CI pipeline, and base configuration.
-
-## Scope
-...
-
----EPIC---
-{"name": "Authentication System", "folderName": "E02-Authentication-System", "priority": "P1"}
----BODY---
-# Authentication System Epic
-
-**Goal**: Implement a complete authentication system with login, signup, logout, and session persistence using JWT tokens.
-
-## Scope
-...
-
-RULES FOR FORMAT:
-1. Start each Epic with the line: ---EPIC---
-2. Next line: a single-line JSON object with ONLY "name", "folderName", and "priority"
-3. Next line: ---BODY---
-4. Everything after "---BODY---" until the next "---EPIC---" (or end of output) is the markdown body
-
-Body template for each Epic (use EXACTLY these sections — no others):
-
-# [Epic Name] Epic
-
-**Goal**: [1-2 sentences — WHAT this epic delivers. Concise, technical, no narrative.]
-
-## Scope
-- [Feature/capability 1]: [Concise technical description — what it does, key behaviors]
-- [Feature/capability 2]: [Description] (needs Discovery)
-[Each bullet = one feature area that maps to 1+ executable child tasks. Include technical specifics.]
-
-## Acceptance Criteria
-- [ ] [Technically verifiable condition — checkable by tests, build, or code inspection]
-(5-10 ACs per Epic. Each must be specific and verifiable. Include error handling, edge cases, data validation.)
-
-## Technical Approach
-- [Architecture decisions and patterns to follow]
-- [Key libraries, frameworks, tools to use]
-- [Data flow, state management, API design]
-- [Pseudo-code for key business logic when non-trivial]
-- [Items needing research] (needs Discovery)
-[Implementation guidance that helps generate concrete child tasks]
-
-## Dependencies
-- [Other Epics by name, external services, packages, or "None"]
-
-## Child Tasks
-See individual user story files in this Epic folder.
-
-SECTIONS TO NEVER INCLUDE:
-- ❌ "Motivation & Objectives" — Claude Code doesn't need motivation
-- ❌ "User Experience & Design" — UX details go into individual child tasks
-- ❌ "Open Questions & Risks" — Claude Code executes, it doesn't deliberate
-- ❌ "User Story" / "As a [role], I want..."
-- ❌ "Technical Tasks" with numbered steps
-- ❌ "Tests" with specific test files
-- ❌ "Standard Completion Criteria"
-
-ADDITIONAL RULES:
-- Order Epics by implementation priority (E01 = most foundational)
-- Use E{NN} prefix in folderName, numbered sequentially (E01, E02, E03...)
-- ACs must NOT be generic — they must describe concrete, verifiable behavior
-- Flag complex areas with "(needs Discovery)" suffix
-- NEVER include manual tests — only reference automated testing
-- Dependencies section must reference other Epics by name when applicable
-- LANGUAGE: ALL output (name, folderName, body) MUST be written in English, regardless of the conversation's language. If the conversation is in another language, translate all content to English while preserving meaning and detail.
-</output_format>`;
-}
-
 /**
  * Parse a single Epic response from the separator-based format:
  *   {"name": "...", "folderName": "...", "priority": "P1"}
@@ -6164,80 +5968,6 @@ function parseSingleEpicResponse(text, epicIndex) {
     priority: ['P0', 'P1', 'P2', 'P3'].includes(epic.priority) ? epic.priority : 'P1',
     body: epic.body || ''
   };
-}
-
-function parseIdeasToEpicsResponse(reply) {
-  const text = String(reply || '').trim();
-
-  // Try separator-based format first (---EPIC--- delimited)
-  if (text.includes('---EPIC---')) {
-    const chunks = text.split('---EPIC---').filter((c) => c.trim());
-    const normalized = [];
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i].trim();
-      const bodySep = '---BODY---';
-      const bodyIdx = chunk.indexOf(bodySep);
-      if (bodyIdx === -1) continue;
-
-      let metaStr = chunk.slice(0, bodyIdx).trim();
-      const body = chunk.slice(bodyIdx + bodySep.length).trim();
-      if (!body) continue;
-
-      // Strip markdown code block wrapper from metadata if present
-      const metaCodeBlock = metaStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-      if (metaCodeBlock) metaStr = metaCodeBlock[1].trim();
-
-      try {
-        const meta = JSON.parse(metaStr);
-        if (!meta.name) continue;
-        normalized.push({
-          name: meta.name.trim(),
-          folderName: (meta.folderName || '').trim() || slugFromTitle(meta.name.trim()),
-          priority: ['P0', 'P1', 'P2', 'P3'].includes(meta.priority) ? meta.priority : 'P1',
-          body
-        });
-        if (normalized.length >= 20) break; // Hard cap
-      } catch {
-        continue; // Skip malformed metadata
-      }
-    }
-    if (normalized.length > 0) return normalized;
-    // If separator format found but parsing failed, fall through to legacy
-  }
-
-  // Fallback: legacy JSON array format
-  const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  const jsonStr = codeBlockMatch ? codeBlockMatch[1].trim() : text;
-
-  let epics;
-  try {
-    epics = JSON.parse(jsonStr);
-  } catch {
-    throw new Error('Claude did not return valid JSON. Raw response: ' + text.slice(0, 500));
-  }
-
-  if (!Array.isArray(epics)) {
-    throw new Error('Expected a JSON array of Epics but got: ' + typeof epics);
-  }
-
-  const normalized = [];
-  for (const e of epics) {
-    if (!e.name || typeof e.name !== 'string') continue;
-    if (!e.body || typeof e.body !== 'string') continue;
-    normalized.push({
-      name: e.name.trim(),
-      folderName: (e.folderName && typeof e.folderName === 'string') ? e.folderName.trim() : slugFromTitle(e.name.trim()),
-      priority: ['P0', 'P1', 'P2', 'P3'].includes(e.priority) ? e.priority : 'P1',
-      body: e.body
-    });
-    if (normalized.length >= 20) break; // Hard cap
-  }
-
-  if (normalized.length === 0) {
-    throw new Error('Claude returned no valid Epics. Raw response: ' + text.slice(0, 500));
-  }
-
-  return normalized;
 }
 
 // Return the saved idea session from disk (if any) so the frontend can resume
@@ -6350,6 +6080,11 @@ app.post('/api/ideas/chat', async (req, res) => {
     return;
   }
 
+  if (generateEpicsState.running) {
+    res.status(409).json({ ok: false, message: 'Epic generation is in progress. Please wait for it to finish.' });
+    return;
+  }
+
   ideaChatState.running = true;
 
   try {
@@ -6446,6 +6181,19 @@ app.post('/api/ideas/chat', async (req, res) => {
   }
 });
 
+app.get('/api/ideas/generate-epics/status', (_req, res) => {
+  res.json({
+    running: generateEpicsState.running,
+    sessionId: generateEpicsState.sessionId,
+    created: generateEpicsState.created,
+    total: generateEpicsState.total,
+    failed: generateEpicsState.failed,
+    phase: generateEpicsState.phase,
+    errors: [...generateEpicsState.errors],
+    canResume: generateEpicsState.canResume
+  });
+});
+
 app.post('/api/ideas/generate-epics', async (req, res) => {
   const { sessionId, plan: clientPlan } = req.body;
 
@@ -6454,160 +6202,224 @@ app.post('/api/ideas/generate-epics', async (req, res) => {
     return;
   }
 
+  if (generateEpicsState.running) {
+    res.status(409).json({ ok: false, message: 'Epic generation is already in progress. Please wait.' });
+    return;
+  }
+
   if (ideaChatState.running) {
     res.status(409).json({ ok: false, message: 'A brainstorming request is already in progress. Please wait.' });
     return;
   }
 
-  ideaChatState.running = true;
-  pushLog('info', LOG_SOURCE.panel, 'Generating Epics from brainstorm session...');
+  // Check if we can resume from a saved Phase 1 plan (same session, phase 1 already done)
+  const isResuming = generateEpicsState.canResume &&
+                     generateEpicsState.sessionId === sessionId &&
+                     generateEpicsState.plan !== null;
 
-  try {
-    const session = ideaSessions.get(sessionId);
+  // Initialize state and respond immediately so the client never times out
+  Object.assign(generateEpicsState, {
+    running: true,
+    sessionId,
+    created: 0,
+    total: 0,
+    failed: 0,
+    phase: isResuming ? 'generating' : 'planning',
+    errors: [],
+    canResume: false
+  });
+  if (!isResuming) generateEpicsState.plan = null;
 
-    // Resolve plan: prefer client-sent plan, then session plan
-    const plan = clientPlan || session.plan || '';
+  pushLog('info', LOG_SOURCE.panel, isResuming
+    ? 'Resuming Epic generation (reusing Phase 1 plan)...'
+    : 'Starting Epic generation from brainstorm session...');
+  res.json({ ok: true, started: true });
 
-    // Auto-compact conversation before generating epics to prevent timeout
-    const compactLogger = {
-      info: (msg) => pushLog('info', LOG_SOURCE.panel, msg),
-      warn: (msg) => pushLog('warn', LOG_SOURCE.panel, msg),
-      success: (msg) => pushLog('success', LOG_SOURCE.panel, msg),
-    };
-    await autoCompactMessages(session, compactLogger);
+  // Run generation in background
+  (async () => {
+    try {
+      const session = ideaSessions.get(sessionId);
+      const plan = clientPlan || session.plan || '';
 
-    // Gather board context
-    const env = await readEnvPairs();
-    const boardDir = resolveBoardDir(env);
-    const boardConfig = {
-      board: {
-        dir: boardDir,
-        statuses: {
-          notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
-          inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
-          done: env.BOARD_STATUS_DONE || 'Done'
-        },
-        typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
+      // Gather board context
+      const env = await readEnvPairs();
+      const boardDir = resolveBoardDir(env);
+      const boardConfig = {
+        board: {
+          dir: boardDir,
+          statuses: {
+            notStarted: env.BOARD_STATUS_NOT_STARTED || 'Not Started',
+            inProgress: env.BOARD_STATUS_IN_PROGRESS || 'In Progress',
+            done: env.BOARD_STATUS_DONE || 'Done'
+          },
+          typeValues: { epic: env.BOARD_TYPE_EPIC || 'Epic' }
+        }
+      };
+      const client = new LocalBoardClient(boardConfig);
+      await client.initialize();
+
+      const boardContext = await buildBoardContext(client, null);
+
+      let epicPlan;
+      let epicsToGenerate;
+
+      if (isResuming) {
+        // Reuse saved Phase 1 plan — skip Phase 1 entirely
+        epicPlan = generateEpicsState.plan;
+        const allTasks = await client.listTasks();
+        const existingEpicNames = new Set(
+          allTasks.filter((t) => t.type === 'Epic').map((t) => t.name.toLowerCase().trim())
+        );
+        epicsToGenerate = epicPlan.filter((e) => !existingEpicNames.has(e.name.toLowerCase().trim()));
+        generateEpicsState.total = epicsToGenerate.length;
+        generateEpicsState.phase = 'generating';
+        if (epicsToGenerate.length === 0) {
+          pushLog('success', LOG_SOURCE.panel, 'All Epics already exist. Nothing to resume.');
+          return;
+        }
+        pushLog('info', LOG_SOURCE.panel, `Resuming: ${epicsToGenerate.length} of ${epicPlan.length} Epics remaining. Generating one by one...`);
+      } else {
+        // Phase 1: Generate epic plan (outlines only — fast call)
+        const allTasks = await client.listTasks();
+        const existingEpicNames = allTasks
+          .filter((t) => t.type === 'Epic')
+          .map((t) => t.name);
+
+        const compactLogger = {
+          info: (msg) => pushLog('info', LOG_SOURCE.panel, msg),
+          warn: (msg) => pushLog('warn', LOG_SOURCE.panel, msg),
+          success: (msg) => pushLog('success', LOG_SOURCE.panel, msg),
+        };
+        await autoCompactMessages(session, compactLogger);
+
+        pushLog('info', LOG_SOURCE.panel, 'Planning Epics from brainstorm...');
+        const planPrompt = buildEpicPlanPrompt({
+          plan,
+          messages: session.messages,
+          existingEpicNames,
+          boardContext
+        });
+        let planReply;
+        try {
+          ({ reply: planReply } = await runClaudePromptViaApi(planPrompt, PANEL_DEFAULT_MODEL));
+        } catch (planErr) {
+          pushLog('error', LOG_SOURCE.claude, `Phase 1 (planning) failed: ${planErr.message}`, {
+            stderr: planErr.stderr || null,
+            stdout: planErr.stdout || null,
+            exitCode: planErr.exitCode || null,
+            signal: planErr.signal || null
+          });
+          planErr._loggedByPhase1 = true;
+          throw planErr;
+        }
+
+        epicPlan = parseEpicPlanResponse(planReply);
+        generateEpicsState.plan = epicPlan;
+        epicsToGenerate = epicPlan;
+        generateEpicsState.total = epicPlan.length;
+        generateEpicsState.phase = 'generating';
+        pushLog('info', LOG_SOURCE.panel, `Epic plan ready: ${epicPlan.length} Epics. Generating one by one...`);
       }
-    };
-    const client = new LocalBoardClient(boardConfig);
-    await client.initialize();
 
-    const boardContext = await buildBoardContext(client, null);
-
-    // Generate Epics: use parallel agents if plan has epic sections, otherwise single call
-    const epicSections = plan ? splitPlanIntoEpicSections(plan) : [];
-    let epics;
-
-    if (epicSections.length >= 2) {
-      // ── Parallel generation: one agent per Epic ──────────────
-      pushLog('info', LOG_SOURCE.panel, `Splitting plan into ${epicSections.length} parallel agents...`);
-      const parallelResults = await Promise.allSettled(
-        epicSections.map((section) => {
-          const prompt = buildSingleEpicPrompt(
-            section.section, section.index, epicSections.length, plan, boardContext
+      // Phase 2: Generate each Epic body individually
+      for (let i = 0; i < epicsToGenerate.length; i++) {
+        const outline = epicsToGenerate[i];
+        try {
+          // Build a synthetic plan section from the outline (name + brief)
+          const epicSection = `## ${outline.name}\n\n${outline.brief}`;
+          const epicPrompt = buildSingleEpicPrompt(
+            epicSection, i + 1, epicsToGenerate.length, plan, boardContext
           );
-          pushLog('info', LOG_SOURCE.panel, `Agent started: Epic ${section.index} — ${section.name}`);
-          return runClaudePromptViaApi(prompt, PANEL_DEFAULT_MODEL);
-        })
-      );
+          const { reply: epicReply } = await runClaudePromptViaApi(epicPrompt, PANEL_DEFAULT_MODEL);
+          const epic = parseSingleEpicResponse(String(epicReply || '').trim(), i + 1);
 
-      epics = [];
-      for (let i = 0; i < parallelResults.length; i++) {
-        const result = parallelResults[i];
-        const section = epicSections[i];
-        if (result.status === 'fulfilled') {
-          try {
-            const text = String(result.value.reply || '').trim();
-            const epic = parseSingleEpicResponse(text, section.index);
-            if (epic && epic.name && epic.body) {
-              epics.push(epic);
-              pushLog('success', LOG_SOURCE.panel, `Agent done: Epic ${section.index} — ${section.name}`);
-            } else {
-              pushLog('warn', LOG_SOURCE.panel, `Agent returned invalid structure for Epic ${section.index} — ${section.name}`);
-            }
-          } catch (err) {
-            pushLog('warn', LOG_SOURCE.panel, `Agent parse error for Epic ${section.index} — ${section.name}: ${err.message}`);
+          if (!epic || !epic.name || !epic.body) {
+            throw new Error('Claude returned an invalid or empty Epic structure.');
           }
-        } else {
-          pushLog('warn', LOG_SOURCE.panel, `Agent failed for Epic ${section.index} — ${section.name}: ${result.reason?.message || 'Unknown error'}`);
+
+          // Prefer outline's folderName if Claude didn't provide one
+          if (!epic.folderName) epic.folderName = outline.folderName;
+          if (!epic.priority) epic.priority = outline.priority;
+
+          await client.createTask(
+            { name: epic.name, priority: epic.priority, type: 'Epic', status: 'Not Started' },
+            epic.body,
+            { fileName: epic.folderName }
+          );
+
+          generateEpicsState.created++;
+          pushLog('success', LOG_SOURCE.claude, `Epic created (${generateEpicsState.created}/${generateEpicsState.total}): "${epic.name}"`);
+        } catch (err) {
+          generateEpicsState.failed++;
+          generateEpicsState.errors.push(outline.name);
+          pushLog('error', LOG_SOURCE.claude, `Failed to create Epic "${outline.name}": ${err.message}`, {
+            stderr: err.stderr || null,
+            stdout: err.stdout || null,
+            exitCode: err.exitCode || null,
+            signal: err.signal || null
+          });
         }
       }
-      pushLog('info', LOG_SOURCE.panel, `Parallel generation complete: ${epics.length}/${epicSections.length} succeeded`);
-    } else {
-      // ── Single-call fallback: plan too small or no plan ──────
-      const prompt = plan
-        ? buildPlanToEpicsPrompt(plan, session.messages, boardContext)
-        : buildIdeasToEpicsPrompt(session.messages, boardContext);
-      const { reply } = await runClaudePromptViaApi(prompt, 'claude-opus-4-6');
-      epics = parseIdeasToEpicsResponse(reply);
-    }
 
-    // Create each Epic as a folder with epic.md
-    const created = [];
-    let failed = 0;
+      const summary = `Generated ${generateEpicsState.created}/${generateEpicsState.total} Epics${generateEpicsState.failed > 0 ? ` (${generateEpicsState.failed} failed)` : ''}`;
+      pushLog('success', LOG_SOURCE.claude, summary);
 
-    for (const epic of epics) {
-      try {
-        await client.createTask(
-          { name: epic.name, priority: epic.priority, type: 'Epic', status: 'Not Started' },
-          epic.body,
-          { fileName: epic.folderName }
-        );
-        created.push({ name: epic.name, folderName: epic.folderName });
-      } catch (err) {
-        pushLog('warn', LOG_SOURCE.panel, `Failed to create Epic "${epic.name}": ${err.message}`);
-        failed++;
+      // Post-generation steps (only when at least one Epic was created)
+      if (generateEpicsState.created > 0) {
+        // Save brainstorm conversation log
+        try {
+          const epicNames = epicPlan.map((e) => e.name);
+          const logFileName = await saveBrainstormLog(boardDir, session.messages, plan, epicNames);
+          pushLog('info', LOG_SOURCE.panel, `Brainstorm log saved: ${logFileName}`);
+        } catch (err) {
+          pushLog('warn', LOG_SOURCE.panel, `Failed to save brainstorm log: ${err.message}`);
+        }
+
+        // Update CLAUDE.md and archive session only on full success
+        if (generateEpicsState.failed === 0) {
+          try {
+            const workdir = path.resolve(cwd, env.CLAUDE_WORKDIR || '.');
+            const contextPrompt = buildProjectContextPrompt(plan || '', session.messages);
+            const { reply: contextReply } = await runClaudePromptViaApi(contextPrompt, 'claude-opus-4-6');
+            const projectContext = String(contextReply || '').trim();
+            if (projectContext) {
+              const claudeMdAction = await writeProjectContextToClaudeMd(projectContext, workdir);
+              pushLog('success', LOG_SOURCE.panel, `CLAUDE.md project context ${claudeMdAction}`);
+            }
+          } catch (err) {
+            pushLog('warn', LOG_SOURCE.panel, `Failed to update CLAUDE.md project context: ${err.message}`);
+          }
+
+          ideaSessions.delete(sessionId);
+          const archiveName = await archiveIdeaSession(epicPlan.map((e) => e.name));
+          if (archiveName) {
+            pushLog('info', LOG_SOURCE.panel, `Session archived: ${archiveName}`);
+          }
+        }
+      }
+    } catch (error) {
+      if (!error._loggedByPhase1) {
+        pushLog('error', LOG_SOURCE.claude, `Epic generation failed (${generateEpicsState.phase || 'setup'}): ${error.message}`, {
+          stderr: error.stderr || null,
+          stdout: error.stdout || null,
+          exitCode: error.exitCode || null,
+          signal: error.signal || null,
+          stack: error.stack || null
+        });
+      }
+      generateEpicsState.failed++;
+    } finally {
+      generateEpicsState.running = false;
+      generateEpicsState.phase = null;
+      // Preserve plan for resume if Phase 2 had failures; clear on full success or Phase 1 failure
+      if (generateEpicsState.failed > 0 && generateEpicsState.plan !== null) {
+        generateEpicsState.canResume = true;
+      } else {
+        generateEpicsState.canResume = false;
+        generateEpicsState.plan = null;
       }
     }
-
-    const summary = `Generated ${created.length} Epics from brainstorm${failed > 0 ? ` (${failed} failed)` : ''}`;
-    pushLog('success', LOG_SOURCE.claude, summary);
-
-    // Save brainstorm conversation log as a permanent .md file in Board/
-    try {
-      const epicNames = created.map((e) => e.name);
-      const logFileName = await saveBrainstormLog(boardDir, session.messages, plan, epicNames);
-      pushLog('info', LOG_SOURCE.panel, `Brainstorm log saved: ${logFileName}`);
-    } catch (err) {
-      pushLog('warn', LOG_SOURCE.panel, `Failed to save brainstorm log: ${err.message}`);
-    }
-
-    // Update CLAUDE.md with project context
-    let claudeMdAction = '';
-    try {
-      const workdir = path.resolve(cwd, env.CLAUDE_WORKDIR || '.');
-      const contextPrompt = buildProjectContextPrompt(plan || '', session.messages);
-      const { reply: contextReply } = await runClaudePromptViaApi(contextPrompt, 'claude-opus-4-6');
-      const projectContext = String(contextReply || '').trim();
-      if (projectContext) {
-        claudeMdAction = await writeProjectContextToClaudeMd(projectContext, workdir);
-        pushLog('success', LOG_SOURCE.panel, `CLAUDE.md project context ${claudeMdAction}`);
-      }
-    } catch (err) {
-      pushLog('warn', LOG_SOURCE.panel, `Failed to update CLAUDE.md project context: ${err.message}`);
-      // Non-fatal: epics were already created
-    }
-
-    // Archive session (rename to .data/idea-sessions/) so modal starts fresh
-    ideaSessions.delete(sessionId);
-    const epicNames = created.map((e) => e.name);
-    const archiveName = await archiveIdeaSession(epicNames);
-    if (archiveName) {
-      pushLog('info', LOG_SOURCE.panel, `Session archived: ${archiveName}`);
-    }
-
-    res.json({ ok: true, created, total: epics.length, failed });
-  } catch (error) {
-    const isTimeout = error.message && error.message.includes('timed out');
-    const userMessage = isTimeout
-      ? 'Epic generation timed out. Try using the "To Plan" button to consolidate the conversation, then edit the plan to be more concise before generating again.'
-      : error.message;
-    pushLog('error', LOG_SOURCE.claude, `Epic generation from ideas failed: ${error.message}`);
-    res.status(500).json({ ok: false, message: userMessage });
-  } finally {
-    ideaChatState.running = false;
-  }
+  })();
 });
 
 app.post('/api/ideas/delete-session', async (req, res) => {

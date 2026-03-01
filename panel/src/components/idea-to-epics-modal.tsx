@@ -53,6 +53,14 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [generateStatus, setGenerateStatus] = useState<{
+    phase: string | null;
+    created: number;
+    total: number;
+    failed: number;
+    canResume: boolean;
+  } | null>(null);
+  const generatePollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Plan state
   const [plan, setPlan] = useState('');
@@ -69,6 +77,87 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Poll generation status until completion
+  const startPollingEpics = useCallback(() => {
+    const poll = async () => {
+      try {
+        const res = await fetch(`${apiBaseUrl}/api/ideas/generate-epics/status`);
+        const status = await res.json().catch(() => ({}));
+        setGenerateStatus({
+          phase: status.phase || null,
+          created: status.created || 0,
+          total: status.total || 0,
+          failed: status.failed || 0,
+          canResume: status.canResume || false
+        });
+
+        if (status.running) {
+          generatePollRef.current = setTimeout(poll, 1500);
+        } else {
+          setGenerating(false);
+          const failed = status.failed || 0;
+          const created = status.created || 0;
+          const total = status.total || 0;
+          if (failed > 0) {
+            showToast(`Generated ${created} of ${total} Epics (${failed} failed). Click "Generate Epics" to resume.`, 'warning');
+          } else if (created > 0) {
+            showToast(`Generated ${created} Epics successfully.`, 'success');
+            onCreated();
+            onClose();
+          } else {
+            showToast('Epic generation finished with no Epics created.', 'danger');
+          }
+        }
+      } catch {
+        setGenerating(false);
+        setGenerateStatus(null);
+      }
+    };
+    poll();
+  }, [apiBaseUrl, showToast, onCreated, onClose]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (generatePollRef.current) clearTimeout(generatePollRef.current);
+    };
+  }, []);
+
+  // On modal open: check if a generation is already running and resume polling
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiBaseUrl}/api/ideas/generate-epics/status`);
+        const status = await res.json().catch(() => ({}));
+        if (!cancelled && status.running) {
+          setGenerating(true);
+          setGenerateStatus({
+            phase: status.phase || null,
+            created: status.created || 0,
+            total: status.total || 0,
+            failed: status.failed || 0,
+            canResume: false
+          });
+          startPollingEpics();
+        } else if (!cancelled && status.canResume) {
+          setGenerateStatus({
+            phase: null,
+            created: status.created || 0,
+            total: status.total || 0,
+            failed: status.failed || 0,
+            canResume: true
+          });
+        }
+      } catch {
+        // ignore — server may not be reachable yet
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -210,7 +299,7 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
     if (!sessionId || generating || sending) return;
 
     setGenerating(true);
-    setMessages(prev => [...prev, { role: 'system', content: 'Generating Epics from our conversation...' }]);
+    setGenerateStatus({ phase: 'planning', created: 0, total: 0, failed: 0, canResume: false });
 
     try {
       const response = await fetch(`${apiBaseUrl}/api/ideas/generate-epics`, {
@@ -219,44 +308,27 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
         body: JSON.stringify({ sessionId, plan })
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         const errMsg = data?.message || `Request failed (${response.status})`;
         if (onShowErrorDetail) {
           onShowErrorDetail('Epic generation failed', errMsg);
         }
-        showToast('Failed to generate Epics', 'danger');
-        // Remove the "generating" system message
-        setMessages(prev => prev.slice(0, -1));
+        showToast('Failed to start Epic generation', 'danger');
+        setGenerating(false);
+        setGenerateStatus(null);
         return;
       }
 
-      if (data.ok) {
-        const count = data.created?.length || 0;
-        const failedCount = data.failed || 0;
-        const names = data.created?.map((e: any) => e.name).join(', ') || '';
-
-        showToast(
-          `Created ${count} Epic${count !== 1 ? 's' : ''}${failedCount > 0 ? ` (${failedCount} failed)` : ''}: ${names}`,
-          failedCount > 0 ? 'warning' : 'success'
-        );
-        onCreated();
-        onClose();
-      } else {
-        if (onShowErrorDetail) {
-          onShowErrorDetail('Epic generation failed', data.message || 'Unknown error');
-        }
-        showToast('Failed to generate Epics', 'danger');
-        setMessages(prev => prev.slice(0, -1));
-      }
+      // Backend responds immediately; poll status until done
+      startPollingEpics();
     } catch (error: any) {
       showToast(`Network error: ${error.message}`, 'danger');
-      setMessages(prev => prev.slice(0, -1));
-    } finally {
       setGenerating(false);
+      setGenerateStatus(null);
     }
-  }, [sessionId, generating, sending, apiBaseUrl, showToast, onCreated, onClose, onShowErrorDetail, plan]);
+  }, [sessionId, generating, sending, apiBaseUrl, showToast, onShowErrorDetail, plan, startPollingEpics]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -587,8 +659,35 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
                 </div>
               </div>
 
-              {/* Generate Epics button */}
-              <div className="flex justify-end border-t border-secondary px-6 py-4">
+              {/* Generate Epics button + progress */}
+              <div className="flex items-center justify-between border-t border-secondary px-6 py-4">
+                {/* Progress indicator */}
+                <div className="flex-1 mr-4">
+                  {generating && generateStatus && (
+                    <div className="flex flex-col gap-0.5">
+                      <p className="text-xs font-medium text-secondary">
+                        {generateStatus.phase === 'planning'
+                          ? 'Planning Epics...'
+                          : generateStatus.total > 0
+                            ? `Generating ${generateStatus.created} of ${generateStatus.total} Epics${generateStatus.failed > 0 ? ` (${generateStatus.failed} failed)` : ''}...`
+                            : 'Generating Epics...'}
+                      </p>
+                      {generateStatus.phase === 'generating' && generateStatus.total > 0 && (
+                        <div className="h-1.5 w-full rounded-full bg-secondary overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-brand-600 transition-all duration-500"
+                            style={{ width: `${Math.round((generateStatus.created / generateStatus.total) * 100)}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {!generating && generateStatus?.canResume && (
+                    <p className="text-xs text-utility-warning-500">
+                      Generation partially failed ({generateStatus.failed} of {generateStatus.total} Epics). Click to resume.
+                    </p>
+                  )}
+                </div>
                 <Button
                   size="md"
                   color="primary"
@@ -598,7 +697,11 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
                   isLoading={generating}
                   showTextWhileLoading
                 >
-                  {generating ? 'Generating Epics...' : 'Generate Epics from Plan'}
+                  {generating
+                    ? 'Generating...'
+                    : generateStatus?.canResume
+                      ? 'Resume Generation'
+                      : 'Generate Epics from Plan'}
                 </Button>
               </div>
             </div>
