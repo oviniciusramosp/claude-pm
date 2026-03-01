@@ -1643,10 +1643,10 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                 onDragOver={(e) => handleEpicDragOver(e, task.id, task.status)}
                                 onDrop={(e) => handleEpicDrop(e, task.id, task.status)}
                                 onDragEnd={handleEpicDragEnd}
-                                className={cx('relative flex flex-col isolate', draggedEpicId === task.id && 'opacity-50 cursor-grabbing')}
+                                className={cx('relative flex flex-col isolate overflow-hidden', draggedEpicId === task.id && 'opacity-50 cursor-grabbing')}
                               >
                                 {epicDropBeforeId === task.id && (
-                                  <div className="absolute -top-1 left-0 right-0 h-0.5 bg-utility-brand-500 z-10 rounded-full" />
+                                  <div className="absolute top-0 left-0 right-0 h-0.5 bg-utility-brand-500 z-10 rounded-full" />
                                 )}
                                 {/* Epic card with action footer inside — always on top of children stack */}
                                 <div className="relative" style={{ zIndex: 2 }}>
