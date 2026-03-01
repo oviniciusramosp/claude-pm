@@ -753,8 +753,8 @@
     --color-bg-secondary_subtle: var(--color-gray-25);
     --color-bg-secondary_hover: var(--color-gray-100);
     --color-bg-secondary_alt: var(--color-gray-50);
-    --color-bg-tertiary: var(--color-gray-100);
-    --color-bg-quaternary: var(--color-gray-200);
+    --color-bg-tertiary: var(--color-gray-50);
+    --color-bg-quaternary: var(--color-gray-100);
     --color-bg-error-primary: var(--color-error-50);
     --color-bg-error-secondary: var(--color-error-100);
     --color-bg-error-solid: var(--color-error-600);
