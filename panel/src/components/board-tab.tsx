@@ -659,9 +659,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createDefaultEpicId, setCreateDefaultEpicId] = useState<string | undefined>(undefined);
   const [ideaModalOpen, setIdeaModalOpen] = useState(false);
-  const [generatingEpicId, setGeneratingEpicId] = useState(null as string | null);
-  const [generateProgress, setGenerateProgress] = useState(null as { created: number; total: number; phase: string | null } | null);
-  const generatePollRef = useRef(null as ReturnType<typeof setTimeout> | null);
+  const [generatingEpicIds, setGeneratingEpicIds] = useState(new Set<string>());
+  const [generateProgressMap, setGenerateProgressMap] = useState(new Map<string, { created: number; total: number; phase: string | null }>());
+  const generatePollRefs = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const [fixingEpicId, setFixingEpicId] = useState(null as string | null);
   const [fixingEpicType, setFixingEpicType] = useState(null as string | null);
   const [fixingTaskId, setFixingTaskId] = useState(null as string | null);
@@ -1090,27 +1090,38 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
     }
   }, [draggedEpicId, tasks, apiBaseUrl, showToast, fetchBoard, handleEpicDragEnd]);
 
-  // Cleanup poll on unmount
+  // Cleanup all polls on unmount
   useEffect(() => {
     return () => {
-      if (generatePollRef.current) clearTimeout(generatePollRef.current);
+      generatePollRefs.current.forEach((t) => clearTimeout(t));
     };
   }, []);
 
-  // Poll generation status until completion — shared by handleGenerateStories and mount resume
+  // Helpers to add/remove a single epicId from the Set/Map states
+  const addGenerating = useCallback((epicId: string, progress: { created: number; total: number; phase: string | null }) => {
+    setGeneratingEpicIds((prev) => new Set([...prev, epicId]));
+    setGenerateProgressMap((prev) => { const next = new Map(prev); next.set(epicId, progress); return next; });
+  }, []);
+
+  const removeGenerating = useCallback((epicId: string) => {
+    setGeneratingEpicIds((prev) => { const next = new Set(prev); next.delete(epicId); return next; });
+    setGenerateProgressMap((prev) => { const next = new Map(prev); next.delete(epicId); return next; });
+  }, []);
+
+  // Poll generation status for a specific epic until completion
   const startPollingGeneration = useCallback((epicId: string) => {
     const pollStatus = async () => {
       try {
-        const statusRes = await fetch(`${apiBaseUrl}/api/board/generate-stories/status`);
+        const statusRes = await fetch(`${apiBaseUrl}/api/board/generate-stories/status?epicId=${encodeURIComponent(epicId)}`);
         const status = await statusRes.json().catch(() => ({}));
-        setGenerateProgress({
-          created: status.created || 0,
-          total: status.total || 0,
-          phase: status.phase || null
+        setGenerateProgressMap((prev) => {
+          const next = new Map(prev);
+          next.set(epicId, { created: status.created || 0, total: status.total || 0, phase: status.phase || null });
+          return next;
         });
 
         if (status.running) {
-          generatePollRef.current = setTimeout(pollStatus, 1500);
+          generatePollRefs.current.set(epicId, setTimeout(pollStatus, 1500));
         } else {
           const failed = status.failed || 0;
           const created = status.created || 0;
@@ -1119,39 +1130,32 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
             ? `Generated ${created} of ${total} stories (${failed} failed)`
             : `Generated ${created} stories`;
           showToast(msg, failed > 0 ? 'warning' : 'success');
-          setExpandedEpics((prev) => {
-            const next = new Set(prev);
-            next.add(epicId);
-            return next;
-          });
+          setExpandedEpics((prev) => { const next = new Set(prev); next.add(epicId); return next; });
           await fetchBoard(true);
-          setGeneratingEpicId(null);
-          setGenerateProgress(null);
+          removeGenerating(epicId);
         }
       } catch {
-        setGeneratingEpicId(null);
-        setGenerateProgress(null);
+        removeGenerating(epicId);
       }
     };
 
     pollStatus();
-  }, [apiBaseUrl, showToast, fetchBoard, setExpandedEpics]);
+  }, [apiBaseUrl, showToast, fetchBoard, setExpandedEpics, removeGenerating]);
 
-  // On mount: if a generation is already running on the server, resume the progress UI
+  // On mount: resume progress UI for any generations already running on the server
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const res = await fetch(`${apiBaseUrl}/api/board/generate-stories/status`);
-        const status = await res.json().catch(() => ({}));
-        if (!cancelled && status.running && status.epicId) {
-          setGeneratingEpicId(status.epicId);
-          setGenerateProgress({
-            created: status.created || 0,
-            total: status.total || 0,
-            phase: status.phase || null
-          });
-          startPollingGeneration(status.epicId);
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        const sessions: any[] = data.sessions || (data.running && data.epicId ? [data] : []);
+        for (const s of sessions) {
+          if (s.running && s.epicId) {
+            addGenerating(s.epicId, { created: s.created || 0, total: s.total || 0, phase: s.phase || null });
+            startPollingGeneration(s.epicId);
+          }
         }
       } catch {
         // ignore — server may not be reachable yet
@@ -1162,8 +1166,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   }, []);
 
   const handleGenerateStories = useCallback(async (epicId: string) => {
-    setGeneratingEpicId(epicId);
-    setGenerateProgress({ created: 0, total: 0, phase: 'planning' });
+    addGenerating(epicId, { created: 0, total: 0, phase: 'planning' });
 
     try {
       const response = await fetch(`${apiBaseUrl}/api/board/generate-stories`, {
@@ -1174,8 +1177,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         showToast(payload?.message || 'Failed to generate stories', 'danger');
-        setGeneratingEpicId(null);
-        setGenerateProgress(null);
+        removeGenerating(epicId);
         return;
       }
 
@@ -1183,10 +1185,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
       startPollingGeneration(epicId);
     } catch (err: any) {
       showToast(err.message || 'Failed to generate stories', 'danger');
-      setGeneratingEpicId(null);
-      setGenerateProgress(null);
+      removeGenerating(epicId);
     }
-  }, [apiBaseUrl, showToast, startPollingGeneration]);
+  }, [apiBaseUrl, showToast, startPollingGeneration, addGenerating, removeGenerating]);
 
   const handleFixEpic = useCallback(async (epicId: string, fixType: string) => {
     setFixingEpicId(epicId);
@@ -1469,7 +1470,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                               fixStatus={fixStatus[task.id]}
                               allFixStatuses={fixStatus}
                               fixingTaskType={fixingTaskId === task.id ? fixingTaskType : null}
-                              isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
+                              isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicIds.size > 0}
                               showAddStatus={isMissingStatus}
                               onAddStatus={isMissingStatus ? handleAddStatus : undefined}
                               addingStatus={addingStatus}
@@ -1504,7 +1505,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   fixStatus={fixStatus[task.id]}
                                   allFixStatuses={fixStatus}
                                   fixingTaskType={fixingTaskId === task.id ? fixingTaskType : null}
-                                  isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
+                                  isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicIds.size > 0}
                                   showAddStatus={isMissingStatus}
                                   onAddStatus={isMissingStatus ? handleAddStatus : undefined}
                                   addingStatus={addingStatus}
@@ -1523,29 +1524,29 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       </Tooltip>
                                       <div className="flex-1" />
                                       <Tooltip
-                                        title={generatingEpicId === task.id ? "Generating tasks..." : "Generate tasks"}
-                                        description={generatingEpicId === task.id ? "Using Claude AI to create tasks" : "Auto-generate tasks with Claude AI"}
+                                        title={generatingEpicIds.has(task.id) ? "Generating tasks..." : "Generate tasks"}
+                                        description={generatingEpicIds.has(task.id) ? "Using Claude AI to create tasks" : "Auto-generate tasks with Claude AI"}
                                       >
                                         <TooltipTrigger
                                           onPress={() => handleGenerateStories(task.id)}
-                                          isDisabled={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
+                                          isDisabled={generatingEpicIds.has(task.id) || fixingEpicId !== null || fixingTaskId !== null}
                                           className={cx(
                                             'flex h-6 items-center gap-1 rounded-md px-2 text-xs transition-all duration-200',
-                                            generatingEpicId === task.id
+                                            generatingEpicIds.has(task.id)
                                               ? 'text-brand-secondary bg-utility-brand-50'
-                                              : (generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null)
+                                              : (generatingEpicIds.has(task.id) || fixingEpicId !== null || fixingTaskId !== null)
                                                 ? 'text-quaternary cursor-not-allowed'
                                                 : 'text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10'
                                           )}
                                         >
-                                          {generatingEpicId === task.id
-                                            ? (generateProgress && generateProgress.total > 0
-                                              ? <GenerateProgressDonut created={generateProgress.created} total={generateProgress.total} />
+                                          {generatingEpicIds.has(task.id)
+                                            ? ((generateProgressMap.get(task.id)?.total ?? 0) > 0
+                                              ? <GenerateProgressDonut created={generateProgressMap.get(task.id)!.created} total={generateProgressMap.get(task.id)!.total} />
                                               : <div className="size-3 animate-spin rounded-full border-[1.5px] border-current/25 border-t-current" />)
                                             : <Stars01 className="size-3" />}
-                                          <span className="hidden min-[961px]:inline">{generatingEpicId === task.id
-                                            ? (generateProgress && generateProgress.total > 0
-                                              ? (generateProgress.phase === 'planning' ? 'Planning...' : `${generateProgress.created}/${generateProgress.total}`)
+                                          <span className="hidden min-[961px]:inline">{generatingEpicIds.has(task.id)
+                                            ? ((generateProgressMap.get(task.id)?.total ?? 0) > 0
+                                              ? (generateProgressMap.get(task.id)?.phase === 'planning' ? 'Planning...' : `${generateProgressMap.get(task.id)!.created}/${generateProgressMap.get(task.id)!.total}`)
                                               : 'Planning...')
                                             : 'Generate'}</span>
                                         </TooltipTrigger>
@@ -1554,7 +1555,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                         epicId={task.id}
                                         onFix={handleFixEpic}
                                         isFixing={fixingEpicId === task.id}
-                                        isAnyOperationRunning={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
+                                        isAnyOperationRunning={generatingEpicIds.has(task.id) || fixingEpicId !== null || fixingTaskId !== null}
                                         currentFixType={fixingEpicId === task.id ? fixingEpicType : null}
                                       />
                                     </div>
@@ -1659,7 +1660,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                     fixStatus={fixStatus[task.id]}
                                     allFixStatuses={fixStatus}
                                     fixingTaskType={fixingTaskId === task.id ? fixingTaskType : null}
-                                    isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
+                                    isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicIds.size > 0}
                                     showAddStatus={isMissingStatus}
                                     onAddStatus={isMissingStatus ? handleAddStatus : undefined}
                                     addingStatus={addingStatus}
@@ -1689,29 +1690,29 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                             </Tooltip>
                                             <div className="flex-1" />
                                             <Tooltip
-                                              title={generatingEpicId === task.id ? "Generating tasks..." : "Generate tasks"}
-                                              description={generatingEpicId === task.id ? "Using Claude AI to create tasks" : "Auto-generate tasks with Claude AI"}
+                                              title={generatingEpicIds.has(task.id) ? "Generating tasks..." : "Generate tasks"}
+                                              description={generatingEpicIds.has(task.id) ? "Using Claude AI to create tasks" : "Auto-generate tasks with Claude AI"}
                                             >
                                               <TooltipTrigger
                                                 onPress={() => handleGenerateStories(task.id)}
-                                                isDisabled={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
+                                                isDisabled={generatingEpicIds.has(task.id) || fixingEpicId !== null || fixingTaskId !== null}
                                                 className={cx(
                                                   'flex h-6 items-center gap-1 rounded-md px-2 text-xs transition-all duration-200',
-                                                  generatingEpicId === task.id
+                                                  generatingEpicIds.has(task.id)
                                                     ? 'text-brand-secondary bg-utility-brand-50'
-                                                    : (generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null)
+                                                    : (generatingEpicIds.has(task.id) || fixingEpicId !== null || fixingTaskId !== null)
                                                       ? 'text-quaternary cursor-not-allowed'
                                                       : 'text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10'
                                                 )}
                                               >
-                                                {generatingEpicId === task.id
-                                                  ? (generateProgress && generateProgress.total > 0
-                                                    ? <GenerateProgressDonut created={generateProgress.created} total={generateProgress.total} />
+                                                {generatingEpicIds.has(task.id)
+                                                  ? ((generateProgressMap.get(task.id)?.total ?? 0) > 0
+                                                    ? <GenerateProgressDonut created={generateProgressMap.get(task.id)!.created} total={generateProgressMap.get(task.id)!.total} />
                                                     : <div className="size-3 animate-spin rounded-full border-[1.5px] border-current/25 border-t-current" />)
                                                   : <Stars01 className="size-3" />}
-                                                <span className="hidden min-[961px]:inline">{generatingEpicId === task.id
-                                                  ? (generateProgress && generateProgress.total > 0
-                                                    ? (generateProgress.phase === 'planning' ? 'Planning...' : `${generateProgress.created}/${generateProgress.total}`)
+                                                <span className="hidden min-[961px]:inline">{generatingEpicIds.has(task.id)
+                                                  ? ((generateProgressMap.get(task.id)?.total ?? 0) > 0
+                                                    ? (generateProgressMap.get(task.id)?.phase === 'planning' ? 'Planning...' : `${generateProgressMap.get(task.id)!.created}/${generateProgressMap.get(task.id)!.total}`)
                                                     : 'Planning...')
                                                   : 'Generate'}</span>
                                               </TooltipTrigger>
@@ -1720,7 +1721,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                               epicId={task.id}
                                               onFix={handleFixEpic}
                                               isFixing={fixingEpicId === task.id}
-                                              isAnyOperationRunning={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
+                                              isAnyOperationRunning={generatingEpicIds.has(task.id) || fixingEpicId !== null || fixingTaskId !== null}
                                               currentFixType={fixingEpicId === task.id ? fixingEpicType : null}
                                             />
                                           </>
@@ -1783,7 +1784,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                             fixStatus={fixStatus[child.id]}
                                             allFixStatuses={fixStatus}
                                             fixingTaskType={fixingTaskId === child.id ? fixingTaskType : null}
-                                            isGlobalOperationRunning={!expanded || fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
+                                            isGlobalOperationRunning={!expanded || fixingTaskId !== null || fixingEpicId !== null || generatingEpicIds.size > 0}
                                             showAddStatus={isMissingStatus}
                                             onAddStatus={isMissingStatus ? handleAddStatus : undefined}
                                             addingStatus={addingStatus}
@@ -1813,7 +1814,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                 fixStatus={fixStatus[task.id]}
                                 allFixStatuses={fixStatus}
                                 fixingTaskType={fixingTaskId === task.id ? fixingTaskType : null}
-                                isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
+                                isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicIds.size > 0}
                                 showAddStatus={isMissingStatus}
                                 onAddStatus={isMissingStatus ? handleAddStatus : undefined}
                                 addingStatus={addingStatus}
@@ -1832,29 +1833,29 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                     </Tooltip>
                                     <div className="flex-1" />
                                     <Tooltip
-                                      title={generatingEpicId === task.id ? "Generating tasks..." : "Generate tasks"}
-                                      description={generatingEpicId === task.id ? "Using Claude AI to create tasks" : "Auto-generate tasks with Claude AI"}
+                                      title={generatingEpicIds.has(task.id) ? "Generating tasks..." : "Generate tasks"}
+                                      description={generatingEpicIds.has(task.id) ? "Using Claude AI to create tasks" : "Auto-generate tasks with Claude AI"}
                                     >
                                       <TooltipTrigger
                                         onPress={() => handleGenerateStories(task.id)}
-                                        isDisabled={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
+                                        isDisabled={generatingEpicIds.has(task.id) || fixingEpicId !== null || fixingTaskId !== null}
                                         className={cx(
                                           'flex h-6 items-center gap-1 rounded-md px-2 text-xs transition-all duration-200',
-                                          generatingEpicId === task.id
+                                          generatingEpicIds.has(task.id)
                                             ? 'text-brand-secondary bg-utility-brand-50'
-                                            : (generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null)
+                                            : (generatingEpicIds.has(task.id) || fixingEpicId !== null || fixingTaskId !== null)
                                               ? 'text-quaternary cursor-not-allowed'
                                               : 'text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/10'
                                         )}
                                       >
-                                        {generatingEpicId === task.id
-                                          ? (generateProgress && generateProgress.total > 0
-                                            ? <GenerateProgressDonut created={generateProgress.created} total={generateProgress.total} />
+                                        {generatingEpicIds.has(task.id)
+                                          ? ((generateProgressMap.get(task.id)?.total ?? 0) > 0
+                                            ? <GenerateProgressDonut created={generateProgressMap.get(task.id)!.created} total={generateProgressMap.get(task.id)!.total} />
                                             : <div className="size-3 animate-spin rounded-full border-[1.5px] border-current/25 border-t-current" />)
                                           : <Stars01 className="size-3" />}
-                                        <span className="hidden min-[961px]:inline">{generatingEpicId === task.id
-                                          ? (generateProgress && generateProgress.total > 0
-                                            ? (generateProgress.phase === 'planning' ? 'Planning...' : `${generateProgress.created}/${generateProgress.total}`)
+                                        <span className="hidden min-[961px]:inline">{generatingEpicIds.has(task.id)
+                                          ? ((generateProgressMap.get(task.id)?.total ?? 0) > 0
+                                            ? (generateProgressMap.get(task.id)?.phase === 'planning' ? 'Planning...' : `${generateProgressMap.get(task.id)!.created}/${generateProgressMap.get(task.id)!.total}`)
                                             : 'Planning...')
                                           : 'Generate'}</span>
                                       </TooltipTrigger>
@@ -1863,7 +1864,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                       epicId={task.id}
                                       onFix={handleFixEpic}
                                       isFixing={fixingEpicId === task.id}
-                                      isAnyOperationRunning={generatingEpicId !== null || fixingEpicId !== null || fixingTaskId !== null}
+                                      isAnyOperationRunning={generatingEpicIds.has(task.id) || fixingEpicId !== null || fixingTaskId !== null}
                                       currentFixType={fixingEpicId === task.id ? fixingEpicType : null}
                                     />
                                   </div>
@@ -1920,7 +1921,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                   fixStatus={fixStatus[task.id]}
                                   allFixStatuses={fixStatus}
                                   fixingTaskType={fixingTaskId === task.id ? fixingTaskType : null}
-                                  isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
+                                  isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicIds.size > 0}
                                   showAddStatus={isMissingStatus}
                                   onAddStatus={isMissingStatus ? handleAddStatus : undefined}
                                   addingStatus={addingStatus}
@@ -1942,7 +1943,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                               fixStatus={fixStatus[task.id]}
                               allFixStatuses={fixStatus}
                               fixingTaskType={fixingTaskId === task.id ? fixingTaskType : null}
-                              isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicId !== null}
+                              isGlobalOperationRunning={fixingTaskId !== null || fixingEpicId !== null || generatingEpicIds.size > 0}
                               showAddStatus={isMissingStatus}
                               onAddStatus={isMissingStatus ? handleAddStatus : undefined}
                               addingStatus={addingStatus}
