@@ -540,7 +540,7 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
         <div className="mb-2">
           <Tooltip title={parentEpic.name} placement="top">
             <TooltipTrigger className="flex items-center gap-1 text-[11px] text-quaternary font-mono tracking-wide cursor-default">
-              <Icon icon={Folder} className="size-3 shrink-0 text-utility-purple-600" />
+              <Icon icon={Folder} className="size-3 shrink-0" />
               {parentEpicCode && <span>{parentEpicCode}</span>}
               {taskCode && (
                 <>
