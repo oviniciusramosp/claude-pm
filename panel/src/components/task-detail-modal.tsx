@@ -7,6 +7,7 @@ import { Button } from '@/components/base/buttons/button';
 import { cx } from '@/utils/cx';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
+import { Tooltip, TooltipTrigger } from './base/tooltip/tooltip';
 import { DiscardConfirmOverlay } from './discard-confirm-overlay';
 import { Select, type SelectOption } from '@/components/base/select/select';
 import { BOARD_PRIORITY_COLORS, CLAUDE_TASK_MODELS } from '../constants';
@@ -571,20 +572,19 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                         <span className={PRIORITY_INLINE_COLORS[task.priority] || ''}>{task.priority}</span>
                       </>
                     )}
-                    {/* Status */}
-                    {task.status && (
-                      <>
-                        <span className="opacity-40">•</span>
-                        <span className={cx('inline-block size-1.5 shrink-0 rounded-full', STATUS_DOT_COLORS[task.status] || 'bg-gray-400')} />
-                        <span>{task.status}</span>
-                      </>
-                    )}
                   </div>
                 )}
                 <div className="flex items-center gap-2">
                   <h3 className="m-0 truncate text-2xl font-semibold text-primary">
                     {editing ? editName || 'Task' : (task?.name || 'Task')}
                   </h3>
+                  {!editing && task?.status && (
+                    <Tooltip title={task.status} placement="top">
+                      <TooltipTrigger>
+                        <span className={cx('inline-block size-2 shrink-0 rounded-full', STATUS_DOT_COLORS[task.status] || 'bg-gray-400')} />
+                      </TooltipTrigger>
+                    </Tooltip>
+                  )}
                 </div>
                 {!editing && task && (task.model || task.agents.length > 0) && (
                   <div className="mt-3 flex flex-col gap-2">
