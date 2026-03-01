@@ -1361,12 +1361,12 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
           {columns.map((col) => (
             <div
               key={col.key}
-              className="relative flex w-[85vw] shrink-0 snap-center flex-col bg-tertiary dark:bg-primary overflow-hidden sm:w-auto sm:shrink"
+              className="relative flex w-[85vw] shrink-0 snap-center flex-col bg-secondary_hover dark:bg-primary overflow-hidden sm:w-auto sm:shrink"
               style={{ borderRadius: 'var(--board-col-radius)' }}
             >
               {/* Frosted glass header — outside scroll container so backdrop-filter blurs cards */}
               <div className="absolute top-0 left-0 right-0 z-20 pointer-events-none backdrop-blur-md">
-                <div className="absolute inset-0 bg-gradient-to-b from-tertiary to-tertiary/40 dark:from-primary dark:to-primary/40" />
+                <div className="absolute inset-0 bg-gradient-to-b from-secondary_hover to-secondary_hover/40 dark:from-primary dark:to-primary/40" />
                 <div className="relative flex items-center justify-between px-4 py-3 pointer-events-auto">
                   <div className="flex items-center gap-2">
                     <span
@@ -1717,7 +1717,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                           pointerEvents: expanded ? 'auto' : 'none',
                                           transition: expanded
                                             ? 'max-height 350ms ease, opacity 250ms ease, margin-top 300ms ease'
-                                            : 'max-height 250ms ease, opacity 200ms ease, margin-top 250ms ease',
+                                            : isHidden
+                                              ? 'max-height 0ms, opacity 0ms, margin-top 0ms'
+                                              : 'max-height 250ms ease, opacity 200ms ease, margin-top 250ms ease',
                                           transitionDelay: expanded
                                             ? `${i * 60}ms`
                                             : `${Math.max(0, 2 - i) * 30}ms`,
@@ -1732,7 +1734,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                                           transformOrigin: 'center top',
                                           transition: expanded
                                             ? 'transform 350ms ease'
-                                            : 'transform 250ms ease',
+                                            : isHidden
+                                              ? 'transform 0ms'
+                                              : 'transform 250ms ease',
                                           transitionDelay: expanded
                                             ? `${i * 60}ms`
                                             : `${Math.max(0, 2 - i) * 30}ms`,
