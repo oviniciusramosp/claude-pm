@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { marked } from 'marked';
 import { AlertTriangle, Beaker01, CornerUpLeft, CpuChip01, Edit05, Folder, Stars01, Target02, Trash01, Users01, X, Zap } from '@untitledui/icons';
-import { Badge } from '@/components/base/badges/badges';
+import { BadgeWithDot } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
@@ -578,9 +578,9 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                 </h3>
                 {!editing && task?.status && (
                   <div className="mt-2">
-                    <Badge size="sm" color={(STATUS_BADGE_COLORS[task.status] || 'gray') as any} className="ring-0">
+                    <BadgeWithDot size="sm" color={(STATUS_BADGE_COLORS[task.status] || 'gray') as any} className="ring-0">
                       {task.status}
-                    </Badge>
+                    </BadgeWithDot>
                   </div>
                 )}
                 {!editing && task && (task.model || task.agents.length > 0) && (
