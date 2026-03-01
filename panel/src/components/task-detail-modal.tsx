@@ -574,10 +574,7 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                     )}
                   </div>
                 )}
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className="m-0 text-2xl font-semibold text-primary">
-                    {editing ? editName || 'Task' : (task?.name || 'Task')}
-                  </h3>
+                <div className="flex items-start gap-2">
                   {!editing && task?.status && (
                     <Tooltip title={task.status} placement="top">
                       <TooltipTrigger>
@@ -585,6 +582,9 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                       </TooltipTrigger>
                     </Tooltip>
                   )}
+                  <h3 className="m-0 text-2xl font-semibold text-primary">
+                    {editing ? editName || 'Task' : (task?.name || 'Task')}
+                  </h3>
                 </div>
                 {!editing && task && (task.model || task.agents.length > 0) && (
                   <div className="mt-3 flex flex-col gap-2">
