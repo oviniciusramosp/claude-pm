@@ -526,7 +526,7 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
         /* Epic card */
         <div className="flex items-center gap-1 mb-2 text-[11px] text-quaternary font-mono tracking-wide">
           <Icon icon={Folder} className="size-3 shrink-0 text-utility-purple-600" />
-          <span>{taskCode}</span>
+          <span className="text-utility-purple-600">{taskCode}</span>
           {task.priority && (
             <>
               <span className="opacity-40">·</span>
