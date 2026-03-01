@@ -566,7 +566,7 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                   </div>
                 )}
                 <div className="flex items-center gap-2">
-                  <h3 className="m-0 truncate text-lg font-semibold text-primary">
+                  <h3 className="m-0 truncate text-xl font-semibold text-primary">
                     {editing ? editName || 'Task' : (task?.name || 'Task')}
                   </h3>
                 </div>
