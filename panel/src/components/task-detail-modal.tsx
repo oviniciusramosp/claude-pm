@@ -574,14 +574,14 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                     )}
                   </div>
                 )}
-                <div className="flex items-center gap-2">
+                <div className="flex items-start justify-between gap-2">
                   <h3 className="m-0 text-2xl font-semibold text-primary">
                     {editing ? editName || 'Task' : (task?.name || 'Task')}
                   </h3>
                   {!editing && task?.status && (
                     <Tooltip title={task.status} placement="top">
                       <TooltipTrigger>
-                        <span className={cx('inline-block size-2 shrink-0 rounded-full', STATUS_DOT_COLORS[task.status] || 'bg-gray-400')} />
+                        <span className={cx('mt-2 inline-block size-2 shrink-0 rounded-full', STATUS_DOT_COLORS[task.status] || 'bg-gray-400')} />
                       </TooltipTrigger>
                     </Tooltip>
                   )}
