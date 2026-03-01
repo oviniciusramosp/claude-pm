@@ -523,11 +523,6 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
               <div className="min-w-0 flex-1">
                 {!editing && task && (task.priority || task.type || task.status) && (
                   <div className="mb-2 flex flex-wrap items-center gap-2">
-                    {task.priority && (
-                      <Badge size="sm" color={(priorityColor || 'gray') as any} className="ring-0 font-mono text-xs">
-                        {task.priority}
-                      </Badge>
-                    )}
                     {task.type && task.type.toLowerCase() === 'epic' ? (
                       <div className="flex items-center gap-1 text-[11px] font-mono text-utility-purple-600">
                         <Icon icon={Folder} className="size-3 shrink-0" />
@@ -538,6 +533,11 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
                         {task.type}
                       </Badge>
                     ) : null}
+                    {task.priority && (
+                      <Badge size="sm" color={(priorityColor || 'gray') as any} className="ring-0 font-mono text-xs">
+                        {task.priority}
+                      </Badge>
+                    )}
                     {task.status && (
                       <Badge size="sm" color="gray" className="ring-0 font-mono text-xs">
                         {task.status}
