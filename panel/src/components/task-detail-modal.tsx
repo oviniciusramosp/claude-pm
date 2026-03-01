@@ -104,6 +104,13 @@ function extractEpicNumber(taskId: string): string | null {
   return null;
 }
 
+function extractStoryCode(taskId: string): string | null {
+  const fileName = taskId.split('/').pop() || '';
+  const match = fileName.match(/^s(\d+)-(\d+)/i);
+  if (match) return `S${match[1]}.${match[2]}`;
+  return null;
+}
+
 // --- Component ---
 interface TaskDetailModalProps {
   open: boolean;
@@ -522,26 +529,39 @@ export function TaskDetailModal({ open, onClose, task, apiBaseUrl, showToast, on
             <div className="flex items-start justify-between gap-3 border-b border-secondary px-6 py-4">
               <div className="min-w-0 flex-1">
                 {!editing && task && (task.priority || task.type || task.status) && (
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    {task.type && task.type.toLowerCase() === 'epic' ? (
-                      <div className="flex items-center gap-1 text-[11px] font-mono text-utility-purple-600">
-                        <Icon icon={Folder} className="size-3 shrink-0" />
-                        <span>Epic {extractEpicNumber(task.id) ?? ''}</span>
-                      </div>
-                    ) : task.type ? (
-                      <Badge size="sm" color={(typeColor || 'gray') as any} className="ring-0 font-mono text-xs">
-                        {task.type}
-                      </Badge>
-                    ) : null}
-                    {task.priority && (
-                      <Badge size="sm" color={(priorityColor || 'gray') as any} className="ring-0 font-mono text-xs">
-                        {task.priority}
-                      </Badge>
-                    )}
-                    {task.status && (
-                      <Badge size="sm" color="gray" className="ring-0 font-mono text-xs">
-                        {task.status}
-                      </Badge>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {task.parentId && (
+                        <div className="flex items-center gap-1 text-[11px] font-mono text-utility-purple-600">
+                          <Icon icon={Folder} className="size-3 shrink-0" />
+                          <span>Epic {extractEpicNumber(task.parentId) ?? ''}</span>
+                        </div>
+                      )}
+                      {task.type && task.type.toLowerCase() === 'epic' ? (
+                        <div className="flex items-center gap-1 text-[11px] font-mono text-utility-purple-600">
+                          <Icon icon={Folder} className="size-3 shrink-0" />
+                          <span>Epic {extractEpicNumber(task.id) ?? ''}</span>
+                        </div>
+                      ) : task.type ? (
+                        <Badge size="sm" color={(typeColor || 'gray') as any} className="ring-0 font-mono text-xs">
+                          {task.type}
+                        </Badge>
+                      ) : null}
+                      {task.priority && (
+                        <Badge size="sm" color={(priorityColor || 'gray') as any} className="ring-0 font-mono text-xs">
+                          {task.priority}
+                        </Badge>
+                      )}
+                      {task.status && (
+                        <Badge size="sm" color="gray" className="ring-0 font-mono text-xs">
+                          {task.status}
+                        </Badge>
+                      )}
+                    </div>
+                    {task.parentId && extractStoryCode(task.id) && (
+                      <span className="shrink-0 font-mono text-[11px] text-quaternary">
+                        {extractStoryCode(task.id)}
+                      </span>
                     )}
                   </div>
                 )}
