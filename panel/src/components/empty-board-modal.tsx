@@ -60,7 +60,7 @@ export function EmptyBoardModal({ open, onClose, onIdeaToEpics, onNewEpic }: Emp
                       <span className="text-sm font-semibold text-primary">Idea to Epics</span>
                       <span className="inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">Recommended</span>
                     </div>
-                    <p className="text-sm text-tertiary leading-relaxed">
+                    <p className="text-xs text-tertiary leading-relaxed">
                       Describe your product ideas in plain language. Claude will ask clarifying questions and generate structured Epics automatically.
                     </p>
                   </div>
@@ -76,7 +76,7 @@ export function EmptyBoardModal({ open, onClose, onIdeaToEpics, onNewEpic }: Emp
                   </span>
                   <div className="flex-1 min-w-0">
                     <span className="text-sm font-semibold text-primary block mb-1">New Epic</span>
-                    <p className="text-sm text-tertiary leading-relaxed">
+                    <p className="text-xs text-tertiary leading-relaxed">
                       Manually create an Epic and add Tasks inside it. Best when you already know what you want to build.
                     </p>
                   </div>
