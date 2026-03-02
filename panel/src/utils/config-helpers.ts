@@ -22,7 +22,7 @@ export function normalizeText(value: unknown): string {
 export function buildInitialConfig(): Record<string, string | boolean> {
   return {
     CLAUDE_CODE_OAUTH_TOKEN: '',
-    CLAUDE_WORKDIR: '.',
+    CLAUDE_WORKDIR: '',
     CLAUDE_MODEL_OVERRIDE: '',
     CLAUDE_FULL_ACCESS: true,
     CLAUDE_STREAM_OUTPUT: true,

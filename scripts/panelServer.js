@@ -1829,7 +1829,7 @@ app.get('/api/config', async (_req, res) => {
     values: {
       CLAUDE_CODE_OAUTH_TOKEN: env.CLAUDE_CODE_OAUTH_TOKEN || '',
       CLAUDE_COMMAND: DEFAULT_CLAUDE_COMMAND,
-      CLAUDE_WORKDIR: env.CLAUDE_WORKDIR || '.',
+      CLAUDE_WORKDIR: env.CLAUDE_WORKDIR || '',
       CLAUDE_MODEL_OVERRIDE: env.CLAUDE_MODEL_OVERRIDE || '',
       CLAUDE_FULL_ACCESS: env.CLAUDE_FULL_ACCESS || 'true',
       CLAUDE_STREAM_OUTPUT: env.CLAUDE_STREAM_OUTPUT || 'true',
