@@ -309,8 +309,13 @@ export function runClaudeTask(task, prompt, config, { signal, onAcComplete, over
     if (config.claude.oauthToken) {
       commandEnv.CLAUDE_CODE_OAUTH_TOKEN = config.claude.oauthToken;
     }
-    // Remove CLAUDECODE to allow spawning Claude Code subprocesses from within a Claude Code session
-    delete commandEnv.CLAUDECODE;
+    // Remove Claude Code session env vars so each task runs as a fresh, independent invocation.
+    // Without this, Claude Code detects a nested session and exits with code 1.
+    for (const key of Object.keys(commandEnv)) {
+      if (key === 'CLAUDECODE' || key.startsWith('CLAUDE_CODE_')) {
+        delete commandEnv[key];
+      }
+    }
 
     const command = buildCommand(config, task, overrideModel);
 
