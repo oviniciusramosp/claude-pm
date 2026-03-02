@@ -10,8 +10,10 @@ export interface SelectOption {
   value: string;
   label: string;
   badge?: {
-    color: 'gray' | 'brand' | 'error' | 'warning' | 'success' | 'blue' | 'indigo' | 'purple' | 'pink' | 'orange' | 'gray-blue';
+    color?: 'gray' | 'brand' | 'error' | 'warning' | 'success' | 'blue' | 'indigo' | 'purple' | 'pink' | 'orange' | 'gray-blue';
     text?: string;
+    /** When provided, renders a plain colored span instead of the Badge pill (no border, no background). */
+    className?: string;
   };
   icon?: React.ComponentType<{ className?: string }>;
   iconColor?: string;
@@ -171,9 +173,15 @@ export function Select({
           {selectedOption ? (
             <>
               {selectedOption.badge && (
-                <Badge size="sm" color={selectedOption.badge.color}>
-                  {selectedOption.badge.text || selectedOption.label}
-                </Badge>
+                selectedOption.badge.className ? (
+                  <span className={cx('shrink-0 text-[11px] font-mono tracking-wide font-medium px-1.5 py-0.5 rounded-full', selectedOption.badge.className)}>
+                    {selectedOption.badge.text || selectedOption.label}
+                  </span>
+                ) : (
+                  <Badge size="sm" color={selectedOption.badge.color!}>
+                    {selectedOption.badge.text || selectedOption.label}
+                  </Badge>
+                )
               )}
               {selectedOption.icon && (
                 <Icon
@@ -212,7 +220,7 @@ export function Select({
                 onClick={() => !option.disabled && handleSelect(option.value)}
                 disabled={option.disabled}
                 className={cx(
-                  'w-full px-3 py-2 text-left flex items-center gap-2 transition',
+                  'w-full px-3 py-2 text-left flex items-center gap-3 transition',
                   'first:rounded-t-lg last:rounded-b-lg',
                   option.disabled
                     ? 'text-disabled cursor-not-allowed'
@@ -224,9 +232,15 @@ export function Select({
                 aria-selected={isSelected}
               >
                 {option.badge && (
-                  <Badge size="sm" color={option.badge.color}>
-                    {option.badge.text || option.label}
-                  </Badge>
+                  option.badge.className ? (
+                    <span className={cx('shrink-0 text-[11px] font-mono tracking-wide font-medium px-1.5 py-0.5 rounded-full', option.badge.className)}>
+                      {option.badge.text || option.label}
+                    </span>
+                  ) : (
+                    <Badge size="sm" color={option.badge.color!}>
+                      {option.badge.text || option.label}
+                    </Badge>
+                  )
                 )}
                 {option.icon && (
                   <Icon

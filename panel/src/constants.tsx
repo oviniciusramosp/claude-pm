@@ -284,8 +284,8 @@ export const BOARD_COLUMNS = [
 export const BOARD_PRIORITY_COLORS: Record<string, string> = {
   P0: 'error',
   P1: 'warning',
-  P2: 'blue',
-  P3: 'gray'
+  P2: 'orange',
+  P3: 'success'
 };
 
 export const BOARD_TYPE_COLORS: Record<string, string> = {

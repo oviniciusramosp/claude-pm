@@ -8,7 +8,7 @@ import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/mod
 import { Icon } from './icon';
 import { DiscardConfirmOverlay } from './discard-confirm-overlay';
 import { Select, type SelectOption } from '@/components/base/select/select';
-import { BOARD_PRIORITY_COLORS, CLAUDE_TASK_MODELS } from '../constants';
+import { CLAUDE_TASK_MODELS } from '../constants';
 import { handleModalKeyDown } from '@/utils/modal-keyboard';
 import type { BoardTask } from '../types';
 
@@ -45,10 +45,10 @@ const TYPE_OPTIONS: SelectOption[] = [
 ];
 
 const PRIORITY_OPTIONS: SelectOption[] = [
-  { value: 'P0', label: 'Critical', badge: { color: BOARD_PRIORITY_COLORS.P0 as any, text: 'P0' }, description: 'Drop everything and fix now' },
-  { value: 'P1', label: 'High', badge: { color: BOARD_PRIORITY_COLORS.P1 as any, text: 'P1' }, description: 'Important, plan to address soon' },
-  { value: 'P2', label: 'Medium', badge: { color: BOARD_PRIORITY_COLORS.P2 as any, text: 'P2' }, description: 'Normal priority' },
-  { value: 'P3', label: 'Low', badge: { color: BOARD_PRIORITY_COLORS.P3 as any, text: 'P3' }, description: 'Nice to have, no rush' }
+  { value: 'P0', label: 'Critical', badge: { className: 'bg-utility-error-50 text-utility-error-700', text: 'P0' }, description: 'Drop everything and fix now' },
+  { value: 'P1', label: 'High', badge: { className: 'bg-utility-warning-50 text-utility-warning-700', text: 'P1' }, description: 'Important, plan to address soon' },
+  { value: 'P2', label: 'Medium', badge: { className: 'bg-utility-yellow-50 text-utility-yellow-700', text: 'P2' }, description: 'Normal priority' },
+  { value: 'P3', label: 'Low', badge: { className: 'bg-utility-gray-50 text-utility-gray-700', text: 'P3' }, description: 'Nice to have, no rush' }
 ];
 
 const STATUS_OPTIONS: SelectOption[] = [

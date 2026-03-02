@@ -123,7 +123,7 @@ const PRIORITY_INLINE_COLORS: Record<string, string> = {
   P0: 'text-utility-error-600',
   P1: 'text-utility-warning-600',
   P2: 'text-utility-yellow-600',
-  P3: 'text-utility-success-600',
+  P3: 'text-utility-gray-600',
 };
 
 function AcDonut({ done, total, label = 'ACs' }: { done: number; total: number; label?: string }) {
