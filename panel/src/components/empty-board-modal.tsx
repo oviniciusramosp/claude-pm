@@ -46,11 +46,11 @@ export function EmptyBoardModal({ open, onClose, onIdeaToEpics, onNewEpic }: Emp
               </p>
 
               {/* Option cards */}
-              <div className="flex gap-3">
+              <div className="flex flex-col gap-3">
                 {/* Idea to Epics */}
                 <button
                   onClick={() => { onClose(); onIdeaToEpics(); }}
-                  className="group flex flex-1 flex-col items-start gap-4 rounded-xl border border-secondary bg-secondary p-5 text-left transition hover:border-brand-300 hover:bg-brand-25 focus:outline-none focus:ring-2 focus:ring-brand-solid"
+                  className="group flex w-full items-center gap-4 rounded-xl border border-secondary bg-secondary p-5 text-left transition hover:border-brand-300 hover:bg-brand-25 focus:outline-none focus:ring-2 focus:ring-brand-solid"
                 >
                   <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-brand-50 transition group-hover:bg-brand-100">
                     <Lightbulb02 className="size-6 text-brand-600" />
@@ -69,7 +69,7 @@ export function EmptyBoardModal({ open, onClose, onIdeaToEpics, onNewEpic }: Emp
                 {/* New Epic (manual) */}
                 <button
                   onClick={() => { onClose(); onNewEpic(); }}
-                  className="group flex flex-1 flex-col items-start gap-4 rounded-xl border border-secondary bg-secondary p-5 text-left transition hover:border-secondary hover:bg-primary_hover focus:outline-none focus:ring-2 focus:ring-brand-solid"
+                  className="group flex w-full items-center gap-4 rounded-xl border border-secondary bg-secondary p-5 text-left transition hover:border-secondary hover:bg-primary_hover focus:outline-none focus:ring-2 focus:ring-brand-solid"
                 >
                   <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-secondary transition group-hover:bg-quaternary">
                     <Folder className="size-6 text-tertiary group-hover:text-secondary" />
