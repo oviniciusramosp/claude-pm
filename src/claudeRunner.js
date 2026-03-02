@@ -309,6 +309,8 @@ export function runClaudeTask(task, prompt, config, { signal, onAcComplete, over
     if (config.claude.oauthToken) {
       commandEnv.CLAUDE_CODE_OAUTH_TOKEN = config.claude.oauthToken;
     }
+    // Remove CLAUDECODE to allow spawning Claude Code subprocesses from within a Claude Code session
+    delete commandEnv.CLAUDECODE;
 
     const command = buildCommand(config, task, overrideModel);
 
