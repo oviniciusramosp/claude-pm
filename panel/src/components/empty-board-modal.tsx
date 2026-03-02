@@ -1,7 +1,7 @@
 // panel/src/components/empty-board-modal.tsx
 
 import React from 'react';
-import { Folder, Lightbulb02, X, ArrowRight } from '@untitledui/icons';
+import { Folder, Lightbulb02, X } from '@untitledui/icons';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
 
@@ -46,42 +46,40 @@ export function EmptyBoardModal({ open, onClose, onIdeaToEpics, onNewEpic }: Emp
               </p>
 
               {/* Option cards */}
-              <div className="flex flex-col gap-3">
+              <div className="flex gap-3">
                 {/* Idea to Epics */}
                 <button
                   onClick={() => { onClose(); onIdeaToEpics(); }}
-                  className="group flex w-full items-start gap-5 rounded-xl border border-secondary bg-secondary p-5 text-left transition hover:border-brand-300 hover:bg-brand-25 focus:outline-none focus:ring-2 focus:ring-brand-solid"
+                  className="group flex flex-1 flex-col items-start gap-4 rounded-xl border border-secondary bg-secondary p-5 text-left transition hover:border-brand-300 hover:bg-brand-25 focus:outline-none focus:ring-2 focus:ring-brand-solid"
                 >
-                  <span className="mt-0.5 flex size-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 transition group-hover:bg-brand-100">
+                  <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-brand-50 transition group-hover:bg-brand-100">
                     <Lightbulb02 className="size-6 text-brand-600" />
                   </span>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
                       <span className="text-sm font-semibold text-primary">Idea to Epics</span>
                       <span className="inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">Recommended</span>
                     </div>
-                    <p className="mt-1 text-sm text-tertiary leading-relaxed">
-                      Describe your product ideas in plain language. Claude will ask clarifying questions and automatically generate structured Epics.
+                    <p className="text-sm text-tertiary leading-relaxed">
+                      Describe your product ideas in plain language. Claude will ask clarifying questions and generate structured Epics automatically.
                     </p>
                   </div>
-                  <ArrowRight className="mt-1 size-4 shrink-0 text-quaternary transition group-hover:text-brand-600" />
                 </button>
 
                 {/* New Epic (manual) */}
                 <button
                   onClick={() => { onClose(); onNewEpic(); }}
-                  className="group flex w-full items-start gap-5 rounded-xl border border-secondary bg-secondary p-5 text-left transition hover:border-secondary hover:bg-primary_hover focus:outline-none focus:ring-2 focus:ring-brand-solid"
+                  className="group flex flex-1 flex-col items-start gap-4 rounded-xl border border-secondary bg-secondary p-5 text-left transition hover:border-secondary hover:bg-primary_hover focus:outline-none focus:ring-2 focus:ring-brand-solid"
                 >
-                  <span className="mt-0.5 flex size-12 shrink-0 items-center justify-center rounded-xl bg-secondary transition group-hover:bg-quaternary">
+                  <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-secondary transition group-hover:bg-quaternary">
                     <Folder className="size-6 text-tertiary group-hover:text-secondary" />
                   </span>
                   <div className="flex-1 min-w-0">
-                    <span className="text-sm font-semibold text-primary">New Epic</span>
-                    <p className="mt-1 text-sm text-tertiary leading-relaxed">
-                      Manually create an Epic and add Tasks inside it. Best when you already know exactly what you want to build.
+                    <span className="text-sm font-semibold text-primary block mb-1">New Epic</span>
+                    <p className="text-sm text-tertiary leading-relaxed">
+                      Manually create an Epic and add Tasks inside it. Best when you already know what you want to build.
                     </p>
                   </div>
-                  <ArrowRight className="mt-1 size-4 shrink-0 text-quaternary transition group-hover:text-secondary" />
                 </button>
               </div>
             </div>
