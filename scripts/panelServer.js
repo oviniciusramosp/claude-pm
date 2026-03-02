@@ -6659,6 +6659,31 @@ app.get('/api/usage/weekly', async (_req, res) => {
 
 // ── Git endpoints ──────────────────────────────────────────────────────
 
+function runCommand(cmd, args, workdir) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, {
+      cwd: workdir || process.cwd(),
+      env: { ...process.env }
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+    child.on('error', (error) => { reject(error); });
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve(stdout + stderr);
+      } else {
+        const error = new Error(stderr.trim() || stdout.trim() || `${cmd} command failed with exit=${code}`);
+        error.exitCode = code;
+        reject(error);
+      }
+    });
+  });
+}
+
 function runGitCommand(args, workdir) {
   return new Promise((resolve, reject) => {
     const child = spawn('git', args, {
@@ -6810,6 +6835,79 @@ app.get('/api/git/diff', async (req, res) => {
     res.json({ ok: true, stat: stat.trim() });
   } catch (error) {
     res.status(500).json({ ok: false, message: error.message || String(error) });
+  }
+});
+
+app.get('/api/git/gh-status', async (_req, res) => {
+  const env = await readEnvPairs();
+  const workdir = path.resolve(cwd, env.CLAUDE_WORKDIR || '.');
+  const workdirBasename = path.basename(workdir).replace(/\s+/g, '-');
+
+  // Check if gh CLI is installed
+  try {
+    await runCommand('gh', ['--version']);
+  } catch {
+    return res.json({ ok: true, available: false, authenticated: false, workdirBasename, reason: 'gh CLI not installed. Install it with: brew install gh' });
+  }
+
+  // Check if authenticated
+  try {
+    const output = await runCommand('gh', ['auth', 'status']);
+    const match = output.match(/account\s+(\S+)/i);
+    const username = match ? match[1] : null;
+    return res.json({ ok: true, available: true, authenticated: true, username, workdirBasename });
+  } catch {
+    return res.json({ ok: true, available: true, authenticated: false, workdirBasename, reason: 'Not authenticated. Run: gh auth login' });
+  }
+});
+
+app.post('/api/git/init', async (req, res) => {
+  const { type, repoName, visibility = 'private' } = req.body || {};
+
+  if (!type || !['local', 'github'].includes(type)) {
+    return res.status(400).json({ ok: false, message: 'Invalid type. Use "local" or "github".' });
+  }
+
+  const env = await readEnvPairs();
+  const workdir = path.resolve(cwd, env.CLAUDE_WORKDIR || '.');
+
+  try {
+    await fs.access(workdir);
+  } catch {
+    return res.status(400).json({ ok: false, message: 'Working directory not found.' });
+  }
+
+  try {
+    await runGitCommand(['init'], workdir);
+
+    if (type === 'local') {
+      return res.json({ ok: true, message: 'Local git repository initialized successfully.' });
+    }
+
+    // GitHub flow: create an initial commit if there are files, then create the remote repo
+    const name = (repoName || path.basename(workdir)).trim().replace(/\s+/g, '-');
+
+    let hasCommit = false;
+    try {
+      const statusOutput = await runGitCommand(['status', '--porcelain'], workdir);
+      if (statusOutput.trim()) {
+        await runGitCommand(['add', '-A'], workdir);
+        await runGitCommand(['commit', '-m', 'Initial commit'], workdir);
+        hasCommit = true;
+      }
+    } catch {
+      // no files or commit failed — proceed without push
+    }
+
+    const ghArgs = ['repo', 'create', name, `--${visibility}`, '--source=.'];
+    if (hasCommit) ghArgs.push('--push');
+
+    await runCommand('gh', ghArgs, workdir);
+
+    const action = hasCommit ? 'created and pushed to GitHub' : 'created on GitHub (no commits to push yet)';
+    return res.json({ ok: true, message: `Repository '${name}' ${action}.` });
+  } catch (err) {
+    return res.status(500).json({ ok: false, message: err.message || 'Failed to initialize repository.' });
   }
 });
 

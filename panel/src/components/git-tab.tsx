@@ -1,13 +1,14 @@
 // panel/src/components/git-tab.tsx
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Asterisk02, Clock, GitBranch02, GitCommit, RefreshCw01, User01 } from '@untitledui/icons';
+import { Asterisk02, Clock, FolderPlus, GitBranch02, GitCommit, RefreshCw01, User01 } from '@untitledui/icons';
 import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { cx } from '@/utils/cx';
 import { Icon } from './icon';
 import { GIT_CONVENTIONAL_TYPE_COLORS, GIT_POLL_INTERVAL_MS } from '../constants';
 import { CommitDetailModal } from './commit-detail-modal';
+import { CreateRepoModal } from './create-repo-modal';
 import { SetupRequiredBanner } from './setup-required-banner';
 import type { GitCommit as GitCommitType } from '../types';
 
@@ -126,12 +127,14 @@ export function GitTab({ apiBaseUrl, showToast, refreshTrigger, setupComplete, o
   const [commits, setCommits] = useState<GitCommitType[]>([]);
   const [loading, setLoading] = useState(true);
   const [gitError, setGitError] = useState<string | null>(null);
+  const [gitErrorCode, setGitErrorCode] = useState<string | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [currentBranch, setCurrentBranch] = useState('');
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [selectedCommit, setSelectedCommit] = useState<GitCommitType | null>(null);
+  const [showCreateRepo, setShowCreateRepo] = useState(false);
   const mountedRef = useRef(true);
 
   const fetchGitLog = useCallback(
@@ -152,6 +155,7 @@ export function GitTab({ apiBaseUrl, showToast, refreshTrigger, setupComplete, o
 
         if (!response.ok || !payload.ok) {
           setGitError(payload.message || 'Failed to load git history.');
+          setGitErrorCode(payload.code || null);
           if (!append) setCommits([]);
           return;
         }
@@ -168,6 +172,7 @@ export function GitTab({ apiBaseUrl, showToast, refreshTrigger, setupComplete, o
         setHasMore(newCommits.length === PAGE_SIZE);
         setLastRefreshed(new Date());
         setGitError(null);
+        setGitErrorCode(null);
       } catch (err: any) {
         if (!mountedRef.current) return;
         setGitError(err.message || 'Failed to connect to panel API.');
@@ -267,6 +272,18 @@ export function GitTab({ apiBaseUrl, showToast, refreshTrigger, setupComplete, o
               The Git page is designed to show commits from your user project only, not from the automation system itself.
             </p>
           )}
+          {gitErrorCode === 'NOT_GIT_REPO' && (
+            <div className="mt-3">
+              <Button
+                size="sm"
+                color="primary"
+                iconLeading={FolderPlus}
+                onPress={() => setShowCreateRepo(true)}
+              >
+                Create Repository
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -323,6 +340,15 @@ export function GitTab({ apiBaseUrl, showToast, refreshTrigger, setupComplete, o
         commit={selectedCommit}
         apiBaseUrl={apiBaseUrl}
         showToast={showToast}
+      />
+
+      {/* Create repository modal */}
+      <CreateRepoModal
+        open={showCreateRepo}
+        onClose={() => setShowCreateRepo(false)}
+        apiBaseUrl={apiBaseUrl}
+        showToast={showToast}
+        onSuccess={() => fetchGitLog()}
       />
     </>
   );
