@@ -936,6 +936,17 @@ function startManagedProcess(target, command, source, envOverrides = {}) {
     // Include meta if present (contains expandableContent, progressive flags, etc)
     if (parsed.meta && Object.keys(parsed.meta).length > 0) {
       extra.meta = parsed.meta;
+
+      // Promote debug fields from expandableContent to top-level so the Debug Errors modal
+      // can render entry.stderr, entry.stdout, entry.exitCode, entry.signal, entry.stack.
+      const ec = parsed.meta.expandableContent;
+      if (ec && typeof ec === 'object' && !Array.isArray(ec)) {
+        if (ec.stderr != null) extra.stderr = ec.stderr;
+        if (ec.stdout != null) extra.stdout = ec.stdout;
+        if (ec.exitCode != null) extra.exitCode = ec.exitCode;
+        if (ec.signal != null) extra.signal = ec.signal;
+        if (ec.stack != null) extra.stack = ec.stack;
+      }
     }
 
     return Object.keys(extra).length > 0 ? extra : undefined;

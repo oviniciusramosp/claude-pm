@@ -616,8 +616,15 @@ export class Orchestrator {
               break;
             }
 
-            // Log concise message to Live Feed
-            this.logger.error(`Opus review failed for "${taskLabel(task)}": ${reviewError.message}`);
+            // Log concise message to Live Feed; pass technical details for Debug Errors modal
+            this.logger.error(`Opus review failed for "${taskLabel(task)}": ${reviewError.message}`, {
+              expandableContent: {
+                stderr: reviewError.stderr || null,
+                stdout: reviewError.stdout || null,
+                exitCode: reviewError.exitCode ?? null,
+                signal: reviewError.signal || null
+              }
+            });
 
             const shouldHaltReview = this.watchdog.recordFailure(task.id, task.name);
             if (shouldHaltReview) {
@@ -998,8 +1005,15 @@ export class Orchestrator {
               break;
             }
 
-            // Log concise message to Live Feed
-            this.logger.error(`Opus review failed for "${taskLabel(task)}": ${reviewError.message}`);
+            // Log concise message to Live Feed; pass technical details for Debug Errors modal
+            this.logger.error(`Opus review failed for "${taskLabel(task)}": ${reviewError.message}`, {
+              expandableContent: {
+                stderr: reviewError.stderr || null,
+                stdout: reviewError.stdout || null,
+                exitCode: reviewError.exitCode ?? null,
+                signal: reviewError.signal || null
+              }
+            });
 
             const shouldHaltReview = this.watchdog.recordFailure(task.id, task.name);
             if (shouldHaltReview) {
@@ -1381,8 +1395,15 @@ export class Orchestrator {
             return;
           }
 
-          // Log concise message to Live Feed
-          this.logger.error(`Epic review failed for "${taskLabel(task)}": ${reviewError.message}`);
+          // Log concise message to Live Feed; pass technical details for Debug Errors modal
+          this.logger.error(`Epic review failed for "${taskLabel(task)}": ${reviewError.message}`, {
+            expandableContent: {
+              stderr: reviewError.stderr || null,
+              stdout: reviewError.stdout || null,
+              exitCode: reviewError.exitCode ?? null,
+              signal: reviewError.signal || null
+            }
+          });
 
           const shouldHaltEpic = this.watchdog.recordFailure(task.id, task.name);
           if (shouldHaltEpic) {

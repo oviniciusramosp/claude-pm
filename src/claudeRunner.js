@@ -432,7 +432,7 @@ export function runClaudeTask(task, prompt, config, { signal, onAcComplete, over
       }
 
       if (code !== 0) {
-        const error = new Error('Claude command falhou');
+        const error = new Error('Claude command failed');
         error.exitCode = code;
         error.signal = exitSignal || 'none';
         error.stderr = stderr;
