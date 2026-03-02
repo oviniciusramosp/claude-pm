@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { Folder, Lightbulb02, X, ArrowRight } from '@untitledui/icons';
-import { Button } from '@/components/base/buttons/button';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
 
@@ -34,16 +33,16 @@ export function EmptyBoardModal({ open, onClose, onIdeaToEpics, onNewEpic }: Emp
                 <span className="inline-flex size-8 items-center justify-center rounded-lg bg-brand-50">
                   <Icon icon={Folder} className="size-4 text-brand-600" />
                 </span>
-                <h2 className="text-lg font-semibold text-primary">Como começar</h2>
+                <h2 className="text-lg font-semibold text-primary">Get Started</h2>
               </div>
 
               <p className="mb-1 text-sm text-secondary">
-                O app precisa de <strong className="text-primary font-semibold">Epics</strong> e <strong className="text-primary font-semibold">Tasks</strong> para funcionar.
+                This app requires <strong className="text-primary font-semibold">Epics</strong> and <strong className="text-primary font-semibold">Tasks</strong> to work.
               </p>
               <p className="mb-6 text-sm text-tertiary">
-                Eles são armazenados como arquivos <code className="rounded bg-quaternary px-1 py-0.5 text-xs font-mono">.md</code> dentro da pasta{' '}
-                <code className="rounded bg-quaternary px-1 py-0.5 text-xs font-mono">Board/</code>.
-                A forma mais fácil de criar é usando uma das opções abaixo — o app vai otimizar a escrita dos Epics e Tasks para o Claude funcionar melhor.
+                They are stored as <code className="rounded bg-quaternary px-1 py-0.5 text-xs font-mono">.md</code> files inside the{' '}
+                <code className="rounded bg-quaternary px-1 py-0.5 text-xs font-mono">Board/</code> folder.
+                The easiest way to create them is using one of the options below — the app will optimize the Epic and Task content so Claude performs better.
               </p>
 
               {/* Option cards */}
@@ -59,10 +58,10 @@ export function EmptyBoardModal({ open, onClose, onIdeaToEpics, onNewEpic }: Emp
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-primary">Idea to Epics</span>
-                      <span className="inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">Recomendado</span>
+                      <span className="inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">Recommended</span>
                     </div>
                     <p className="mt-1 text-sm text-tertiary leading-relaxed">
-                      Descreva suas ideias de produto em linguagem natural. O Claude vai fazer perguntas e gerar os Epics estruturados automaticamente.
+                      Describe your product ideas in plain language. Claude will ask clarifying questions and automatically generate structured Epics.
                     </p>
                   </div>
                   <ArrowRight className="mt-1 size-4 shrink-0 text-quaternary transition group-hover:text-brand-600" />
@@ -77,9 +76,9 @@ export function EmptyBoardModal({ open, onClose, onIdeaToEpics, onNewEpic }: Emp
                     <Folder className="size-6 text-tertiary group-hover:text-secondary" />
                   </span>
                   <div className="flex-1 min-w-0">
-                    <span className="text-sm font-semibold text-primary">Novo Epic</span>
+                    <span className="text-sm font-semibold text-primary">New Epic</span>
                     <p className="mt-1 text-sm text-tertiary leading-relaxed">
-                      Crie um Epic manualmente e adicione as Tasks dentro dele. Bom quando você já sabe exatamente o que quer construir.
+                      Manually create an Epic and add Tasks inside it. Best when you already know exactly what you want to build.
                     </p>
                   </div>
                   <ArrowRight className="mt-1 size-4 shrink-0 text-quaternary transition group-hover:text-secondary" />
