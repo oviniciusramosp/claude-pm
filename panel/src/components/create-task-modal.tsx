@@ -24,6 +24,7 @@ interface CreateTaskModalProps {
   onCreated: () => void;
   tasks: BoardTask[];
   defaultEpicId?: string;
+  defaultType?: string;
   onShowErrorDetail?: (title: string, message: string) => void;
 }
 
@@ -102,7 +103,7 @@ const STATUS_OPTIONS: SelectOption[] = [
 const inputClasses = 'w-full rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary shadow-xs focus:border-brand-solid focus:outline-none focus:ring-1 focus:ring-brand-solid';
 const labelClasses = 'block text-xs uppercase tracking-wider font-semibold text-tertiary mb-2';
 
-export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreated, tasks, defaultEpicId, onShowErrorDetail }: CreateTaskModalProps) {
+export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreated, tasks, defaultEpicId, defaultType, onShowErrorDetail }: CreateTaskModalProps) {
   const [name, setName] = useState('');
   const [fileName, setFileName] = useState('');
   const [fileNameManual, setFileNameManual] = useState(false);
@@ -194,7 +195,7 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
       setFileName('');
       setFileNameManual(false);
       setPriority('P1');
-      setType(defaultEpicId ? 'UserStory' : 'UserStory');
+      setType(defaultEpicId ? 'UserStory' : (defaultType || 'UserStory'));
       setStatus('Not Started');
       setModel(CLAUDE_DEFAULT_TASK_MODEL);
       setAgents('');
@@ -211,7 +212,7 @@ export function CreateTaskModal({ open, onClose, apiBaseUrl, showToast, onCreate
         .then((data) => { if (data.ok) setNextNumbers(data); })
         .catch(() => {});
     }
-  }, [open, defaultEpicId, apiBaseUrl]);
+  }, [open, defaultEpicId, defaultType, apiBaseUrl]);
 
   // Detect duplicate number prefix within the same scope
   const numberConflict = useMemo(() => {

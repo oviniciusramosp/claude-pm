@@ -14,6 +14,7 @@ import {
 import { TaskDetailModal } from './task-detail-modal';
 import { CreateTaskModal } from './create-task-modal';
 import { IdeaToEpicsModal } from './idea-to-epics-modal';
+import { EmptyBoardModal } from './empty-board-modal';
 import { SetupRequiredBanner } from './setup-required-banner';
 import type { BoardTask } from '../types';
 
@@ -658,7 +659,9 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const [epicDropBeforeId, setEpicDropBeforeId] = useState(null as string | null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createDefaultEpicId, setCreateDefaultEpicId] = useState<string | undefined>(undefined);
+  const [createDefaultType, setCreateDefaultType] = useState<string | undefined>(undefined);
   const [ideaModalOpen, setIdeaModalOpen] = useState(false);
+  const [emptyBoardModalOpen, setEmptyBoardModalOpen] = useState(false);
   const [generatingEpicIds, setGeneratingEpicIds] = useState(new Set<string>());
   const [generateProgressMap, setGenerateProgressMap] = useState(new Map<string, { created: number; total: number; phase: string | null }>());
   const generatePollRefs = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -1276,6 +1279,13 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const showBoardMissing = boardExists === false && !loading;
   const showErrorBanner = boardError && !loading && tasks.length === 0 && !showBoardMissing;
   const showBoard = !showBoardMissing && (tasks.length > 0 || (loading && !showErrorBanner) || (!boardError && !loading));
+  const isBoardEmpty = !loading && !boardError && !showBoardMissing && boardExists === true && tasks.length === 0 && setupComplete;
+
+  useEffect(() => {
+    if (isBoardEmpty) {
+      setEmptyBoardModalOpen(true);
+    }
+  }, [isBoardEmpty]);
 
   const handleViewDetails = useCallback(() => {
     if (!boardError) return;
@@ -1973,12 +1983,13 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
       />
       <CreateTaskModal
         open={createModalOpen}
-        onClose={() => { setCreateModalOpen(false); setCreateDefaultEpicId(undefined); }}
+        onClose={() => { setCreateModalOpen(false); setCreateDefaultEpicId(undefined); setCreateDefaultType(undefined); }}
         apiBaseUrl={apiBaseUrl}
         showToast={showToast}
         onCreated={() => fetchBoard(true)}
         tasks={tasks}
         defaultEpicId={createDefaultEpicId}
+        defaultType={createDefaultType}
         onShowErrorDetail={onShowErrorDetail}
       />
 
@@ -1989,6 +2000,13 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
         showToast={showToast}
         onCreated={() => fetchBoard(true)}
         onShowErrorDetail={onShowErrorDetail}
+      />
+
+      <EmptyBoardModal
+        open={emptyBoardModalOpen}
+        onClose={() => setEmptyBoardModalOpen(false)}
+        onIdeaToEpics={() => { setEmptyBoardModalOpen(false); setIdeaModalOpen(true); }}
+        onNewEpic={() => { setEmptyBoardModalOpen(false); setCreateDefaultEpicId(undefined); setCreateDefaultType('Epic'); setCreateModalOpen(true); }}
       />
     </section>
   );
