@@ -18,9 +18,8 @@ const SECTIONS: Section[] = [
     title: 'Setup',
     color: 'text-blue-500',
     items: [
-      'Configure your Claude OAuth token and working directory.',
-      'The working directory is where your project lives — not the Product Manager folder.',
-      'After saving, the API service can be restarted from the sidebar.',
+      'Tell the app where your project lives and paste your Claude token. That\'s it — everything else has sensible defaults.',
+      'Once saved, use the sidebar buttons to start the API and kick off the automation.',
     ],
   },
   {
@@ -28,12 +27,10 @@ const SECTIONS: Section[] = [
     title: 'Board',
     color: 'text-violet-500',
     items: [
-      'Tasks live as .md files with YAML frontmatter inside Board/ in your project.',
-      'Three columns: Not Started, In Progress, Done — status is tracked in frontmatter.',
-      'Create standalone tasks or group related tasks into Epics (sub-folders).',
-      'Each card shows a donut chart with Acceptance Criteria progress.',
-      'Drag cards between columns, or use "Review with Claude" to improve task quality.',
-      'Generate Stories: click the ✦ button on an Epic card to auto-generate user stories.',
+      'Tasks are cards you create to describe work you want Claude to execute. Write what needs to be done and add Acceptance Criteria — Claude reads them and checks each one off as it goes.',
+      'Group related tasks into an Epic. Got a big idea? Use "Idea to Epic" to describe it in plain language and let Claude turn it into a structured Epic with a clear scope.',
+      'Inside an Epic, click "Generate Tasks" to have Claude break the Epic down into individual tasks automatically.',
+      'Before running a task, click "Review with Claude" to let Claude improve the description, sharpen the acceptance criteria, and catch anything missing.',
     ],
   },
   {
@@ -41,19 +38,9 @@ const SECTIONS: Section[] = [
     title: 'Feed',
     color: 'text-emerald-500',
     items: [
-      'Live log stream — all output from the orchestrator, Claude, and the API.',
-      'Color-coded by source: Panel, API, Claude, Chat.',
-      'AC completions appear as success messages in real time.',
-      'Use the chat input at the bottom to send one-shot prompts to Claude.',
-    ],
-  },
-  {
-    icon: GitCommit,
-    title: 'Git',
-    color: 'text-orange-500',
-    items: [
-      'View recent commits and diffs in your working directory.',
-      'Click any commit to see full details and changed files.',
+      'This is where you watch Claude work in real time. You can see it thinking, writing code, running commands, and checking off acceptance criteria as each one is completed.',
+      'If something goes wrong or you\'re curious about what happened, the full output is here.',
+      'You can also type directly in the chat box at the bottom to ask Claude questions or give it quick instructions mid-session.',
     ],
   },
   {
@@ -86,6 +73,15 @@ const SECTIONS: Section[] = [
       'Use Haiku for mechanical work, Sonnet for most tasks, Opus for discovery and complex reasoning.',
       'Set model: claude-sonnet-4-5-20250929 (or haiku/opus) in task frontmatter to override the default.',
       'Enable Auto-Recovery in .env so failed tasks are analysed and retried automatically.',
+    ],
+  },
+  {
+    icon: GitCommit,
+    title: 'Git',
+    color: 'text-orange-500',
+    items: [
+      'View recent commits and diffs in your working directory.',
+      'Click any commit to see full details and changed files.',
     ],
   },
 ];
