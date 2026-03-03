@@ -241,6 +241,13 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
                               key={commit.sha}
                               className="group flex items-center gap-2 rounded-md px-2 py-1.5 transition hover:bg-primary_hover"
                             >
+                              <span
+                                className="w-16 shrink-0 text-right font-mono text-[10px] text-quaternary"
+                                title={formatDate(commit.date)}
+                              >
+                                {formatRelativeDate(commit.date)}
+                              </span>
+
                               <Icon
                                 icon={CommitIcon}
                                 className={cx('size-4 shrink-0', iconColor)}
@@ -249,13 +256,6 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
                               <p className="m-0 min-w-0 flex-1 truncate text-sm text-primary">
                                 {subject}
                               </p>
-
-                              <span
-                                className="shrink-0 font-mono text-[10px] text-quaternary"
-                                title={formatDate(commit.date)}
-                              >
-                                {formatRelativeDate(commit.date)}
-                              </span>
 
                               <a
                                 href={commit.url}
