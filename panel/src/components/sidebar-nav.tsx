@@ -2,7 +2,7 @@
 /// <reference path="../vite-env.d.ts" />
 
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertOctagon, ArrowUpRight, Asterisk02, BookOpen01, ChevronDown, LayersThree01, Monitor01, Moon01, PauseCircle, PlayCircle, Server01, Settings01, StopCircle, Sun } from '@untitledui/icons';
+import { AlertOctagon, ArrowUpRight, Asterisk02, BookOpen01, ChevronDown, LayersThree01, Monitor01, Moon01, PauseCircle, PlayCircle, Server01, StopCircle, Sun } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { Tooltip, TooltipTrigger } from './base/tooltip/tooltip';
 import { cx } from '@/utils/cx';
@@ -31,7 +31,6 @@ export function SidebarNav({
   apiError,
   onAppBadgeClick,
   onApiBadgeClick,
-  setRuntimeSettingsModalOpen,
   disabledTabs,
   errorCount,
   unreadFeedCount,
@@ -56,7 +55,6 @@ export function SidebarNav({
   apiError: string | null;
   onAppBadgeClick: () => void;
   onApiBadgeClick: () => void;
-  setRuntimeSettingsModalOpen: (open: boolean) => void;
   disabledTabs?: Set<string>;
   errorCount: number;
   unreadFeedCount: number;
@@ -294,15 +292,6 @@ export function SidebarNav({
           )
         )}
 
-        <Button
-          size="sm"
-          color="tertiary"
-          iconLeading={Settings01}
-          className="w-full justify-center"
-          onPress={() => setRuntimeSettingsModalOpen(true)}
-        >
-          Runtime Settings
-        </Button>
       </div>
 
       {/* Spacer */}

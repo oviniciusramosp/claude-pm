@@ -15,7 +15,6 @@ import {
   normalizeText,
   buildInitialConfig,
   parseConfigPayload,
-  parseRuntimeSettingsPayload,
   isSameConfigValue,
   isSetupConfigurationComplete,
   validateFieldValue,
@@ -30,7 +29,6 @@ import { FeedTab } from './components/feed-tab';
 import { BoardTab } from './components/board-tab';
 import { GitTab } from './components/git-tab';
 import { SaveConfirmModal } from './components/save-confirm-modal';
-import { RuntimeSettingsModal } from './components/runtime-settings-modal';
 import { ErrorDetailModal } from './components/error-detail-modal';
 import { DebugErrorsModal } from './components/debug-errors-modal';
 import { AuthProvider, useAuth } from './contexts/auth-context';
@@ -115,12 +113,10 @@ function AppInner({ mode = 'light', themeMode = 'system', setThemeMode = (_m) =>
   const [activeTab, setActiveTab] = useState(NAV_TAB_KEYS.setup);
   const [status, setStatus] = useState(null);
   const [logs, setLogs] = useState([]);
-  const [runtimeSettings, setRuntimeSettings] = useState({ streamOutput: false, logPrompt: true });
   const [toasts, setToasts] = useState([]);
   const [busy, setBusy] = useState({});
   const [saveConfirm, setSaveConfirm] = useState({ open: false, changedKeys: [] });
   const [revealedFields, setRevealedFields] = useState({});
-  const [runtimeSettingsModalOpen, setRuntimeSettingsModalOpen] = useState(false);
   const [chatDraft, setChatDraft] = useState('');
   const [chatModel, setChatModel] = useState('claude-sonnet-4-5-20250929');
   const [serviceErrors, setServiceErrors] = useState({ app: null, api: null });
@@ -338,11 +334,6 @@ function AppInner({ mode = 'light', themeMode = 'system', setThemeMode = (_m) =>
     setLogs(payload.lines || []);
   }, [callApi]);
 
-  const loadRuntimeSettings = useCallback(async () => {
-    const payload = await callApi('/api/automation/runtime');
-    setRuntimeSettings(parseRuntimeSettingsPayload(payload));
-  }, [callApi]);
-
   const loadWeeklyUsage = useCallback(async () => {
     try {
       const payload = await callApi('/api/usage/weekly');
@@ -360,7 +351,7 @@ function AppInner({ mode = 'light', themeMode = 'system', setThemeMode = (_m) =>
     let canceled = false;
 
     async function bootstrap() {
-      const results = await Promise.allSettled([loadConfig(), loadLogs(), loadRuntimeSettings(), refreshStatus(), loadWeeklyUsage()]);
+      const results = await Promise.allSettled([loadConfig(), loadLogs(), refreshStatus(), loadWeeklyUsage()]);
       if (canceled) return;
       const failed = results.filter((r) => r.status === 'rejected');
       if (failed.length === results.length) {
@@ -422,7 +413,7 @@ function AppInner({ mode = 'light', themeMode = 'system', setThemeMode = (_m) =>
       clearInterval(usageInterval);
       events.close();
     };
-  }, [apiBaseUrl, appendLog, loadConfig, loadLogs, loadRuntimeSettings, loadWeeklyUsage, refreshStatus, showToast, loading, serverInfo, user]);
+  }, [apiBaseUrl, appendLog, loadConfig, loadLogs, loadWeeklyUsage, refreshStatus, showToast, loading, serverInfo, user]);
 
   const runAction = useCallback(
     async (key, endpoint, successMessage) => {
@@ -557,39 +548,6 @@ function AppInner({ mode = 'light', themeMode = 'system', setThemeMode = (_m) =>
       setBusy((prev) => ({ ...prev, pickWorkdir: false }));
     }
   }, [callApi, showToast]);
-
-  const updateRuntimeSetting = useCallback(
-    async (settingKey, checked) => {
-      const busyKey = `runtime_${settingKey}`;
-      setBusy((prev) => ({ ...prev, [busyKey]: true }));
-
-      try {
-        const next = {
-          ...runtimeSettings,
-          [settingKey]: checked
-        };
-
-        await callApi('/api/automation/runtime', {
-          method: 'POST',
-          body: JSON.stringify({
-            claude: {
-              streamOutput: next.streamOutput,
-              logPrompt: next.logPrompt
-            }
-          })
-        });
-
-        setRuntimeSettings(next);
-        showToast('Runtime Claude settings updated.', 'success');
-      } catch (error) {
-        showToast(`Could not update runtime settings: ${error.message}`, 'danger');
-      } finally {
-        setBusy((prev) => ({ ...prev, [busyKey]: false }));
-      }
-    },
-    [callApi, runtimeSettings, showToast]
-  );
-
 
   const persistConfig = useCallback(
     async ({ restartApi }) => {
@@ -759,7 +717,6 @@ function AppInner({ mode = 'light', themeMode = 'system', setThemeMode = (_m) =>
             setErrorModal({ open: true, title: 'API error', message: serviceErrors.api });
           }
         }}
-        setRuntimeSettingsModalOpen={setRuntimeSettingsModalOpen}
         disabledTabs={disabledTabs}
         errorCount={collectedErrors.length}
         unreadFeedCount={unreadFeedCount}
@@ -851,15 +808,6 @@ function AppInner({ mode = 'light', themeMode = 'system', setThemeMode = (_m) =>
         setSaveConfirm={setSaveConfirm}
         busy={busy}
         persistConfig={persistConfig}
-      />
-
-      <RuntimeSettingsModal
-        runtimeSettingsModalOpen={runtimeSettingsModalOpen}
-        setRuntimeSettingsModalOpen={setRuntimeSettingsModalOpen}
-        apiRunning={apiRunning}
-        runtimeSettings={runtimeSettings}
-        busy={busy}
-        updateRuntimeSetting={updateRuntimeSetting}
       />
 
       <ErrorDetailModal

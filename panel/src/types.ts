@@ -64,11 +64,6 @@ export interface Toast {
 
 export type ToastState = Toast[];
 
-export interface RuntimeSettings {
-  streamOutput: boolean;
-  logPrompt: boolean;
-}
-
 export interface LogSourceMeta {
   label: string;
   icon: React.FC<{ className?: string }>;

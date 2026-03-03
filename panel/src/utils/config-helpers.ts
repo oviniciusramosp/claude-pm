@@ -50,15 +50,6 @@ export function parseConfigPayload(values: Record<string, unknown> = {}): Record
   return next;
 }
 
-export function parseRuntimeSettingsPayload(payload: Record<string, unknown> = {}): { streamOutput: boolean; logPrompt: boolean } {
-  const claude = (payload.claude as Record<string, unknown>) || {};
-
-  return {
-    streamOutput: Boolean(claude.streamOutput),
-    logPrompt: Boolean(claude.logPrompt)
-  };
-}
-
 export function isSameConfigValue(key: string, a: unknown, b: unknown): boolean {
   if (TOGGLE_KEYS.includes(key)) {
     return Boolean(a) === Boolean(b);
