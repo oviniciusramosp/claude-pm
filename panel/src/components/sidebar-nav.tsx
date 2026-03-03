@@ -2,7 +2,7 @@
 /// <reference path="../vite-env.d.ts" />
 
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertOctagon, ArrowUpRight, Asterisk02, ChevronDown, LayersThree01, Monitor01, Moon01, PauseCircle, PlayCircle, Server01, Settings01, StopCircle, Sun } from '@untitledui/icons';
+import { AlertOctagon, ArrowUpRight, Asterisk02, BookOpen01, ChevronDown, LayersThree01, Monitor01, Moon01, PauseCircle, PlayCircle, Server01, Settings01, StopCircle, Sun } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { Tooltip, TooltipTrigger } from './base/tooltip/tooltip';
 import { cx } from '@/utils/cx';
@@ -313,6 +313,14 @@ export function SidebarNav({
         <button
           type="button"
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-tertiary transition hover:bg-primary_hover hover:text-secondary"
+          onClick={() => setHelpOpen(true)}
+        >
+          <Icon icon={BookOpen01} className="size-5" />
+          <span>How it Works</span>
+        </button>
+        <button
+          type="button"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-tertiary transition hover:bg-primary_hover hover:text-secondary"
           onClick={onDebugClick}
         >
           <Icon icon={AlertOctagon} className="size-5" />
@@ -369,23 +377,13 @@ export function SidebarNav({
 
         <div className="mt-1 flex items-center justify-between px-3">
           <p className="text-[11px] text-quaternary">v{__APP_VERSION__}</p>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              className="rounded px-1.5 py-0.5 text-[11px] text-quaternary transition hover:bg-primary_hover hover:text-secondary"
-              onClick={() => setHelpOpen(true)}
-            >
-              Help
-            </button>
-            <span className="text-[11px] text-quaternary">·</span>
-            <button
-              type="button"
-              className="rounded px-1.5 py-0.5 text-[11px] text-quaternary transition hover:bg-primary_hover hover:text-secondary"
-              onClick={() => setChangelogOpen(true)}
-            >
-              Changelog
-            </button>
-          </div>
+          <button
+            type="button"
+            className="rounded px-1.5 py-0.5 text-[11px] text-quaternary transition hover:bg-primary_hover hover:text-secondary"
+            onClick={() => setChangelogOpen(true)}
+          >
+            Changelog
+          </button>
         </div>
       </div>
 
