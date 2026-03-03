@@ -128,32 +128,65 @@ const EVENT_ROWS = [
 ] as const;
 
 function InsecureContextWarning() {
-  const origin = window.location.origin;
-  const localhostUrl = `http://localhost:${window.location.port || '4100'}`;
+  const [expanded, setExpanded] = useState(false);
+  const port = window.location.port || '4100';
+  const localhostUrl = `http://localhost:${port}`;
+
   return (
-    <div className="mt-2 rounded-lg border border-warning-primary/30 bg-warning-primary/5 p-3 space-y-2">
-      <p className="m-0 text-xs font-medium text-warning-primary">
-        Browser notifications require HTTPS or localhost.
-      </p>
-      <p className="m-0 text-xs text-secondary">
-        You are accessing the panel via a plain HTTP IP address, which browsers block for security reasons.
-      </p>
-      <p className="m-0 text-xs text-tertiary">
-        Current URL:
-      </p>
-      <code className="block rounded bg-secondary px-2 py-1 text-xs text-primary">{origin}</code>
-      <p className="m-0 pt-1 text-xs text-secondary font-medium">To enable browser notifications:</p>
-      <ul className="m-0 space-y-1.5 pl-4">
-        <li className="text-xs text-secondary">
-          <span className="font-medium">Same machine</span> — open the panel at{' '}
-          <code className="rounded bg-secondary px-1 text-xs text-primary">{localhostUrl}</code> instead.
-        </li>
-        <li className="text-xs text-secondary">
-          <span className="font-medium">Remote / mobile</span> — run{' '}
-          <code className="rounded bg-secondary px-1 text-xs text-primary">npm run panel:public</code>{' '}
-          to get an HTTPS Cloudflare Tunnel URL.
-        </li>
-      </ul>
+    <div className="mt-2 overflow-hidden rounded-lg border border-warning-primary/30 bg-warning-primary/5">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-start justify-between gap-2 p-3 text-left"
+        aria-expanded={expanded}
+      >
+        <p className="m-0 text-xs font-medium text-warning-primary">
+          Browser notifications require HTTPS or localhost.
+        </p>
+        <Icon icon={ChevronDown} className={cx('size-3.5 shrink-0 text-warning-primary transition-transform mt-0.5', expanded && 'rotate-180')} />
+      </button>
+
+      {expanded && (
+        <div className="border-t border-warning-primary/20 px-3 pb-3 pt-2 space-y-3">
+          <p className="m-0 text-xs text-secondary">
+            You are accessing the panel via a plain HTTP address. Browsers block the Notifications API on non-secure contexts.
+          </p>
+
+          <div className="space-y-1.5">
+            <p className="m-0 text-xs font-semibold text-secondary">Option 1 — Enable HTTPS locally (recommended)</p>
+            <p className="m-0 text-xs text-secondary">Install mkcert once, then restart the panel. Certificates are generated automatically and browser notifications will work from any device on your network.</p>
+            <ol className="m-0 space-y-1 pl-4">
+              <li className="text-xs text-secondary">
+                Install mkcert:{' '}
+                <code className="rounded bg-secondary px-1 text-xs text-primary">brew install mkcert</code>
+              </li>
+              <li className="text-xs text-secondary">
+                Restart the panel:{' '}
+                <code className="rounded bg-secondary px-1 text-xs text-primary">npm run panel</code>
+              </li>
+            </ol>
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="m-0 text-xs font-semibold text-secondary">Option 2 — Use localhost (same machine only)</p>
+            <p className="m-0 text-xs text-secondary">
+              Open the panel at{' '}
+              <code className="rounded bg-secondary px-1 text-xs text-primary">{localhostUrl}</code>{' '}
+              instead of the LAN IP address.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="m-0 text-xs font-semibold text-secondary">Option 3 — Public tunnel (access from anywhere)</p>
+            <p className="m-0 text-xs text-secondary">
+              Run{' '}
+              <code className="rounded bg-secondary px-1 text-xs text-primary">npm run panel:public</code>{' '}
+              to get an HTTPS Cloudflare Tunnel URL. Requires{' '}
+              <code className="rounded bg-secondary px-1 text-xs text-primary">brew install cloudflared</code>.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
