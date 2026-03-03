@@ -226,7 +226,8 @@ export function NotificationsModal({
                       step={0.05}
                       value={settings.volume}
                       onChange={(e) => onSettingChange({ volume: parseFloat(e.target.value) })}
-                      className="flex-1 accent-brand-solid"
+                      className="flex-1"
+                      style={{ accentColor: 'var(--color-bg-brand-solid)' }}
                       aria-label="Notification volume"
                     />
                     <span className="w-8 text-right text-xs text-tertiary">
@@ -246,7 +247,7 @@ export function NotificationsModal({
                     <p className="m-0 text-sm text-secondary">{label}</p>
                     <div className="flex items-center gap-2">
                       {settings.audioEnabled && (
-                        <Button size="sm" color="secondary" onPress={previews[previewKey]}>
+                        <Button size="xs" color="tertiary" onPress={previews[previewKey]}>
                           Preview
                         </Button>
                       )}
