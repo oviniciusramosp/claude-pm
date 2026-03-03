@@ -779,6 +779,8 @@ function AppInner({ mode = 'light', themeMode = 'system', setThemeMode = (_m) =>
               setFixingTaskId={setFixingTaskId}
               setupComplete={allFieldsValidated && !hasBlockingErrors}
               onNavigateToSetup={() => setActiveTab(NAV_TAB_KEYS.setup)}
+              apiRunning={apiRunning}
+              onStartApi={() => runAction('startApi', '/api/process/api/start', 'API started')}
             />
           ) : activeTab === NAV_TAB_KEYS.git ? (
             <GitTab

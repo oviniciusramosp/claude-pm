@@ -34,6 +34,8 @@ interface BoardTabProps {
   setFixingTaskId?: (taskId: string | null) => void;
   setupComplete: boolean;
   onNavigateToSetup: () => void;
+  apiRunning?: boolean;
+  onStartApi?: () => Promise<void>;
 }
 
 interface BoardError {
@@ -603,18 +605,18 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
             {task.name}
           </p>
           {/* Divider */}
-          {(task.agents?.length > 0 || task.model) && (
+          {!epic && (task.agents?.length > 0 || task.model) && (
             <div className="mt-2 border-t border-secondary/40" />
           )}
           {/* Agents row */}
-          {task.agents?.length > 0 && (
+          {!epic && task.agents?.length > 0 && (
             <div className="mt-2 flex items-center gap-1.5 text-[11px] text-quaternary w-full">
               <Icon icon={Users01} className="size-3 shrink-0" />
               <span>{task.agents.map(a => a.charAt(0).toUpperCase() + a.slice(1)).join(', ')}</span>
             </div>
           )}
           {/* Model row */}
-          {task.model && (
+          {!epic && task.model && (
             <div className={cx(task.agents?.length > 0 ? 'mt-0.5' : 'mt-2', 'flex items-center gap-1.5 text-[11px] text-quaternary w-full')}>
               <Icon icon={CpuChip01} className="size-3 shrink-0" />
               <span>{formatModelName(task.model)}</span>
@@ -668,7 +670,7 @@ function SkeletonCard() {
   );
 }
 
-export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDetail, onError, setFixingTaskId: setFixingTaskIdProp, setupComplete, onNavigateToSetup }: BoardTabProps) {
+export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDetail, onError, setFixingTaskId: setFixingTaskIdProp, setupComplete, onNavigateToSetup, apiRunning, onStartApi }: BoardTabProps) {
   const [tasks, setTasks] = useState<BoardTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [boardError, setBoardError] = useState<BoardError | null>(null);
@@ -694,6 +696,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const generatePollRefs = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const [fixingEpicId, setFixingEpicId] = useState(null as string | null);
   const [fixingEpicType, setFixingEpicType] = useState(null as string | null);
+  const [startingApi, setStartingApi] = useState(false);
   const [fixingTaskId, setFixingTaskId] = useState(null as string | null);
   const [fixingTaskType, setFixingTaskType] = useState(null as string | null);
   const [boardExists, setBoardExists] = useState<boolean | null>(null);
@@ -1436,6 +1439,24 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
         <div className="rounded-xl bg-utility-error-50 p-8 text-center">
           <p className="text-sm font-medium text-error-primary">{boardError.message}</p>
           <div className="mt-3 flex items-center justify-center gap-2">
+            {boardError.code === 'NETWORK_ERROR' && !apiRunning && onStartApi && (
+              <Button
+                size="sm"
+                color="primary"
+                isLoading={startingApi}
+                onPress={async () => {
+                  setStartingApi(true);
+                  try {
+                    await onStartApi();
+                    await fetchBoard();
+                  } finally {
+                    setStartingApi(false);
+                  }
+                }}
+              >
+                Run Now
+              </Button>
+            )}
             <Button size="sm" color="secondary" onPress={() => fetchBoard()}>
               Retry
             </Button>
