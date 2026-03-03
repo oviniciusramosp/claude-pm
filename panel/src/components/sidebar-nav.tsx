@@ -157,20 +157,6 @@ export function SidebarNav({
           <p className="m-0 text-[11px] font-semibold uppercase tracking-wider text-quaternary">Controls</p>
           <div className="flex items-center gap-2">
             <Tooltip
-              title={appError ? "Orchestrator Error" : (apiRunning && !isPaused) ? "Orchestrator Running" : "Orchestrator Stopped"}
-              description={appError ? "Click to view error details" : (apiRunning && !isPaused) ? "Orchestrator is active and processing tasks" : "Orchestrator is not running"}
-            >
-              <TooltipTrigger className={appError ? "cursor-pointer" : "cursor-default"}>
-                <StatusBadge
-                  color={appError ? 'error' : (apiRunning && !isPaused) ? 'success' : 'gray'}
-                  connectionState={(apiRunning && !isPaused) ? 'active' : 'inactive'}
-                  onClick={appError ? onAppBadgeClick : undefined}
-                >
-                  Orchestrator
-                </StatusBadge>
-              </TooltipTrigger>
-            </Tooltip>
-            <Tooltip
               title={apiError ? "API Error" : apiHealthStatus.connectionState === 'active' ? "API Connected" : "API Disconnected"}
               description={apiError ? "Click to view error details" : apiHealthStatus.connectionState === 'active' ? "API is healthy and responding" : "API is not responding"}
             >

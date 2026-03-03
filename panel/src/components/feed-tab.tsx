@@ -808,13 +808,13 @@ export function FeedTab({
                   {!isOutgoing ? (
                     isLastInGroup
                       ? <SourceAvatar sourceMeta={sourceMeta} />
-                      : <span className="size-8 shrink-0" aria-hidden="true" />
+                      : <span className="size-10 shrink-0" aria-hidden="true" />
                   ) : null}
 
                   <div
                     className={cx(
                       'group/msg min-w-0 max-w-[min(86%,760px)] rounded-xl px-3 py-2.5 shadow-xs sm:px-4 sm:py-3',
-                      isOutgoing ? 'rounded-br-sm' : 'rounded-bl-sm',
+                      isLastInGroup && (isOutgoing ? 'rounded-br-sm' : 'rounded-bl-sm'),
                       logToneClasses(level, sourceMeta.side, sourceMeta.directClaude, 'progressive-log', true)
                     )}
                   >
@@ -837,7 +837,7 @@ export function FeedTab({
                   {isOutgoing ? (
                     isLastInGroup
                       ? <SourceAvatar sourceMeta={sourceMeta} />
-                      : <span className="size-8 shrink-0" aria-hidden="true" />
+                      : <span className="size-10 shrink-0" aria-hidden="true" />
                   ) : null}
                 </div>
               </div>
@@ -963,23 +963,14 @@ export function FeedTab({
                 {!isOutgoing ? (
                   isLastInGroup
                     ? <SourceAvatar sourceMeta={sourceMeta} />
-                    : <span className="size-8 shrink-0" aria-hidden="true" />
+                    : <span className="size-10 shrink-0" aria-hidden="true" />
                 ) : null}
 
                 <div
                   className={cx(
                     'group/msg min-w-0 max-w-[min(86%,760px)] rounded-xl px-3 py-2.5 shadow-xs sm:px-4 sm:py-3',
-                    isOutgoing ? 'rounded-br-sm' : 'rounded-bl-sm',
-                    logToneClasses(level, sourceMeta.side, sourceMeta.directClaude, specialBubble, validationReport?.valid ?? true),
-                    specialBubble === 'validation-report'
-                      ? validationReport?.valid
-                        ? 'ring-1 ring-green-400/50'
-                        : 'ring-1 ring-yellow-400/50'
-                      : specialBubble === 'in-progress'
-                        ? 'ring-1 ring-blue-400/50'
-                        : specialBubble === 'epic-done'
-                          ? 'ring-1 ring-purple-400/50'
-                          : ''
+                    isLastInGroup && (isOutgoing ? 'rounded-br-sm' : 'rounded-bl-sm'),
+                    logToneClasses(level, sourceMeta.side, sourceMeta.directClaude, specialBubble, validationReport?.valid ?? true)
                   )}
                 >
                   {line.isPrompt ? (
@@ -1032,7 +1023,7 @@ export function FeedTab({
                 {isOutgoing ? (
                   isLastInGroup
                     ? <SourceAvatar sourceMeta={sourceMeta} />
-                    : <span className="size-8 shrink-0" aria-hidden="true" />
+                    : <span className="size-10 shrink-0" aria-hidden="true" />
                 ) : null}
               </div>
             </div>
@@ -1064,10 +1055,11 @@ export function FeedTab({
 
       <div
         className={cx(
-          'flex flex-col gap-2 rounded-lg bg-primary p-2 shadow-xs ring-1 ring-primary ring-inset transition-shadow duration-100 ease-linear sm:flex-row sm:items-end',
+          'flex flex-col gap-2 bg-primary p-2 shadow-xs ring-1 ring-primary ring-inset transition-shadow duration-100 ease-linear sm:flex-row sm:items-end',
           'has-[:focus]:ring-2 has-[:focus]:ring-brand',
           isChatDisabled && 'bg-disabled_subtle ring-disabled'
         )}
+        style={{ borderRadius: 'var(--board-col-radius)', ['--inner-radius' as any]: 'calc(var(--board-col-radius) - 0.5rem)' }}
       >
           <div className="flex items-end gap-2 sm:contents">
             <div className="relative shrink-0">
@@ -1076,7 +1068,7 @@ export function FeedTab({
                 onChange={(e) => setChatModel(e.target.value)}
                 disabled={isChatDisabled}
                 className={cx(
-                  'h-9 appearance-none rounded-md border border-secondary bg-primary px-3 pr-8 text-sm text-primary outline-hidden transition-colors',
+                  'h-9 appearance-none rounded-[var(--inner-radius)] border border-secondary bg-primary px-3 pr-8 text-sm text-primary outline-hidden transition-colors',
                   'hover:border-secondary_hover focus:border-brand focus:ring-2 focus:ring-brand/20',
                   isChatDisabled && 'cursor-not-allowed opacity-50'
                 )}
@@ -1181,7 +1173,7 @@ export function FeedTab({
                 delay={200}
               >
                 <TooltipTrigger className="shrink-0">
-                  <span className="inline-flex rounded-xs bg-disabled p-2 shadow-xs cursor-not-allowed">
+                  <span className="inline-flex size-9 items-center justify-center rounded-[var(--inner-radius)] bg-disabled shadow-xs cursor-not-allowed">
                     <Icon icon={Send01} className="size-4 text-fg-disabled" />
                   </span>
                 </TooltipTrigger>
@@ -1191,7 +1183,7 @@ export function FeedTab({
                 size="sm"
                 color="primary"
                 iconLeading={Send01}
-                className="shrink-0 rounded-xs p-2! [&_svg]:!size-4"
+                className="shrink-0 size-9! rounded-[var(--inner-radius)]! [&_svg]:!size-4"
                 isLoading={Boolean(busy.chat)}
                 isDisabled={!chatDraft.trim()}
                 onPress={sendClaudeChatMessage}
