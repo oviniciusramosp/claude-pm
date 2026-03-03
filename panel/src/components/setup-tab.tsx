@@ -224,7 +224,7 @@ export function SetupTab({
               className="bg-secondary_hover dark:bg-primary space-y-4 p-3"
               style={{ borderRadius: 'var(--board-col-radius)' }}
             >
-              <div className="space-y-1">
+              <div className="space-y-1 px-3 sm:px-4">
                 <h3 className="m-0 text-md font-semibold text-primary">{section.title}</h3>
                 <p className="m-0 text-sm text-tertiary">{section.description}</p>
               </div>
