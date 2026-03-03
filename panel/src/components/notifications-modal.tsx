@@ -1,12 +1,115 @@
 // panel/src/components/notifications-modal.tsx
 
-import { Bell01, VolumeMax } from '@untitledui/icons';
+import { useState } from 'react';
+import { Bell01, ChevronDown, VolumeMax } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { Toggle } from '@/components/base/toggle/toggle';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
 import { handleModalKeyDown } from '@/utils/modal-keyboard';
+import { cx } from '@/utils/cx';
 import type { NotificationSettings } from '../hooks/useNotifications';
+
+type BrowserKind = 'chrome' | 'edge' | 'firefox' | 'safari' | 'other';
+
+function detectBrowser(): BrowserKind {
+  const ua = navigator.userAgent;
+  if (ua.includes('Edg/')) return 'edge';
+  if (ua.includes('Firefox/')) return 'firefox';
+  if (ua.includes('Safari/') && !ua.includes('Chrome/')) return 'safari';
+  if (ua.includes('Chrome/')) return 'chrome';
+  return 'other';
+}
+
+const BROWSER_STEPS: Record<BrowserKind, { name: string; steps: string[] }> = {
+  chrome: {
+    name: 'Chrome',
+    steps: [
+      'Click the lock icon (🔒) in the address bar.',
+      'Click "Notifications" in the dropdown.',
+      'Change the setting to "Allow".',
+      'Reload this page.',
+    ],
+  },
+  edge: {
+    name: 'Edge',
+    steps: [
+      'Click the lock icon (🔒) in the address bar.',
+      'Click "Permissions for this site".',
+      'Find "Notifications" and change to "Allow".',
+      'Reload this page.',
+    ],
+  },
+  firefox: {
+    name: 'Firefox',
+    steps: [
+      'Click the lock icon (🔒) in the address bar.',
+      'Click "Connection secure" → "More Information".',
+      'Go to the "Permissions" tab.',
+      'Find "Send Notifications" → uncheck "Use Default" → select "Allow".',
+      'Reload this page.',
+    ],
+  },
+  safari: {
+    name: 'Safari',
+    steps: [
+      'In the menu bar: Safari → Settings → Websites → Notifications.',
+      'Find this site in the list and change to "Allow".',
+      'Reload this page.',
+    ],
+  },
+  other: {
+    name: 'your browser',
+    steps: [
+      'Open your browser settings and search for "Notifications".',
+      'Find this site in the list and change the permission to "Allow".',
+      'Reload this page.',
+    ],
+  },
+};
+
+function PermissionDeniedHelp() {
+  const [expanded, setExpanded] = useState(false);
+  const browser = detectBrowser();
+  const { name, steps } = BROWSER_STEPS[browser];
+  const origin = window.location.origin;
+
+  return (
+    <div className="mt-2 rounded-lg border border-error-primary/30 bg-error-primary/5 p-3">
+      <div className="flex items-start justify-between gap-2">
+        <p className="m-0 text-xs text-error-primary">
+          Permission blocked by {name}. You need to re-enable it manually.
+        </p>
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="shrink-0 rounded p-0.5 text-xs text-error-primary/70 transition hover:text-error-primary"
+          aria-expanded={expanded}
+          aria-label="Toggle instructions"
+        >
+          <Icon icon={ChevronDown} className={cx('size-3.5 transition-transform', expanded && 'rotate-180')} />
+        </button>
+      </div>
+
+      {expanded && (
+        <div className="mt-3 space-y-2">
+          <p className="m-0 text-xs font-medium text-secondary">Steps for {name}:</p>
+          <ol className="m-0 space-y-1 pl-4">
+            {steps.map((step, i) => (
+              <li key={i} className="text-xs text-secondary">{step}</li>
+            ))}
+          </ol>
+          <p className="m-0 pt-1 text-xs text-tertiary">
+            Look for this site in your browser settings:
+          </p>
+          <code className="block rounded bg-secondary px-2 py-1 text-xs text-primary">
+            {origin}
+          </code>
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface NotificationsModalProps {
   open: boolean;
@@ -70,15 +173,8 @@ export function NotificationsModal({
                     {!canUseBrowser && (
                       <p className="m-0 mt-1 text-xs text-tertiary">Not supported in this browser.</p>
                     )}
-                    {canUseBrowser && browserPermission === 'denied' && (
-                      <p className="m-0 mt-1 text-xs text-error-primary">
-                        Permission denied — allow notifications in browser settings.
-                      </p>
-                    )}
                     {canUseBrowser && browserPermission === 'default' && (
-                      <p className="m-0 mt-1 text-xs text-tertiary">
-                        Permission not yet granted.
-                      </p>
+                      <p className="m-0 mt-1 text-xs text-tertiary">Permission not yet granted.</p>
                     )}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
@@ -102,6 +198,7 @@ export function NotificationsModal({
                     />
                   </div>
                 </div>
+                {canUseBrowser && browserPermission === 'denied' && <PermissionDeniedHelp />}
               </div>
             </div>
 
