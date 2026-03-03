@@ -15,6 +15,7 @@ import { TaskDetailModal } from './task-detail-modal';
 import { CreateTaskModal } from './create-task-modal';
 import { IdeaToEpicsModal } from './idea-to-epics-modal';
 import { EmptyBoardModal } from './empty-board-modal';
+import { EpicsOnboardingModal } from './epics-onboarding-modal';
 import { SetupRequiredBanner } from './setup-required-banner';
 import type { BoardTask } from '../types';
 
@@ -662,6 +663,7 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const [createDefaultType, setCreateDefaultType] = useState<string | undefined>(undefined);
   const [ideaModalOpen, setIdeaModalOpen] = useState(false);
   const [emptyBoardModalOpen, setEmptyBoardModalOpen] = useState(false);
+  const [epicsOnboardingModalOpen, setEpicsOnboardingModalOpen] = useState(false);
   const [generatingEpicIds, setGeneratingEpicIds] = useState(new Set<string>());
   const [generateProgressMap, setGenerateProgressMap] = useState(new Map<string, { created: number; total: number; phase: string | null }>());
   const generatePollRefs = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -1281,11 +1283,31 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const showBoard = !showBoardMissing && (tasks.length > 0 || (loading && !showErrorBanner) || (!boardError && !loading));
   const isBoardEmpty = !loading && !boardError && !showBoardMissing && boardExists === true && tasks.length === 0 && setupComplete;
 
+  const hasOnlyEmptyEpics = useMemo(() => {
+    if (loading || boardError || !boardExists || !setupComplete || tasks.length === 0) return false;
+    const epics = tasks.filter((t: BoardTask) => isEpic(t, tasks) && !t.parentId);
+    if (epics.length === 0) return false;
+    const nonEpicTasks = tasks.filter((t: BoardTask) => !isEpic(t, tasks) && !t.parentId);
+    if (nonEpicTasks.length > 0) return false;
+    return !tasks.some((t: BoardTask) => t.parentId);
+  }, [loading, boardError, boardExists, setupComplete, tasks]);
+
   useEffect(() => {
     if (isBoardEmpty) {
       setEmptyBoardModalOpen(true);
     }
   }, [isBoardEmpty]);
+
+  useEffect(() => {
+    if (hasOnlyEmptyEpics && !localStorage.getItem('epicsOnboardingDismissed')) {
+      setEpicsOnboardingModalOpen(true);
+    }
+  }, [hasOnlyEmptyEpics]);
+
+  const handleEpicsOnboardingClose = useCallback(() => {
+    setEpicsOnboardingModalOpen(false);
+    localStorage.setItem('epicsOnboardingDismissed', '1');
+  }, []);
 
   const handleViewDetails = useCallback(() => {
     if (!boardError) return;
@@ -2007,6 +2029,11 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
         onClose={() => setEmptyBoardModalOpen(false)}
         onIdeaToEpics={() => { setEmptyBoardModalOpen(false); setIdeaModalOpen(true); }}
         onNewEpic={() => { setEmptyBoardModalOpen(false); setCreateDefaultEpicId(undefined); setCreateDefaultType('Epic'); setCreateModalOpen(true); }}
+      />
+
+      <EpicsOnboardingModal
+        open={epicsOnboardingModalOpen}
+        onClose={handleEpicsOnboardingClose}
       />
     </section>
   );
