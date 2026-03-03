@@ -212,7 +212,7 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
               {groups.map((group) => (
                 <div key={group.key}>
                   {/* Sticky date separator */}
-                  <div className="sticky top-0 z-10 -mx-6 bg-primary px-6 py-2">
+                  <div className="sticky top-0 z-10 -mx-6 bg-primary px-6 pb-2">
                     <div className="flex items-center gap-3">
                       <div className="h-px flex-1 bg-secondary" />
                       <span
