@@ -1,6 +1,12 @@
 // scripts/setupCerts.js
 // Sets up locally-trusted HTTPS certificates for the panel using mkcert.
-// Run once with: npm run panel:certs
+//
+// Manual run:  npm run panel:certs
+// Auto mode:   node scripts/setupCerts.js --auto
+//   In auto mode the script is non-blocking:
+//   - Skips silently if certs already exist.
+//   - Skips with a hint (exit 0) if mkcert is not installed.
+//   - Generates certs (may prompt for CA password once) if mkcert is available.
 
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -11,6 +17,7 @@ const cwd = process.cwd();
 const certsDir = path.join(cwd, '.certs');
 const certFile = path.join(certsDir, 'cert.pem');
 const keyFile = path.join(certsDir, 'key.pem');
+const isAuto = process.argv.includes('--auto');
 
 function getLocalNetworkIp() {
   const interfaces = os.networkInterfaces();
@@ -33,14 +40,34 @@ function checkMkcert() {
   }
 }
 
+function certsExist() {
+  return fs.existsSync(certFile) && fs.existsSync(keyFile);
+}
+
 function main() {
-  console.log('🔐 Panel HTTPS Certificate Setup\n');
+  // Auto mode: skip if certs are already present
+  if (isAuto && certsExist()) {
+    return;
+  }
+
+  if (!isAuto) {
+    console.log('🔐 Panel HTTPS Certificate Setup\n');
+  }
 
   if (!checkMkcert()) {
+    if (isAuto) {
+      console.log('ℹ️  mkcert not found — panel will start with plain HTTP.');
+      console.log('   Run "brew install mkcert && npm run panel:certs" for HTTPS + LAN notifications.');
+      return; // exit 0, don't block panel startup
+    }
     console.error('❌ mkcert is not installed.');
     console.error('   Install it with: brew install mkcert');
     console.error('   Then re-run: npm run panel:certs');
     process.exit(1);
+  }
+
+  if (isAuto) {
+    console.log('🔐 Generating HTTPS certificates for the panel...');
   }
 
   // Install local CA (trusted by the OS and all browsers on this machine)
@@ -48,6 +75,11 @@ function main() {
   try {
     execSync('mkcert -install', { stdio: 'inherit' });
   } catch (err) {
+    if (isAuto) {
+      console.warn(`⚠️  mkcert -install failed: ${err.message}`);
+      console.warn('   Panel will start with plain HTTP.');
+      return;
+    }
     console.error('\n❌ Failed to install CA:', err.message);
     process.exit(1);
   }
@@ -74,14 +106,22 @@ function main() {
       { stdio: 'inherit' }
     );
   } catch (err) {
+    if (isAuto) {
+      console.warn(`⚠️  Certificate generation failed: ${err.message}`);
+      console.warn('   Panel will start with plain HTTP.');
+      return;
+    }
     console.error('\n❌ Failed to generate certificate:', err.message);
     process.exit(1);
   }
 
+  if (isAuto) {
+    console.log('\n✅ HTTPS certificates ready. Panel will start with HTTPS.');
+    return;
+  }
+
   console.log('\n✅ Done! Certificates saved to .certs/');
   console.log('   The panel will now use HTTPS automatically on the next start.\n');
-  console.log('🚀 Start the panel with:');
-  console.log('   npm run panel\n');
   if (lanIp) {
     const port = process.env.PANEL_PORT || 4100;
     console.log(`📱 LAN access (HTTPS): https://${lanIp}:${port}`);

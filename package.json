@@ -1,6 +1,6 @@
 {
   "name": "product-manager-automation",
-  "version": "1.79.24",
+  "version": "1.79.25",
   "description": "Product Manager automation with local file-based board + Claude Code",
   "type": "module",
   "engines": {
@@ -11,7 +11,7 @@
     "start": "NODE_OPTIONS='--disable-warning=DEP0040' node src/index.js",
     "test": "node --test",
     "test:panel": "vitest run --config panel/vitest.config.mts",
-    "panel": "npm run panel:build && node scripts/panelServer.js",
+    "panel": "node scripts/setupCerts.js --auto && npm run panel:build && node scripts/panelServer.js",
     "panel:certs": "node scripts/setupCerts.js",
     "panel:public": "npm run panel:build && node scripts/panelServer.js --public",
     "panel:build": "vite build --config panel/vite.config.mjs",
