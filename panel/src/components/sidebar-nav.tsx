@@ -2,7 +2,7 @@
 /// <reference path="../vite-env.d.ts" />
 
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertOctagon, ArrowUpRight, Asterisk02, BookOpen01, ChevronDown, LayersThree01, Monitor01, Moon01, PauseCircle, PlayCircle, Server01, StopCircle, Sun } from '@untitledui/icons';
+import { AlertOctagon, ArrowUpRight, Asterisk02, Bell01, BookOpen01, ChevronDown, LayersThree01, Monitor01, Moon01, PauseCircle, PlayCircle, Server01, StopCircle, Sun } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { Tooltip, TooltipTrigger } from './base/tooltip/tooltip';
 import { cx } from '@/utils/cx';
@@ -35,6 +35,7 @@ export function SidebarNav({
   errorCount,
   unreadFeedCount,
   onDebugClick,
+  onNotificationsClick,
   sidebarOpen,
   setSidebarOpen,
   serverInfo
@@ -59,6 +60,7 @@ export function SidebarNav({
   errorCount: number;
   unreadFeedCount: number;
   onDebugClick: () => void;
+  onNotificationsClick: () => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
   serverInfo?: any;
@@ -306,6 +308,14 @@ export function SidebarNav({
         >
           <Icon icon={BookOpen01} className="size-5" />
           <span>How it Works</span>
+        </button>
+        <button
+          type="button"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-tertiary transition hover:bg-primary_hover hover:text-secondary"
+          onClick={onNotificationsClick}
+        >
+          <Icon icon={Bell01} className="size-5" />
+          <span>Notifications</span>
         </button>
         <button
           type="button"

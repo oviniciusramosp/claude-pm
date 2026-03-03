@@ -34,6 +34,8 @@ import { DebugErrorsModal } from './components/debug-errors-modal';
 import { AuthProvider, useAuth } from './contexts/auth-context';
 import { LoginPage } from './components/login-page';
 import { useIsDesktop } from './hooks/use-is-desktop';
+import { useNotifications } from './hooks/useNotifications';
+import { NotificationsModal } from './components/notifications-modal';
 
 // ── Error Boundary ──────────────────────────────────────────────────
 // Catches uncaught errors in the React tree and renders a fallback UI
@@ -138,6 +140,10 @@ function AppInner({ mode = 'light', themeMode = 'system', setThemeMode = (_m) =>
   const [unreadFeedCount, setUnreadFeedCount] = useState(0);
   const logFeedRef = useRef(null);
   const didResolveInitialTabRef = useRef(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notifications = useNotifications();
+  const handleLogEntryRef = useRef(notifications.handleLogEntry);
+  useEffect(() => { handleLogEntryRef.current = notifications.handleLogEntry; }, [notifications.handleLogEntry]);
 
   const currentMode = mode || 'light';
   const isDark = currentMode === 'dark';
@@ -390,6 +396,8 @@ function AppInner({ mode = 'light', themeMode = 'system', setThemeMode = (_m) =>
         if (msg.startsWith('Moved to Done:') || msg.startsWith('Epic moved to Done')) {
           loadWeeklyUsage().catch(() => {});
         }
+
+        handleLogEntryRef.current(parsed);
       } catch {
         // Ignore malformed event.
       }
@@ -721,6 +729,7 @@ function AppInner({ mode = 'light', themeMode = 'system', setThemeMode = (_m) =>
         errorCount={collectedErrors.length}
         unreadFeedCount={unreadFeedCount}
         onDebugClick={() => setDebugModalOpen(true)}
+        onNotificationsClick={() => setNotificationsOpen(true)}
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
         serverInfo={serverInfo}
@@ -855,6 +864,18 @@ function AppInner({ mode = 'light', themeMode = 'system', setThemeMode = (_m) =>
             showToast('Failed to copy errors.', 'danger');
           }
         }}
+      />
+
+      <NotificationsModal
+        open={notificationsOpen}
+        onClose={() => setNotificationsOpen(false)}
+        settings={notifications.settings}
+        browserPermission={notifications.browserPermission}
+        onSettingChange={notifications.updateSettings}
+        onRequestPermission={notifications.requestBrowserPermission}
+        onPreviewTaskDone={notifications.previewTaskDone}
+        onPreviewEpicDone={notifications.previewEpicDone}
+        onPreviewError={notifications.previewError}
       />
 
       <ToastNotification
