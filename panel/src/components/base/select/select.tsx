@@ -231,17 +231,6 @@ export function Select({
                 role="option"
                 aria-selected={isSelected}
               >
-                {option.badge && (
-                  option.badge.className ? (
-                    <span className={cx('shrink-0 text-[11px] font-mono tracking-wide font-medium px-1.5 py-0.5 rounded-full', option.badge.className)}>
-                      {option.badge.text || option.label}
-                    </span>
-                  ) : (
-                    <Badge size="sm" color={option.badge.color!}>
-                      {option.badge.text || option.label}
-                    </Badge>
-                  )
-                )}
                 {option.icon && (
                   <Icon
                     icon={option.icon}
@@ -262,6 +251,17 @@ export function Select({
                     <p className="text-xs text-tertiary mt-0.5">{option.description}</p>
                   )}
                 </div>
+                {option.badge && (
+                  option.badge.className ? (
+                    <span className={cx('shrink-0 text-[11px] font-mono tracking-wide font-medium px-1.5 py-0.5 rounded-full', option.badge.className)}>
+                      {option.badge.text || option.label}
+                    </span>
+                  ) : (
+                    <Badge size="sm" color={option.badge.color!}>
+                      {option.badge.text || option.label}
+                    </Badge>
+                  )
+                )}
               </button>
             );
           })}

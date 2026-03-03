@@ -407,7 +407,7 @@ export function SetupTab({
 
                     return (
                       <div key={toggle.key} className="rounded-lg border border-secondary bg-primary p-3 sm:p-4">
-                        <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center justify-between gap-3">
                           <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
                             <div className="mt-0.5 shrink-0 flex size-6 items-center justify-center rounded-full bg-quaternary">
                               <Icon icon={toggle.icon} className="size-3.5 text-fg-quaternary" />
