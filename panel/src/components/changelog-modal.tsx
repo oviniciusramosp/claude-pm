@@ -2,7 +2,7 @@
 /// <reference path="../vite-env.d.ts" />
 
 import { useEffect, useState } from 'react';
-import { ArrowUpRight, Beaker01, CpuChip01, Edit05, File03, GitCommit, RefreshCw01, Settings01, Stars01, Tool01, X, Zap } from '@untitledui/icons';
+import { ArrowUpRight, Beaker01, ChevronDown, CpuChip01, Edit05, File03, GitCommit, RefreshCw01, Settings01, Stars01, Tool01, X, Zap } from '@untitledui/icons';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
 import { cx } from '@/utils/cx';
@@ -128,10 +128,19 @@ function groupByDate(commits: ChangelogCommit[]): DateGroup[] {
 
 // ── Component ────────────────────────────────────────────────────────
 export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [groups, setGroups]   = useState<DateGroup[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState<string | null>(null);
-  const [hasNew, setHasNew]   = useState(false);
+  const [groups, setGroups]       = useState<DateGroup[]>([]);
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState<string | null>(null);
+  const [hasNew, setHasNew]       = useState(false);
+  const [expanded, setExpanded]   = useState<Set<string>>(new Set());
+
+  function toggleBody(sha: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(sha) ? next.delete(sha) : next.add(sha);
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -276,9 +285,24 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
                             </div>
 
                             {body && (
-                              <p className="m-0 mt-0.5 whitespace-pre-wrap pl-6 text-xs text-tertiary">
-                                {body}
-                              </p>
+                              <div className="pl-6">
+                                <button
+                                  type="button"
+                                  className="flex items-center gap-1 text-[10px] text-quaternary transition hover:text-secondary"
+                                  onClick={() => toggleBody(commit.sha)}
+                                >
+                                  <Icon
+                                    icon={ChevronDown}
+                                    className={cx('size-3 transition-transform', !expanded.has(commit.sha) && '-rotate-90')}
+                                  />
+                                  <span>{expanded.has(commit.sha) ? 'Hide' : 'Show'} description</span>
+                                </button>
+                                {expanded.has(commit.sha) && (
+                                  <p className="m-0 mt-1 whitespace-pre-wrap text-xs text-tertiary">
+                                    {body}
+                                  </p>
+                                )}
+                              </div>
                             )}
                           </div>
                         </div>
