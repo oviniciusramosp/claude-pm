@@ -225,7 +225,7 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
                         'flex-1 space-y-0.5 border-l pl-4',
                         group.isNew ? 'border-brand-primary/40' : 'border-secondary'
                       )}>
-                        {group.commits.map((commit) => {
+                        {group.commits.map((commit, ci) => {
                           const firstLine = commit.message.split('\n')[0];
                           const conventional = parseConventional(firstLine);
                           const subject = conventional?.subject ?? firstLine;
@@ -235,6 +235,9 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
                           const iconColor = conventional
                             ? (TYPE_COLOR[conventional.type] ?? 'text-quaternary')
                             : 'text-quaternary';
+                          const dateKey = commit.date.slice(0, 10);
+                          const prevDateKey = ci > 0 ? group.commits[ci - 1].date.slice(0, 10) : null;
+                          const showDate = dateKey !== prevDateKey;
 
                           return (
                             <div
@@ -243,9 +246,9 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
                             >
                               <span
                                 className="w-16 shrink-0 text-right font-mono text-[10px] text-quaternary"
-                                title={formatDate(commit.date)}
+                                title={showDate ? formatDate(commit.date) : undefined}
                               >
-                                {formatRelativeDate(commit.date)}
+                                {showDate ? formatRelativeDate(commit.date) : ''}
                               </span>
 
                               <Icon
