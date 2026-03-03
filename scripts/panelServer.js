@@ -7146,7 +7146,13 @@ async function startServer() {
     } else {
       const lanIp = getLocalNetworkIp();
       if (lanIp) {
-        console.log(`📱 LAN access: ${scheme}://${lanIp}:${panelPort}`);
+        if (httpsEnabled) {
+          console.log(`📱 LAN access (HTTPS): https://${lanIp}:${panelPort}`);
+          console.log('   Browser notifications enabled — works from any device on your network.');
+        } else {
+          console.log(`📱 LAN access (HTTP): http://${lanIp}:${panelPort}`);
+          console.log('   ⚠️  Browser notifications require HTTPS. Run: brew install mkcert');
+        }
       }
     }
 
