@@ -12,6 +12,7 @@ import { StatusBadge } from './status-badge';
 import { AccessMenu } from './access-menu';
 import { UserMenu } from './user-menu';
 import { ChangelogModal } from './changelog-modal';
+import { HelpModal } from './help-modal';
 
 export function SidebarNav({
   activeTab,
@@ -67,6 +68,7 @@ export function SidebarNav({
   const [workMenuOpen, setWorkMenuOpen] = useState(false);
   const [accessMenuOpen, setAccessMenuOpen] = useState(false);
   const [changelogOpen, setChangelogOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const workMenuRef = useRef(null);
   const accessMenuTriggerRef = useRef<HTMLButtonElement>(null);
 
@@ -367,17 +369,28 @@ export function SidebarNav({
 
         <div className="mt-1 flex items-center justify-between px-3">
           <p className="text-[11px] text-quaternary">v{__APP_VERSION__}</p>
-          <button
-            type="button"
-            className="rounded px-1.5 py-0.5 text-[11px] text-quaternary transition hover:bg-primary_hover hover:text-secondary"
-            onClick={() => setChangelogOpen(true)}
-          >
-            Changelog
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className="rounded px-1.5 py-0.5 text-[11px] text-quaternary transition hover:bg-primary_hover hover:text-secondary"
+              onClick={() => setHelpOpen(true)}
+            >
+              Help
+            </button>
+            <span className="text-[11px] text-quaternary">·</span>
+            <button
+              type="button"
+              className="rounded px-1.5 py-0.5 text-[11px] text-quaternary transition hover:bg-primary_hover hover:text-secondary"
+              onClick={() => setChangelogOpen(true)}
+            >
+              Changelog
+            </button>
+          </div>
         </div>
       </div>
 
       <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
+      <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
     </aside>
   );
 }
