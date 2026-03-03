@@ -306,15 +306,16 @@ function buildCommand(config, task, overrideModel) {
 export function runClaudeTask(task, prompt, config, { signal, onAcComplete, overrideModel } = {}) {
   return new Promise((resolve, reject) => {
     const commandEnv = { ...process.env };
-    if (config.claude.oauthToken) {
-      commandEnv.CLAUDE_CODE_OAUTH_TOKEN = config.claude.oauthToken;
-    }
     // Remove Claude Code session env vars so each task runs as a fresh, independent invocation.
     // Without this, Claude Code detects a nested session and exits with code 1.
     for (const key of Object.keys(commandEnv)) {
       if (key === 'CLAUDECODE' || key.startsWith('CLAUDE_CODE_')) {
         delete commandEnv[key];
       }
+    }
+    // Re-apply the OAuth token AFTER the cleanup loop, so it is not deleted above.
+    if (config.claude.oauthToken) {
+      commandEnv.CLAUDE_CODE_OAUTH_TOKEN = config.claude.oauthToken;
     }
 
     const command = buildCommand(config, task, overrideModel);
