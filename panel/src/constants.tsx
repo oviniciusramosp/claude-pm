@@ -96,8 +96,7 @@ export const TEXT_FIELD_CONFIG: TextFieldConfig[] = [
       bulletList: true,
       steps: [
         'Use Automatic to use the model specified in each task.',
-        'Or select a model to override all task models.',
-        'Opus 4.6 is most capable but slower, Haiku 4.5 is fastest.'
+        'Or select a model to override all task models.'
       ]
     },
     selectOptions: CLAUDE_MODELS
