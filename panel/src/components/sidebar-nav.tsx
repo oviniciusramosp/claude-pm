@@ -11,6 +11,7 @@ import { Icon } from './icon';
 import { StatusBadge } from './status-badge';
 import { AccessMenu } from './access-menu';
 import { UserMenu } from './user-menu';
+import { ChangelogModal } from './changelog-modal';
 
 export function SidebarNav({
   activeTab,
@@ -63,6 +64,7 @@ export function SidebarNav({
 }) {
   const [workMenuOpen, setWorkMenuOpen] = useState(false);
   const [accessMenuOpen, setAccessMenuOpen] = useState(false);
+  const [changelogOpen, setChangelogOpen] = useState(false);
   const workMenuRef = useRef(null);
   const accessMenuTriggerRef = useRef<HTMLButtonElement>(null);
 
@@ -346,8 +348,19 @@ export function SidebarNav({
           </a>
         )}
 
-        <p className="mt-1 px-3 text-[11px] text-quaternary">v{__APP_VERSION__}</p>
+        <div className="mt-1 flex items-center justify-between px-3">
+          <p className="text-[11px] text-quaternary">v{__APP_VERSION__}</p>
+          <button
+            type="button"
+            className="rounded px-1.5 py-0.5 text-[11px] text-quaternary transition hover:bg-primary_hover hover:text-secondary"
+            onClick={() => setChangelogOpen(true)}
+          >
+            Changelog
+          </button>
+        </div>
       </div>
+
+      <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
     </aside>
   );
 }

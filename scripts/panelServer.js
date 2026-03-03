@@ -120,6 +120,38 @@ try {
 fetchLatestGithubVersion();
 setInterval(fetchLatestGithubVersion, VERSION_CHECK_INTERVAL_MS);
 
+// ── GitHub Changelog ────────────────────────────────────────────────
+const changelogState = {
+  commits: null,
+  lastFetched: null,
+  error: null
+};
+
+async function fetchChangelog() {
+  try {
+    const response = await fetch(
+      `https://api.github.com/repos/${GITHUB_REPO}/commits?per_page=50`,
+      { headers: { 'User-Agent': 'claude-pm-panel' } }
+    );
+    if (!response.ok) {
+      changelogState.error = `GitHub API returned ${response.status}`;
+      return;
+    }
+    const data = await response.json();
+    changelogState.commits = data.map((c) => ({
+      sha: c.sha.slice(0, 7),
+      message: c.commit.message,
+      date: c.commit.committer.date,
+      author: c.commit.author.name,
+      url: c.html_url
+    }));
+    changelogState.lastFetched = new Date().toISOString();
+    changelogState.error = null;
+  } catch (err) {
+    changelogState.error = err.message;
+  }
+}
+
 function startCloudflaredTunnel() {
   tunnelState.status = 'starting';
   tunnelState.error = null;
@@ -1723,6 +1755,22 @@ app.get('/api/server/info', (_req, res) => {
     hasUpdate: versionCheckState.hasUpdate,
     updateUrl: versionCheckState.updateUrl
   });
+});
+
+app.get('/api/changelog', async (_req, res) => {
+  const stale =
+    !changelogState.lastFetched ||
+    Date.now() - new Date(changelogState.lastFetched).getTime() > VERSION_CHECK_INTERVAL_MS;
+
+  if (stale) {
+    await fetchChangelog();
+  }
+
+  if (changelogState.error && !changelogState.commits) {
+    return res.status(502).json({ error: changelogState.error });
+  }
+
+  res.json({ commits: changelogState.commits || [], error: changelogState.error || null });
 });
 
 // Protect all /api/* routes (except /api/auth/* which handle their own auth)
