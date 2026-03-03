@@ -94,6 +94,19 @@ Include checkboxes for: tests passing, build passing. Include a commit message f
 - Flag scope overlaps or redundant acceptance criteria
 - Suggest dependencies where the Epic interacts with other epics
 
+### 10. Task Sizing (non-Epic types)
+
+- Flag tasks that are too **SMALL**: "Install X dependency", "Create config file", "Add TypeScript types" should be merged into their parent implementation task, not exist as standalone tasks.
+- Flag tasks that are too **LARGE**: tasks with 10+ ACs or 15+ implementation steps should be split.
+- Ideal task size: 3-6 ACs, 4-8 implementation steps, completable in one Claude session.
+- If the task is too small, suggest in the summary which task it should be merged into.
+
+### 11. Model Recommendation
+
+- If the task is purely mechanical (install deps, rename files, config changes), suggest `model: claude-haiku-4-5-20251001`.
+- If the task requires deep reasoning, architectural trade-offs, or multi-file coordination, suggest `model: claude-opus-4-6`.
+- Default: Sonnet. Write instructions so Sonnet can execute without ambiguity — explicit paths, exact commands, concrete examples.
+
 ## Output Rules
 
 - Preserve the original YAML frontmatter exactly as-is

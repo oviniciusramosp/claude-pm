@@ -74,6 +74,23 @@ The system automatically validates the Board structure on startup and in the Pan
 
 This section defines the complete format for creating tasks and epics that the automation system can understand.
 
+### Task Sizing Philosophy
+
+**Fewer, larger tasks > many micro-tasks.** Each task should deliver a meaningful, testable increment. The goal is one-shot execution — Claude reads the task, executes it completely in a single session, and moves on.
+
+**Rules:**
+- Target **2-7 tasks per Epic** (not 10-15).
+- Never create standalone tasks for: installing deps, config files, TypeScript types, project structure setup. These are STEPS within a larger task.
+- Only split when there is a genuine dependency boundary (Discovery output needed, or different model required).
+- A good task has 3-6 ACs and 4-8 implementation steps.
+- A task completable in under 5 minutes is too small — merge it.
+
+**Model optimization:**
+- Write tasks with explicit instructions so simpler models can execute them.
+- Specify exact file paths, commands, and expected outcomes.
+- Default to Sonnet. Use Haiku for mechanical work. Reserve Opus for Discovery and complex reasoning.
+- The `model` field in YAML frontmatter selects the Claude model: `claude-sonnet-4-5-20250929`, `claude-haiku-4-5-20251001`, `claude-opus-4-6`.
+
 ### YAML Frontmatter Fields
 
 All task files must start with YAML frontmatter between `---` delimiters.
