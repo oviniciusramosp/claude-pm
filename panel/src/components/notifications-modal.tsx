@@ -127,6 +127,37 @@ const EVENT_ROWS = [
   { key: 'notifyError',    label: 'Error',           previewKey: 'onPreviewError' },
 ] as const;
 
+function InsecureContextWarning() {
+  const origin = window.location.origin;
+  const localhostUrl = `http://localhost:${window.location.port || '4100'}`;
+  return (
+    <div className="mt-2 rounded-lg border border-warning-primary/30 bg-warning-primary/5 p-3 space-y-2">
+      <p className="m-0 text-xs font-medium text-warning-primary">
+        Browser notifications require HTTPS or localhost.
+      </p>
+      <p className="m-0 text-xs text-secondary">
+        You are accessing the panel via a plain HTTP IP address, which browsers block for security reasons.
+      </p>
+      <p className="m-0 text-xs text-tertiary">
+        Current URL:
+      </p>
+      <code className="block rounded bg-secondary px-2 py-1 text-xs text-primary">{origin}</code>
+      <p className="m-0 pt-1 text-xs text-secondary font-medium">To enable browser notifications:</p>
+      <ul className="m-0 space-y-1.5 pl-4">
+        <li className="text-xs text-secondary">
+          <span className="font-medium">Same machine</span> — open the panel at{' '}
+          <code className="rounded bg-secondary px-1 text-xs text-primary">{localhostUrl}</code> instead.
+        </li>
+        <li className="text-xs text-secondary">
+          <span className="font-medium">Remote / mobile</span> — run{' '}
+          <code className="rounded bg-secondary px-1 text-xs text-primary">npm run panel:public</code>{' '}
+          to get an HTTPS Cloudflare Tunnel URL.
+        </li>
+      </ul>
+    </div>
+  );
+}
+
 export function NotificationsModal({
   open,
   onClose,
@@ -138,7 +169,8 @@ export function NotificationsModal({
   onPreviewEpicDone,
   onPreviewError,
 }: NotificationsModalProps) {
-  const canUseBrowser = typeof Notification !== 'undefined';
+  const isSecureContext = window.isSecureContext;
+  const canUseBrowser = typeof Notification !== 'undefined' && isSecureContext;
   const previews: Record<string, () => void> = {
     onPreviewTaskDone,
     onPreviewEpicDone,
@@ -168,7 +200,7 @@ export function NotificationsModal({
                       <Icon icon={Bell01} className="size-4" />
                       Browser Notifications
                     </p>
-                    {!canUseBrowser && (
+                    {typeof Notification === 'undefined' && (
                       <p className="m-0 mt-1 text-xs text-tertiary">Not supported in this browser.</p>
                     )}
                     {canUseBrowser && browserPermission === 'default' && (
@@ -196,6 +228,7 @@ export function NotificationsModal({
                     />
                   </div>
                 </div>
+                {!isSecureContext && typeof Notification !== 'undefined' && <InsecureContextWarning />}
                 {canUseBrowser && browserPermission === 'denied' && <PermissionDeniedHelp />}
               </div>
             </div>
