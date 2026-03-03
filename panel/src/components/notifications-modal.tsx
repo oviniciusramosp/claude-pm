@@ -25,16 +25,16 @@ const BROWSER_STEPS: Record<BrowserKind, { name: string; steps: string[] }> = {
   chrome: {
     name: 'Chrome',
     steps: [
-      'Click the lock icon (🔒) in the address bar.',
-      'Click "Notifications" in the dropdown.',
-      'Change the setting to "Allow".',
+      'Click the "Not secure" label or the info icon (ⓘ) in the address bar.',
+      'Click "Site settings" in the panel that opens.',
+      'Find "Notifications" and change the value to "Allow".',
       'Reload this page.',
     ],
   },
   edge: {
     name: 'Edge',
     steps: [
-      'Click the lock icon (🔒) in the address bar.',
+      'Click the "Not secure" label or the info icon (ⓘ) in the address bar.',
       'Click "Permissions for this site".',
       'Find "Notifications" and change to "Allow".',
       'Reload this page.',
@@ -43,25 +43,23 @@ const BROWSER_STEPS: Record<BrowserKind, { name: string; steps: string[] }> = {
   firefox: {
     name: 'Firefox',
     steps: [
-      'Click the lock icon (🔒) in the address bar.',
-      'Click "Connection secure" → "More Information".',
-      'Go to the "Permissions" tab.',
-      'Find "Send Notifications" → uncheck "Use Default" → select "Allow".',
-      'Reload this page.',
+      'Click the crossed-out lock or info icon in the address bar.',
+      'Click "Remove permission" next to Notifications, then reload.',
+      'The browser will ask again — choose "Allow".',
     ],
   },
   safari: {
     name: 'Safari',
     steps: [
       'In the menu bar: Safari → Settings → Websites → Notifications.',
-      'Find this site in the list and change to "Allow".',
+      'Find this site in the list and change the setting to "Allow".',
       'Reload this page.',
     ],
   },
   other: {
     name: 'your browser',
     steps: [
-      'Open your browser settings and search for "Notifications".',
+      'Open your browser settings and search for "Notifications" or "Site permissions".',
       'Find this site in the list and change the permission to "Allow".',
       'Reload this page.',
     ],
