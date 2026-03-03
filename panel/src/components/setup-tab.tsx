@@ -66,7 +66,6 @@ function ClaudeCliPrerequisites({
             <div className="flex items-center justify-between gap-2">
               <h4 className="m-0 text-sm font-semibold text-primary">Install Claude CLI</h4>
               <div className="flex items-center gap-2">
-                <StatusIcon ok={cliStatus?.cliInstalled} loading={loading} />
                 <button
                   type="button"
                   onClick={onRefresh}
@@ -76,6 +75,7 @@ function ClaudeCliPrerequisites({
                 >
                   <RefreshCw01 className={cx('size-3.5', loading && 'animate-spin')} />
                 </button>
+                <StatusIcon ok={cliStatus?.cliInstalled} loading={loading} />
               </div>
             </div>
             <p className="m-0 text-sm text-tertiary">
