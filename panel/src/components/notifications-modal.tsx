@@ -247,7 +247,7 @@ export function NotificationsModal({
                     <p className="m-0 text-sm text-secondary">{label}</p>
                     <div className="flex items-center gap-2">
                       {settings.audioEnabled && (
-                        <Button size="xs" color="tertiary" onPress={previews[previewKey]}>
+                        <Button size="sm" color="tertiary" onPress={previews[previewKey]}>
                           Preview
                         </Button>
                       )}
