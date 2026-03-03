@@ -14,7 +14,14 @@ export interface TextFieldConfig {
   };
   password?: boolean;
   folderPicker?: boolean;
-  selectOptions?: readonly { value: string; label: string; description: string }[];
+  selectOptions?: readonly {
+    value: string;
+    label: string;
+    description: string;
+    icon?: (props: { className?: string }) => unknown;
+    disabled?: boolean;
+    badge?: { text?: string; color?: string };
+  }[];
 }
 
 export interface ToggleConfig {

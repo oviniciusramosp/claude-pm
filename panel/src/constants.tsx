@@ -4,6 +4,7 @@ import {
   Activity,
   AlertCircle,
   Asterisk02,
+  Atom01,
   Beaker01,
   CheckCircle,
   Columns03,
@@ -11,12 +12,16 @@ import {
   File03,
   Folder,
   GitCommit,
+  Globe01,
   InfoCircle,
   LockUnlocked01,
   MessageChatCircle,
+  Monitor01,
+  Phone01,
   PlayCircle,
   Server01,
   Settings01,
+  SlashCircle01,
   TerminalBrowser,
   User01,
   Users01,
@@ -34,9 +39,12 @@ export const CLAUDE_MODELS = [
 export const CLAUDE_TASK_MODELS = CLAUDE_MODELS.filter((m) => m.value !== '');
 
 export const PLATFORM_PRESETS = [
-  { value: '', label: 'None', description: 'No platform-specific instructions' },
-  { value: 'ios', label: 'iOS / iPadOS', description: 'Simulator management, xcodebuild flags, crash recovery' }
-] as const;
+  { value: '', label: 'None', description: 'No platform-specific instructions', icon: SlashCircle01 },
+  { value: 'ios', label: 'iOS / iPadOS', description: 'Simulator management, xcodebuild flags, crash recovery', icon: Phone01 },
+  { value: 'react-native', label: 'React Native (Android / iOS)', description: 'Cross-platform mobile with Expo or bare React Native', icon: Atom01, disabled: true, badge: { text: 'Soon', color: 'gray' } },
+  { value: 'android', label: 'Android', description: 'Android native development with Gradle and ADB tooling', icon: Monitor01, disabled: true, badge: { text: 'Soon', color: 'gray' } },
+  { value: 'react-web', label: 'React Web', description: 'React web apps with Vite, Next.js, or Create React App', icon: Globe01, disabled: true, badge: { text: 'Soon', color: 'gray' } }
+];
 
 export const CLAUDE_DEFAULT_TASK_MODEL = 'claude-sonnet-4-5-20250929';
 

@@ -294,8 +294,10 @@ export function SetupTab({
                                   options={field.selectOptions.map((opt): SelectOption => ({
                                     value: opt.value,
                                     label: opt.label,
-                                    icon: field.icon,
-                                    description: opt.description
+                                    icon: (opt.icon as SelectOption['icon']) ?? field.icon,
+                                    description: opt.description,
+                                    disabled: opt.disabled,
+                                    badge: opt.badge as SelectOption['badge']
                                   }))}
                                   size="md"
                                 />
