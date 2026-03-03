@@ -733,13 +733,10 @@ export function FeedTab({
   }, [logs, logFeedRef]);
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden rounded-xl border border-secondary bg-primary p-3 shadow-sm sm:gap-4 sm:p-4">
-      <div className="space-y-1">
-        <h2 className="m-0 inline-flex items-center gap-2 text-lg font-semibold text-primary sm:text-xl">
-          <Icon icon={TerminalBrowser} className="size-5" />
-          Live Feed
-        </h2>
-        <p className="m-0 hidden text-sm text-tertiary sm:block">Unified stream for panel, app and direct Claude chat.</p>
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-x-hidden">
+      <div className="flex items-center gap-2 min-w-0">
+        <Icon icon={TerminalBrowser} className="size-5 shrink-0 text-tertiary" />
+        <h2 className="truncate text-2xl font-bold text-primary tracking-tight">Live Feed</h2>
       </div>
 
       {/* Setup required banner */}
@@ -764,7 +761,7 @@ export function FeedTab({
 
       <div
         ref={logFeedRef}
-        className="min-h-0 min-w-0 flex-1 space-y-2 overflow-y-auto overflow-x-hidden rounded-lg border border-secondary bg-secondary p-2 sm:p-3"
+        className="min-h-0 min-w-0 flex-1 space-y-2 overflow-y-auto overflow-x-hidden"
       >
         {groupedLogs.map((item, index) => {
           // Check if this is a progressive log group
@@ -1064,14 +1061,13 @@ export function FeedTab({
         ) : null}
       </div>
 
-      <div className="space-y-2">
-        <div
-          className={cx(
-            'flex flex-col gap-2 rounded-lg bg-primary p-2 shadow-xs ring-1 ring-primary ring-inset transition-shadow duration-100 ease-linear sm:flex-row sm:items-end',
-            'has-[:focus]:ring-2 has-[:focus]:ring-brand',
-            isChatDisabled && 'bg-disabled_subtle ring-disabled'
-          )}
-        >
+      <div
+        className={cx(
+          'flex flex-col gap-2 rounded-lg bg-primary p-2 shadow-xs ring-1 ring-primary ring-inset transition-shadow duration-100 ease-linear sm:flex-row sm:items-end',
+          'has-[:focus]:ring-2 has-[:focus]:ring-brand',
+          isChatDisabled && 'bg-disabled_subtle ring-disabled'
+        )}
+      >
           <div className="flex items-end gap-2 sm:contents">
             <div className="relative shrink-0">
               <select
@@ -1203,7 +1199,6 @@ export function FeedTab({
             )}
           </div>
         </div>
-      </div>
 
       <TaskDetailModal
         open={selectedTask !== null}
