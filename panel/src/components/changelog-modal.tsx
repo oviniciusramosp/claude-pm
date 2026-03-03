@@ -192,7 +192,7 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
             </div>
 
             {/* ── Body ───────────────────────────────────────────── */}
-            <div className="max-h-[60vh] overflow-y-auto px-6 py-2">
+            <div className="max-h-[60vh] overflow-y-auto px-6 pb-2">
               {loading && (
                 <div className="flex items-center justify-center py-12">
                   <div className="size-6 animate-spin rounded-full border-2 border-brand-solid border-t-transparent" />
