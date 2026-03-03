@@ -279,7 +279,7 @@ export class LocalBoardClient {
     return deleted;
   }
 
-  async createTask(fields, body = '', { epicId = null, fileName = null } = {}) {
+  async createTask(fields, body = '', { epicId = null, fileName = null, overwrite = false } = {}) {
     const name = fields.name;
     if (!name) throw new Error('Task name is required');
 
@@ -332,11 +332,15 @@ export class LocalBoardClient {
 
     const targetPath = path.join(targetDir, targetFileName);
 
-    try {
-      await fs.access(targetPath);
-      throw new Error(`File already exists: ${targetFileName}`);
-    } catch (err) {
-      if (err.message.startsWith('File already exists')) throw err;
+    if (overwrite) {
+      try { await fs.unlink(targetPath); } catch { /* file didn't exist — that's fine */ }
+    } else {
+      try {
+        await fs.access(targetPath);
+        throw new Error(`File already exists: ${targetFileName}`);
+      } catch (err) {
+        if (err.message.startsWith('File already exists')) throw err;
+      }
     }
 
     await fs.writeFile(targetPath, content, 'utf8');

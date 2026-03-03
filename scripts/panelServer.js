@@ -4106,6 +4106,16 @@ app.post('/api/board/review-task', async (req, res) => {
 // --- Generate Stories from Epic (two-phase: plan then generate one by one) ---
 
 /**
+ * Returns true if a task markdown file has complete content:
+ * valid frontmatter + at least one AC checkbox + minimum body length.
+ */
+function isStoryComplete(markdown) {
+  if (!markdown || markdown.trim().length < 200) return false;
+  if (!/^---[\s\S]*?---/.test(markdown)) return false;
+  return markdown.includes('- [ ]') || markdown.includes('- [x]');
+}
+
+/**
  * Phase 1: Ask Claude for story outlines only (no full bodies).
  * Fast call that returns a plan: [{name, priority, type, model, brief, dependsOn}]
  */
@@ -4657,14 +4667,33 @@ app.post('/api/board/generate-stories', async (req, res) => {
       const allTasks = await client.listTasks();
       const existingChildren = allTasks.filter((t) => t.parentId === epicId);
 
+      // Check completeness of each existing child to detect files created but not fully written
+      const childWithContent = await Promise.all(
+        existingChildren.map(async (c) => {
+          const md = await client.getTaskMarkdown(c.id);
+          const childFileName = c.id.includes('/') ? c.id.split('/').pop() : c.id;
+          return { child: c, complete: isStoryComplete(md), fileName: childFileName };
+        })
+      );
+      const completeChildNames = new Set(
+        childWithContent.filter((x) => x.complete).map((x) => x.child.name.toLowerCase().trim())
+      );
+      // Map from lowercase name → existing fileName for incomplete children (need overwrite)
+      const incompleteChildMap = new Map(
+        childWithContent.filter((x) => !x.complete).map((x) => [x.child.name.toLowerCase().trim(), x.fileName])
+      );
+      if (incompleteChildMap.size > 0) {
+        pushLog('warn', LOG_SOURCE.panel, `Found ${incompleteChildMap.size} incomplete story file(s) for "${epicName}" — will regenerate.`);
+      }
+
       let storyPlan;
       let storiesToGenerate;
 
       if (isResuming) {
         // Reuse saved Phase 1 plan — skip Phase 1 entirely
         storyPlan = session.plan;
-        const existingNames = new Set(existingChildren.map((c) => c.name.toLowerCase().trim()));
-        storiesToGenerate = storyPlan.filter((s) => !existingNames.has(s.name.toLowerCase().trim()));
+        // Only skip stories that are complete — incomplete files are treated as missing and regenerated
+        storiesToGenerate = storyPlan.filter((s) => !completeChildNames.has(s.name.toLowerCase().trim()));
         session.total = storiesToGenerate.length;
         session.phase = 'generating';
         if (storiesToGenerate.length === 0) {
@@ -4674,12 +4703,13 @@ app.post('/api/board/generate-stories', async (req, res) => {
         pushLog('info', LOG_SOURCE.panel, `Resuming: ${storiesToGenerate.length} of ${storyPlan.length} stories remaining for "${epicName}". Generating one by one...`);
       } else {
         // Phase 1: Generate story plan (outlines only — fast call)
+        // Pass only complete children as "existing" so Claude includes incomplete ones in the new plan
         const boardContext = await buildBoardContext(client, epicId);
         pushLog('info', LOG_SOURCE.panel, `Planning stories for "${epicName}"...`);
         const planPrompt = buildStoryPlanPrompt({
           epicName,
           epicBody: epicBody.trim(),
-          existingChildren: existingChildren.map((c) => ({ name: c.name })),
+          existingChildren: childWithContent.filter((x) => x.complete).map((x) => ({ name: x.child.name })),
           boardContext,
           epicAgents: epicFields && epicFields.agents ? epicFields.agents : null
         });
@@ -4716,7 +4746,8 @@ app.post('/api/board/generate-stories', async (req, res) => {
       }
 
       // Phase 2: Generate each story body individually
-      // existingChildren.length already reflects previously created stories when resuming
+      // Track a separate offset for genuinely new files (incomplete files reuse existing filenames)
+      let newStoryOffset = 0;
       for (let i = 0; i < storiesToGenerate.length; i++) {
         const outline = storiesToGenerate[i];
         try {
@@ -4740,11 +4771,20 @@ app.post('/api/board/generate-stories', async (req, res) => {
             ...(outline.agents ? { agents: outline.agents } : {})
           };
 
-          const fileName = generateStoryFileName(epicId, existingChildren.length + i, outline.name);
-          await client.createTask(taskFields, storyBody, { epicId, fileName });
+          // If this story matches an incomplete existing file, overwrite it (same filename)
+          // Otherwise generate a new filename based on the current count
+          const lcName = outline.name.toLowerCase().trim();
+          const incompleteFileName = incompleteChildMap.get(lcName);
+          const needsOverwrite = !!incompleteFileName;
+          const fileName = incompleteFileName
+            || generateStoryFileName(epicId, existingChildren.length + newStoryOffset, outline.name);
+          if (!needsOverwrite) newStoryOffset++;
+
+          await client.createTask(taskFields, storyBody, { epicId, fileName, overwrite: needsOverwrite });
 
           session.created++;
-          pushLog('success', LOG_SOURCE.claude, `Story created (${session.created}/${session.total}): "${outline.name}"`);
+          const action = needsOverwrite ? 'Story regenerated' : 'Story created';
+          pushLog('success', LOG_SOURCE.claude, `${action} (${session.created}/${session.total}): "${outline.name}"`);
         } catch (err) {
           session.failed++;
           session.errors.push(outline.name);
