@@ -1,6 +1,6 @@
 // panel/src/components/help-modal.tsx
 
-import { BookOpen01, CheckCircle, Clipboard, Columns03, GitCommit, Play, Server01, Settings01, TerminalBrowser, X, Zap } from '@untitledui/icons';
+import { BookOpen01, Columns03, GitCommit, Play, Settings01, TerminalBrowser, X } from '@untitledui/icons';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
 import { handleModalKeyDown } from '@/utils/modal-keyboard';
@@ -18,8 +18,7 @@ const SECTIONS: Section[] = [
     title: 'Setup',
     color: 'text-blue-500',
     items: [
-      'Tell the app where your project lives and paste your Claude token.',
-      'After saving, go to the Board to create your first tasks. Only then come back to the sidebar to start the API and run the automation.',
+      'Tell the app where your project lives and paste your Claude token. Once saved, head to the Board.',
     ],
   },
   {
@@ -27,20 +26,10 @@ const SECTIONS: Section[] = [
     title: 'Board',
     color: 'text-violet-500',
     items: [
-      'Tasks are cards you create to describe work you want Claude to execute. Write what needs to be done and add Acceptance Criteria — Claude reads them and checks each one off as it goes.',
+      'Tasks are cards that describe work you want Claude to execute. Each task needs Acceptance Criteria — Claude reads them and checks each one off as it goes, and only marks the task as Done when all are complete.',
       'Group related tasks into an Epic. Got a big idea? Use "Idea to Epic" to describe it in plain language and let Claude turn it into a structured Epic with a clear scope.',
       'Inside an Epic, click "Generate Tasks" to have Claude break the Epic down into individual tasks automatically.',
       'Before running a task, click "Review with Claude" to let Claude improve the description, sharpen the acceptance criteria, and catch anything missing.',
-    ],
-  },
-  {
-    icon: TerminalBrowser,
-    title: 'Feed',
-    color: 'text-emerald-500',
-    items: [
-      'This is where you watch Claude work in real time. You can see it thinking, writing code, running commands, and checking off acceptance criteria as each one is completed.',
-      'If something goes wrong or you\'re curious about what happened, the full output is here.',
-      'You can also type directly in the chat box at the bottom to ask Claude questions or give it quick instructions mid-session.',
     ],
   },
   {
@@ -55,24 +44,13 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    icon: CheckCircle,
-    title: 'Acceptance Criteria',
-    color: 'text-teal-500',
+    icon: TerminalBrowser,
+    title: 'Feed',
+    color: 'text-emerald-500',
     items: [
-      'Define ACs as checkboxes (- [ ] ...) in the task body.',
-      'Claude checks them off as it works — progress is never lost if a task fails mid-run.',
-      'A task is only moved to Done when all ACs are checked.',
-    ],
-  },
-  {
-    icon: Zap,
-    title: 'Tips',
-    color: 'text-yellow-500',
-    items: [
-      'Fewer, larger tasks work better than many micro-tasks.',
-      'Use Haiku for mechanical work, Sonnet for most tasks, Opus for discovery and complex reasoning.',
-      'Set model: claude-sonnet-4-5-20250929 (or haiku/opus) in task frontmatter to override the default.',
-      'Enable Auto-Recovery in .env so failed tasks are analysed and retried automatically.',
+      'This is where you watch Claude work in real time. You can see it thinking, writing code, running commands, and checking off acceptance criteria as each one is completed.',
+      'If something goes wrong or you\'re curious about what happened, the full output is here.',
+      'You can also type directly in the chat box at the bottom to ask Claude questions or give it quick instructions mid-session.',
     ],
   },
   {
