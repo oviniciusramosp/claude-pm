@@ -247,7 +247,8 @@ export function SetupTab({
                     const isSecretField = Boolean(field.password);
                     const isFieldVisible = Boolean(revealedFields[field.key]);
                     const hasInlineValidationIcon =
-                      validation.level === 'success' || validation.level === 'error' || validation.level === 'warning';
+                      !field.selectOptions &&
+                      (validation.level === 'success' || validation.level === 'error' || validation.level === 'warning');
                     const hasInlineActions = isSecretField || field.folderPicker;
 
                     return (
@@ -283,7 +284,7 @@ export function SetupTab({
 
                         <div className="mt-4 sm:ml-9">
                           <div className="flex items-stretch gap-2">
-                            <div className="relative min-w-0 flex-1">
+                            <div className={cx('relative min-w-0', field.selectOptions ? 'w-1/2' : 'flex-1')}>
                               {field.selectOptions ? (
                                 <Select
                                   aria-label={field.label}
