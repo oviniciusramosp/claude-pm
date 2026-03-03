@@ -2,7 +2,7 @@
 /// <reference path="../vite-env.d.ts" />
 
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertOctagon, ArrowUpRight, Asterisk02, ChevronDown, LayersThree01, Moon01, PauseCircle, PlayCircle, Server01, Settings01, StopCircle, Sun } from '@untitledui/icons';
+import { AlertOctagon, ArrowUpRight, Asterisk02, ChevronDown, LayersThree01, Monitor01, Moon01, PauseCircle, PlayCircle, Server01, Settings01, StopCircle, Sun } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { Tooltip, TooltipTrigger } from './base/tooltip/tooltip';
 import { cx } from '@/utils/cx';
@@ -17,7 +17,8 @@ export function SidebarNav({
   activeTab,
   setActiveTab,
   isDark,
-  onThemeToggle,
+  themeMode,
+  onThemeChange,
   apiRunning,
   apiManagedByPanel,
   isPaused,
@@ -41,7 +42,8 @@ export function SidebarNav({
   activeTab: string;
   setActiveTab: (tab: string) => void;
   isDark: boolean;
-  onThemeToggle: () => void;
+  themeMode: string;
+  onThemeChange: (mode: string) => void;
   apiRunning: boolean;
   apiManagedByPanel: boolean;
   isPaused: boolean;
@@ -324,15 +326,30 @@ export function SidebarNav({
       <div className="border-t border-secondary" />
 
       <div className="px-3 py-3">
-        <button
-          type="button"
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-tertiary transition hover:bg-primary_hover hover:text-secondary"
-          onClick={onThemeToggle}
-          aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-        >
-          <Icon icon={isDark ? Sun : Moon01} className="size-5" />
-          <span>{isDark ? 'Light Mode' : 'Dark Mode'}</span>
-        </button>
+        <div className="flex w-full rounded-lg border border-secondary bg-secondary p-0.5" role="group" aria-label="Theme mode">
+          {([
+            { key: 'system', icon: Monitor01, label: 'System' },
+            { key: 'light',  icon: Sun,       label: 'Light'  },
+            { key: 'dark',   icon: Moon01,    label: 'Dark'   },
+          ] as const).map(({ key, icon, label }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onThemeChange(key)}
+              aria-pressed={themeMode === key}
+              title={label}
+              className={cx(
+                'flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition',
+                themeMode === key
+                  ? 'bg-primary text-primary shadow-xs'
+                  : 'text-tertiary hover:text-secondary'
+              )}
+            >
+              <Icon icon={icon} className="size-3.5 shrink-0" />
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
 
         {serverInfo?.authEnabled && <UserMenu compact />}
 

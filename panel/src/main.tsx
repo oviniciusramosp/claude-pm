@@ -5,31 +5,52 @@ import './theme.css';
 
 const THEME_MODE_STORAGE_KEY = 'pm-panel-theme-mode';
 
+function getOsPreference() {
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function resolveEffectiveMode(themeMode) {
+  return themeMode === 'system' ? getOsPreference() : themeMode;
+}
+
 function resolveInitialMode() {
-  const storedMode = window.localStorage.getItem(THEME_MODE_STORAGE_KEY);
-  if (storedMode === 'light' || storedMode === 'dark') {
-    return storedMode;
-  }
+  const stored = window.localStorage.getItem(THEME_MODE_STORAGE_KEY);
+  if (stored === 'light' || stored === 'dark' || stored === 'system') return stored;
+  return 'system';
+}
 
-  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-    return 'dark';
-  }
-
-  return 'light';
+function applyEffectiveMode(effective) {
+  document.documentElement.classList.remove('light-mode', 'dark-mode');
+  document.documentElement.classList.add(effective === 'dark' ? 'dark-mode' : 'light-mode');
+  document.documentElement.style.colorScheme = effective;
 }
 
 function PanelRoot() {
-  const [mode, setMode] = useState(resolveInitialMode);
+  const [themeMode, setThemeMode] = useState(resolveInitialMode);
+  const [effectiveMode, setEffectiveMode] = useState(() => resolveEffectiveMode(resolveInitialMode()));
 
   useEffect(() => {
-    document.documentElement.classList.remove('light-mode', 'dark-mode');
-    document.documentElement.classList.add(mode === 'dark' ? 'dark-mode' : 'light-mode');
-    document.documentElement.style.colorScheme = mode;
-    window.localStorage.setItem(THEME_MODE_STORAGE_KEY, mode);
-  }, [mode]);
+    const effective = resolveEffectiveMode(themeMode);
+    setEffectiveMode(effective);
+    applyEffectiveMode(effective);
+    window.localStorage.setItem(THEME_MODE_STORAGE_KEY, themeMode);
+  }, [themeMode]);
+
+  // Re-apply when OS preference changes while in system mode
+  useEffect(() => {
+    if (themeMode !== 'system') return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = () => {
+      const effective = mq.matches ? 'dark' : 'light';
+      setEffectiveMode(effective);
+      applyEffectiveMode(effective);
+    };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, [themeMode]);
 
   return (
-    <App mode={mode} setMode={setMode} />
+    <App mode={effectiveMode} themeMode={themeMode} setThemeMode={setThemeMode} />
   );
 }
 

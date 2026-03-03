@@ -95,19 +95,19 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, Error
   }
 }
 
-export function App({ mode = 'light', setMode = () => {} }) {
+export function App({ mode = 'light', themeMode = 'system', setThemeMode = (_m) => {} }) {
   const apiBaseUrl = useMemo(resolveApiBaseUrl, []);
 
   return (
     <ErrorBoundary>
       <AuthProvider apiBaseUrl={apiBaseUrl}>
-        <AppInner mode={mode} setMode={setMode} apiBaseUrl={apiBaseUrl} />
+        <AppInner mode={mode} themeMode={themeMode} setThemeMode={setThemeMode} apiBaseUrl={apiBaseUrl} />
       </AuthProvider>
     </ErrorBoundary>
   );
 }
 
-function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
+function AppInner({ mode = 'light', themeMode = 'system', setThemeMode = (_m) => {}, apiBaseUrl }) {
   const { user, loading } = useAuth();
   const [serverInfo, setServerInfo] = useState(null);
   const [config, setConfig] = useState(buildInitialConfig);
@@ -221,9 +221,9 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
       .catch(() => {});
   }, [apiBaseUrl]);
 
-  const onThemeToggle = useCallback(() => {
-    setMode(isDark ? 'light' : 'dark');
-  }, [isDark, setMode]);
+  const onThemeChange = useCallback((newThemeMode) => {
+    setThemeMode(newThemeMode);
+  }, [setThemeMode]);
 
   const showToast = useCallback((message: string, color: 'success' | 'warning' | 'danger' | 'neutral' = 'success', duration: number | null = 30000) => {
     const id = `toast-${Date.now()}-${Math.random()}`;
@@ -738,7 +738,8 @@ function AppInner({ mode = 'light', setMode = () => {}, apiBaseUrl }) {
           }
         }}
         isDark={isDark}
-        onThemeToggle={onThemeToggle}
+        themeMode={themeMode}
+        onThemeChange={onThemeChange}
         apiRunning={apiRunning}
         apiManagedByPanel={apiManagedByPanel}
         isPaused={isPaused}
