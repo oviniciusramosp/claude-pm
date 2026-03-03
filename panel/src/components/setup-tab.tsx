@@ -199,18 +199,13 @@ export function SetupTab({
   if (cliReady) stepNumber = 2; // Step 2 visible (Login)
 
   return (
-    <section className="rounded-xl border border-secondary bg-primary p-3 shadow-sm sm:p-5">
-      <div className="space-y-2">
-        <h2 className="m-0 inline-flex items-center gap-2 text-lg font-semibold text-primary sm:text-xl">
-          <Icon icon={Settings01} className="size-5" />
-          Setup
-        </h2>
-        <p className="m-0 hidden text-sm text-tertiary sm:block">
-          Follow the steps below to configure your automation. These values are persisted in your local <code>.env</code> file.
-        </p>
+    <section className="flex min-h-0 min-w-0 flex-col gap-5">
+      <div className="flex items-center gap-2 min-w-0">
+        <Icon icon={Settings01} className="size-5 shrink-0 text-tertiary" />
+        <h2 className="truncate text-2xl font-bold text-primary tracking-tight">Setup</h2>
       </div>
 
-      <div className="mt-6 space-y-6">
+      <div className="space-y-6">
         {SETUP_SECTIONS.map((section) => {
           // Sections beyond "claude" are gated by core config readiness.
           if (section.key !== 'claude' && !coreConfigReady) return null;

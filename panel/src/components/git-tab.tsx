@@ -215,15 +215,15 @@ export function GitTab({ apiBaseUrl, showToast, refreshTrigger, setupComplete, o
   const automationCount = commits.filter((c) => c.isAutomation).length;
 
   return (
-    <>
+    <section className="flex min-h-0 min-w-0 flex-col gap-5">
       {/* Setup required banner */}
       {!setupComplete && <SetupRequiredBanner onNavigateToSetup={onNavigateToSetup} />}
 
       {/* Header */}
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
-          <Icon icon={GitCommit} className="size-6 text-tertiary" />
-          <h2 className="m-0 text-xl font-semibold text-primary">Git History</h2>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <Icon icon={GitCommit} className="size-5 shrink-0 text-tertiary" />
+          <h2 className="truncate text-2xl font-bold text-primary tracking-tight">Git History</h2>
         </div>
 
         {commits.length > 0 && (
@@ -264,7 +264,7 @@ export function GitTab({ apiBaseUrl, showToast, refreshTrigger, setupComplete, o
 
       {/* Error banner */}
       {gitError && !loading && (
-        <div className="mb-6 rounded-lg border border-dashed border-error-primary bg-utility-error-50 p-4 text-sm text-error-primary">
+        <div className="rounded-lg border border-dashed border-error-primary bg-utility-error-50 p-4 text-sm text-error-primary">
           <p className="font-medium">⚠️ Git History Unavailable</p>
           <p className="mt-1">{gitError}</p>
           {gitError.includes('Product Manager project') && (
@@ -350,6 +350,6 @@ export function GitTab({ apiBaseUrl, showToast, refreshTrigger, setupComplete, o
         showToast={showToast}
         onSuccess={() => fetchGitLog()}
       />
-    </>
+    </section>
   );
 }
