@@ -44,6 +44,31 @@ interface BoardError {
 }
 
 
+/**
+ * Natural comparison: splits strings into text/number segments and compares
+ * numbers numerically so that "s1-2" < "s1-10" instead of lexicographic order.
+ */
+function naturalCompare(a: string, b: string): number {
+  const segA = a.match(/(\d+|\D+)/g) || [];
+  const segB = b.match(/(\d+|\D+)/g) || [];
+  const len = Math.min(segA.length, segB.length);
+
+  for (let i = 0; i < len; i++) {
+    const numA = Number(segA[i]);
+    const numB = Number(segB[i]);
+    const bothNumeric = !Number.isNaN(numA) && !Number.isNaN(numB);
+
+    if (bothNumeric) {
+      if (numA !== numB) return numA - numB;
+    } else {
+      const cmp = segA[i].localeCompare(segB[i]);
+      if (cmp !== 0) return cmp;
+    }
+  }
+
+  return segA.length - segB.length;
+}
+
 function isEpic(task: BoardTask, allTasks: BoardTask[]): boolean {
   if (task.type?.toLowerCase() === 'epic') return true;
   return allTasks.some((t) => t.parentId === task.id);
@@ -53,11 +78,11 @@ function sortEpics(epics: BoardTask[]): BoardTask[] {
   return [...epics].sort((a, b) => {
     if (a.order != null && b.order != null) {
       if (a.order !== b.order) return a.order - b.order;
-      return a.name.localeCompare(b.name); // Tiebreaker
+      return naturalCompare(a.name, b.name); // Tiebreaker
     }
     if (a.order != null) return -1; // a has order, comes first
     if (b.order != null) return 1;  // b has order, comes first
-    return a.name.localeCompare(b.name); // Both no order: alphabetical
+    return naturalCompare(a.name, b.name); // Both no order: natural sort
   });
 }
 
@@ -1641,13 +1666,13 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                           if (taskA?.order != null) return -1;
                           if (taskB?.order != null) return 1;
 
-                          return groupA.localeCompare(groupB);
+                          return naturalCompare(groupA, groupB);
                         }
 
                         // Same group - epic parent comes before its children
                         if (!a.parentId && b.parentId) return -1;
                         if (a.parentId && !b.parentId) return 1;
-                        return a.id.localeCompare(b.id);
+                        return naturalCompare(a.id, b.id);
                       });
 
                       // Group epic children under their parent when both are in the same column

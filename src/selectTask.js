@@ -6,6 +6,31 @@ function normalize(value) {
   return String(value).trim().toLowerCase();
 }
 
+/**
+ * Natural comparison: splits strings into text/number segments and compares
+ * numbers numerically so that "s1-2" < "s1-10" instead of lexicographic order.
+ */
+function naturalCompare(a, b) {
+  const segA = a.match(/(\d+|\D+)/g) || [];
+  const segB = b.match(/(\d+|\D+)/g) || [];
+  const len = Math.min(segA.length, segB.length);
+
+  for (let i = 0; i < len; i++) {
+    const numA = Number(segA[i]);
+    const numB = Number(segB[i]);
+    const bothNumeric = !Number.isNaN(numA) && !Number.isNaN(numB);
+
+    if (bothNumeric) {
+      if (numA !== numB) return numA - numB;
+    } else {
+      const cmp = segA[i].localeCompare(segB[i]);
+      if (cmp !== 0) return cmp;
+    }
+  }
+
+  return segA.length - segB.length;
+}
+
 function parsePriority(priority) {
   if (!priority) {
     return Number.POSITIVE_INFINITY;
@@ -35,7 +60,7 @@ export function sortCandidates(tasks, order) {
     const idA = normalize(a.id);
     const idB = normalize(b.id);
 
-    return idA.localeCompare(idB);
+    return naturalCompare(idA, idB);
   });
 
   return copied;
