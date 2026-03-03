@@ -95,5 +95,9 @@ export const config = {
   },
   manualRun: {
     token: process.env.MANUAL_RUN_TOKEN || ''
+  },
+  usageLimit: {
+    resumeDelayMs: number('USAGE_LIMIT_RESUME_DELAY_MS', 60 * 60 * 1000), // 1 hour default
+    maxAutoRetries: number('USAGE_LIMIT_MAX_AUTO_RETRIES', 4)
   }
 };

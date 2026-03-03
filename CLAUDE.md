@@ -736,6 +736,8 @@ From the Operations tab:
 - `AUTO_RECOVERY_MAX_RETRIES` - Maximum recovery attempts per task before giving up (default `2`). Applies separately to tasks and epics.
 - `AUTO_RECOVERY_TIMEOUT_MS` - Timeout for recovery execution in milliseconds (default `300000` = 5 minutes).
 - `AUTO_RECOVERY_MODEL` - Model to use for recovery analysis (default `auto`). Valid values: `claude-opus-4-6`, `claude-sonnet-4-5-20250929`, `claude-haiku-4-5-20251001`, or `auto` (uses Opus for maximum intelligence).
+- `USAGE_LIMIT_RESUME_DELAY_MS` - Base wait time before auto-resuming after a Claude usage limit error (default `3600000` = 1 hour). If the error message contains a parsable reset time it takes precedence. On repeated failures the delay doubles each attempt (1h → 2h → 4h).
+- `USAGE_LIMIT_MAX_AUTO_RETRIES` - Maximum number of automatic resume attempts after hitting the usage limit (default `4`). After all attempts are exhausted the orchestrator halts permanently and requires a manual "Resume" click.
 
 ## Auto-Recovery System
 

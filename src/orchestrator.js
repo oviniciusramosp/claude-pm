@@ -83,10 +83,46 @@ function isClaudeAuthError(error) {
   );
 }
 
-function extractResetHint(message) {
+/**
+ * Parse the expected wait time (ms) from a Claude usage-limit error message.
+ * Returns null if the reset time cannot be determined.
+ */
+function parseLimitResetMs(message) {
   const text = String(message || '');
-  const match = text.match(/resets?[^)\n]*\)?/i);
-  return match ? match[0] : null;
+
+  // "resets in X minutes" / "resets in X hours"
+  const relMatch = text.match(/resets?\s+in\s+(\d+)\s+(minute|hour)/i);
+  if (relMatch) {
+    const amount = parseInt(relMatch[1], 10);
+    return relMatch[2].toLowerCase().startsWith('hour')
+      ? amount * 60 * 60 * 1000
+      : amount * 60 * 1000;
+  }
+
+  // "resets at HH:MM AM/PM UTC" or "resets at HH:MM UTC"
+  const absMatch = text.match(/resets?\s+at\s+(\d{1,2}):(\d{2})\s*(AM|PM)?\s*(?:UTC)?/i);
+  if (absMatch) {
+    let hours = parseInt(absMatch[1], 10);
+    const minutes = parseInt(absMatch[2], 10);
+    const ampm = absMatch[3]?.toUpperCase();
+    if (ampm === 'PM' && hours < 12) hours += 12;
+    if (ampm === 'AM' && hours === 12) hours = 0;
+    const now = new Date();
+    const reset = new Date(now);
+    reset.setUTCHours(hours, minutes, 0, 0);
+    if (reset <= now) reset.setUTCDate(reset.getUTCDate() + 1);
+    return reset.getTime() - now.getTime();
+  }
+
+  // "midnight UTC" / "midnight"
+  if (/midnight/i.test(text)) {
+    const now = new Date();
+    const midnight = new Date(now);
+    midnight.setUTCHours(24, 0, 0, 0);
+    return midnight.getTime() - now.getTime();
+  }
+
+  return null;
 }
 
 function getGitHead(workdir) {
@@ -204,6 +240,12 @@ export class Orchestrator {
     this.paused = true; // Start paused by default
     this.shutdownTimer = null; // Track pending shutdown
     this.explicitEpicMode = false; // Track if we're running an explicit "Run Epic" command
+
+    // Usage-limit auto-resume state
+    this.limitResumeTimer = null;  // setTimeout handle for scheduled auto-resume
+    this.limitResumeAt = null;     // Date when auto-resume is scheduled
+    this.limitRetryCount = 0;      // How many auto-retries have been attempted
+    this.haltIgnoredCount = 0;     // Schedule requests suppressed since last halt
   }
 
   async _recordTaskUsage(task, execution) {
@@ -219,7 +261,9 @@ export class Orchestrator {
 
   schedule(reason, options = {}) {
     if (this.halted) {
-      this.logger.warn('Orchestrator halted. Ignoring schedule request.');
+      // Suppress repeated log noise — the halt message already explained the situation.
+      // Just count suppressed requests; they will be reported when auto-resume fires.
+      this.haltIgnoredCount = (this.haltIgnoredCount || 0) + 1;
       return;
     }
 
@@ -301,7 +345,10 @@ export class Orchestrator {
       queuedReasons: this.pendingReasons,
       halted: this.halted,
       paused: this.paused,
-      mode: this.pendingMode
+      mode: this.pendingMode,
+      limitResumeAt: this.limitResumeAt ? this.limitResumeAt.toISOString() : null,
+      limitRetryCount: this.limitRetryCount,
+      limitMaxRetries: this.config.usageLimit.maxAutoRetries
     };
   }
 
@@ -338,9 +385,89 @@ export class Orchestrator {
       return false;
     }
 
+    // Cancel pending auto-resume timer if the user intervened manually
+    if (this.limitResumeTimer) {
+      clearTimeout(this.limitResumeTimer);
+      this.limitResumeTimer = null;
+    }
+    this.limitResumeAt = null;
+    this.limitRetryCount = 0; // Manual resume resets the retry counter
     this.halted = false;
-    this.logger.info('Orchestrator resumed from halted state.');
+    this.haltIgnoredCount = 0;
+    this.logger.info('Orchestrator resumed manually. Checking for tasks...');
+    this.schedule('manual_resume');
     return true;
+  }
+
+  /**
+   * Halt the orchestrator due to a Claude usage limit error and schedule an
+   * automatic resume attempt after the expected reset time.
+   *
+   * If the error message contains a parsable reset time it is used directly;
+   * otherwise an exponential backoff based on `limitRetryCount` is applied
+   * (1h → 1h → 2h → 4h → permanent halt after maxAutoRetries attempts).
+   */
+  haltForUsageLimit(errorMessage, context = '') {
+    // Cancel any pre-existing auto-resume timer before setting a new one
+    if (this.limitResumeTimer) {
+      clearTimeout(this.limitResumeTimer);
+      this.limitResumeTimer = null;
+    }
+
+    this.halted = true;
+    this.haltIgnoredCount = 0;
+
+    const maxRetries = this.config.usageLimit.maxAutoRetries;
+    const ctxStr = context ? ` ${context}` : '';
+
+    if (this.limitRetryCount >= maxRetries) {
+      this.limitResumeAt = null;
+      this.logger.warn(
+        `⏸ Claude usage limit reached${ctxStr}. ` +
+        `Auto-retry exhausted (${maxRetries}/${maxRetries} attempts used). ` +
+        `→ Wait for the limit to reset, then click "Resume" in the panel.`
+      );
+      return;
+    }
+
+    // Prefer the reset time from the error message; fall back to backoff schedule
+    const parsedMs = parseLimitResetMs(errorMessage);
+    const baseDelay = this.config.usageLimit.resumeDelayMs;
+    const backoffFactor = this.limitRetryCount === 0 ? 1 : Math.pow(2, this.limitRetryCount - 1);
+    const computedMs = Math.min(baseDelay * backoffFactor, 4 * 60 * 60 * 1000); // cap at 4 h
+    const delayMs = parsedMs ?? computedMs;
+
+    const resumeAt = new Date(Date.now() + delayMs);
+    this.limitResumeAt = resumeAt;
+
+    const attempt = this.limitRetryCount + 1;
+    const timeStr = resumeAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const durationStr = formatDuration(delayMs);
+    const sourceStr = parsedMs ? '(from error message)' : '(estimated)';
+
+    this.logger.warn(
+      `⏸ Claude usage limit reached${ctxStr}. ` +
+      `Auto-resume scheduled at ${timeStr} in ${durationStr} ${sourceStr} — ` +
+      `attempt ${attempt}/${maxRetries}. ` +
+      `To resume now: click "Resume" in the panel.`
+    );
+
+    this.limitResumeTimer = setTimeout(() => {
+      this.limitResumeTimer = null;
+      this.limitRetryCount++;
+      this.halted = false;
+      this.limitResumeAt = null;
+
+      const suppressedStr = this.haltIgnoredCount > 0
+        ? ` (${this.haltIgnoredCount} schedule requests were suppressed while paused)`
+        : '';
+      this.haltIgnoredCount = 0;
+
+      this.logger.info(
+        `▶ Auto-resuming after usage limit wait${suppressedStr}. Checking for tasks...`
+      );
+      this.schedule('limit_auto_retry');
+    }, delayMs);
   }
 
   observeStatuses(tasks) {
@@ -636,11 +763,7 @@ export class Orchestrator {
             }
 
             if (isClaudeLimitError(reviewError)) {
-              const resetHint = extractResetHint(reviewError.message);
-              this.logger.warn(
-                `Claude usage limit reached during Opus review. Orchestrator halted until ${resetHint || 'unknown reset time'}.`
-              );
-              this.halted = true;
+              this.haltForUsageLimit(reviewError.message, 'during Opus review');
               break;
             }
 
@@ -716,6 +839,7 @@ export class Orchestrator {
         await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.done);
         this.claudeCompletedTaskIds.delete(task.id);
         autoRecovery.reset(task.id); // Reset recovery counter on success
+        this.limitRetryCount = 0;   // Reset usage-limit retry counter on success
         const completionNotes = buildTaskCompletionNotes(task, finalExecution);
         await this.boardClient.appendMarkdown(task.id, completionNotes);
         await this.runStore.markDone(task, finalExecution);
@@ -728,7 +852,6 @@ export class Orchestrator {
         this.logger.info(`Claude finished: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`);
 
         await this.runStore.markFailed(task, error.message);
-        const resetHint = extractResetHint(error.message);
 
         if (isClaudeAuthError(error)) {
           this.logger.error(
@@ -740,10 +863,7 @@ export class Orchestrator {
         }
 
         if (isClaudeLimitError(error)) {
-          this.logger.warn(
-            `Claude usage limit reached. Orchestrator halted until ${resetHint || 'unknown reset time'}.`
-          );
-          this.halted = true;
+          this.haltForUsageLimit(error.message);
           break;
         }
 
@@ -1051,11 +1171,7 @@ export class Orchestrator {
             }
 
             if (isClaudeLimitError(reviewError)) {
-              const resetHint = extractResetHint(reviewError.message);
-              this.logger.warn(
-                `Claude usage limit reached during Opus review. Orchestrator halted until ${resetHint || 'unknown reset time'}.`
-              );
-              this.halted = true;
+              this.haltForUsageLimit(reviewError.message, 'during Opus review');
               break;
             }
 
@@ -1131,6 +1247,7 @@ export class Orchestrator {
         await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.done);
         this.claudeCompletedTaskIds.delete(task.id);
         autoRecovery.reset(task.id); // Reset recovery counter on success
+        this.limitRetryCount = 0;   // Reset usage-limit retry counter on success
         const completionNotes = buildTaskCompletionNotes(task, finalExecution);
         await this.boardClient.appendMarkdown(task.id, completionNotes);
         await this.runStore.markDone(task, finalExecution);
@@ -1143,7 +1260,6 @@ export class Orchestrator {
         this.logger.info(`Claude finished: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`);
 
         await this.runStore.markFailed(task, error.message);
-        const resetHint = extractResetHint(error.message);
 
         if (isClaudeAuthError(error)) {
           this.logger.error(
@@ -1155,10 +1271,7 @@ export class Orchestrator {
         }
 
         if (isClaudeLimitError(error)) {
-          this.logger.warn(
-            `Claude usage limit reached. Orchestrator halted until ${resetHint || 'unknown reset time'}.`
-          );
-          this.halted = true;
+          this.haltForUsageLimit(error.message);
           break;
         }
 
@@ -1467,11 +1580,7 @@ export class Orchestrator {
           }
 
           if (isClaudeLimitError(reviewError)) {
-            const resetHint = extractResetHint(reviewError.message);
-            this.logger.warn(
-              `Claude usage limit reached during Epic review. Orchestrator halted until ${resetHint || 'unknown reset time'}.`
-            );
-            this.halted = true;
+            this.haltForUsageLimit(reviewError.message, 'during Epic review');
             return;
           }
 
@@ -1509,6 +1618,7 @@ export class Orchestrator {
 
       await this.boardClient.updateTaskStatus(task.id, this.config.board.statuses.done);
       autoRecovery.resetEpic(task.id); // Reset epic recovery counter on success
+      this.limitRetryCount = 0;        // Reset usage-limit retry counter on success
 
       const summaryMarkdown = buildEpicSummary(task, summary);
       await this.boardClient.appendMarkdown(task.id, summaryMarkdown);
