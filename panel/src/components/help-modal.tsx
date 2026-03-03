@@ -18,8 +18,8 @@ const SECTIONS: Section[] = [
     title: 'Setup',
     color: 'text-blue-500',
     items: [
-      'Tell the app where your project lives and paste your Claude token. That\'s it — everything else has sensible defaults.',
-      'Once saved, use the sidebar buttons to start the API and kick off the automation.',
+      'Tell the app where your project lives and paste your Claude token.',
+      'After saving, go to the Board to create your first tasks. Only then come back to the sidebar to start the API and run the automation.',
     ],
   },
   {
