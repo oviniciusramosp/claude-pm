@@ -446,9 +446,9 @@ export function SetupTab({
         })}
       </div>
 
-      <div className="fixed bottom-6 right-6 z-50">
-        <Button size="md" color="primary" iconLeading={Save01} isDisabled={saveDisabled} isLoading={Boolean(busy.save)} onPress={onSaveClick}>
-          Save Configuration
+      <div className="fixed bottom-6 right-6 z-50 shadow-2xl rounded-full">
+        <Button size="md" color="primary" iconLeading={Save01} isDisabled={saveDisabled} isLoading={Boolean(busy.save)} onPress={onSaveClick} className="rounded-full px-6">
+          Save
         </Button>
       </div>
     </section>
