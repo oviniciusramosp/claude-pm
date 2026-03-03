@@ -3838,6 +3838,17 @@ ${acGuidance[taskType] || acGuidance.UserStory}
    - No "As a user..." or "User Story" format — write direct instructions
    - Use section header "## Implementation" (not "## Technical Tasks")
    - Use section header "## Completion" (not "## Standard Completion Criteria")
+
+8. **Task Sizing** (non-Epic types):
+   - Flag tasks that are too SMALL: "Install X dependency", "Create config file", "Add TypeScript types" — these should be steps within a larger task, not standalone tasks.
+   - Flag tasks that are too LARGE: tasks with 10+ ACs or 15+ implementation steps should be split.
+   - Ideal size: 3-6 ACs, 4-8 implementation steps, completable in one Claude session.
+   - If the task is too small, suggest merging it into a related implementation task.
+
+9. **Model Recommendation**:
+   - If the task is mechanical (install deps, rename files, config changes), suggest \`model: claude-haiku-4-5-20251001\` in the summary.
+   - If the task requires deep reasoning, architectural trade-offs, or multi-file coordination, suggest \`model: claude-opus-4-6\`.
+   - Default: Sonnet. Write instructions so Sonnet can execute without ambiguity — explicit paths, exact commands, concrete examples.
 </review_instructions>
 
 ${outputFormatBlock}`;
@@ -4035,6 +4046,22 @@ ${boardContext || ''}
 **AI-EXECUTABLE:** Every task must be fully executable by an AI agent without human intervention. Each task must have clear, unambiguous inputs and expected outputs, be completable in a single automated session, require no interactive decisions or human judgment during execution, and be self-contained or explicitly reference what prior task output it depends on.
 </methodology>
 
+<consolidation>
+**MINIMIZE TASKS — AIM FOR ONE-SHOT EXECUTION:**
+- Each task must deliver a MEANINGFUL increment, not a micro-step.
+- MERGE trivial steps into the first implementation task (dependency installs, config changes, boilerplate setup, TypeScript types/interfaces).
+- NEVER create standalone tasks for: installing packages, creating config files, setting up project structure, adding types/interfaces, renaming files. These are steps WITHIN a larger task.
+- Only split into separate tasks when there is a genuine dependency boundary (Discovery output needed before implementation, or fundamentally different domain).
+- Target: 2-7 tasks per Epic. If you have more than 7, consolidate.
+- A task completable by Claude in under 5 minutes is too small — merge it into its neighbor.
+
+**OPTIMIZE FOR SIMPLER MODELS:**
+- Write task specifications so that claude-sonnet or claude-haiku can execute them.
+- Include explicit file paths, exact commands, concrete expected outputs.
+- Avoid ambiguous language requiring reasoning ("consider", "maybe", "if appropriate").
+- Default to claude-sonnet. Use claude-haiku for mechanical tasks. Reserve claude-opus ONLY for Discovery and complex architectural reasoning.
+</consolidation>
+
 <model_selection>
 - **claude-opus-4-6** — Discovery tasks, complex architectural work, large refactors.
 - **claude-sonnet-4-5-20250929** — Standard implementation tasks: features, tests, endpoints, components.
@@ -4050,7 +4077,7 @@ Only assign agents that make sense for the task. Leave agents empty ("") if none
 <instructions>
 1. Analyze the Epic and identify all distinct tasks needed.
 2. Order tasks: Discoveries first, then foundational tasks, then features.
-3. Cap at 15 tasks total. Do NOT include tasks from <existing_children>.
+3. Cap at 7 tasks total. Prefer fewer, larger tasks. Do NOT include tasks from <existing_children>.
 4. For each task, provide: name, priority, type, model, a brief one-sentence summary, dependsOn (list of other task names this task requires to be done first)${agentsList ? ', and agents (comma-separated string from the available agents list)' : ''}.
 
 Return ONLY a JSON array with NO additional text or code blocks:
@@ -4067,7 +4094,7 @@ Return ONLY a JSON array with NO additional text or code blocks:
 
 Rules:
 - Return ONLY valid JSON array, no markdown, no code blocks, no explanation.
-- 1-15 tasks maximum.
+- 2-7 tasks maximum (prefer fewer, consolidated tasks). Hard cap: 10.
 - Use imperative task names: "Research X", "Implement Y", "Add Z".
 - Do NOT include any task whose name matches an existing child.${agentsList ? '\n- Assign agents only from the available_agents list.' : ''}
 </instructions>`;
@@ -4100,15 +4127,25 @@ function parseStoryPlanResponse(reply) {
       dependsOn: Array.isArray(s.dependsOn) ? s.dependsOn : [],
       agents: s.agents && typeof s.agents === 'string' && s.agents.trim() ? s.agents.trim() : null
     }))
-    .slice(0, 15);
+    .slice(0, 10);
 }
 
 /**
  * Phase 2: Generate the full markdown body for a single story.
  */
 function buildSingleStoryBodyPrompt({ outline, epicName, epicBody, allOutlines, position }) {
-  const allTasksList = allOutlines
-    .map((t, i) => `${i + 1}. [${t.type}] ${t.name} — ${t.brief}`)
+  // Extract goal line from epic body for compact context
+  const epicLines = (epicBody || '').split('\n');
+  const goalLine = epicLines.find(l => l.startsWith('**Goal**') || l.startsWith('# ')) || epicName;
+
+  // Only include direct dependencies + immediate neighbors for context
+  const relevantOutlines = allOutlines.filter((t, i) => {
+    if (outline.dependsOn?.includes(t.name)) return true;
+    if (Math.abs(i - position) <= 1) return true;
+    return false;
+  });
+  const relevantTasksList = relevantOutlines
+    .map((t) => `[${t.type}] ${t.name} — ${t.brief}`)
     .join('\n');
 
   const depNotes = outline.dependsOn && outline.dependsOn.length > 0
@@ -4173,16 +4210,14 @@ Save findings to: \`docs/discoveries/[topic-slug].md\`
 
   return `You are writing a detailed task specification for an AI coding assistant (Claude Code). The task will be executed autonomously in a single session. Write instructions as direct commands.
 
-<epic>
-<name>${epicName}</name>
-<body>
-${epicBody}
-</body>
-</epic>
+<epic_context>
+Epic: ${epicName}
+${goalLine}
+</epic_context>
 
-<all_tasks_in_epic>
-${allTasksList}
-</all_tasks_in_epic>
+<related_tasks>
+${relevantTasksList}
+</related_tasks>
 
 <current_task>
 Position: ${position + 1} of ${allOutlines.length}
@@ -4280,32 +4315,30 @@ Once you've determined the correct order, proceed with fixing each story:
 
      # [Story Name]
 
-     **User Story**: As a [role], I want [goal] so that [benefit].
+     [1-3 sentences: imperative description. No "As a user..." format.]
 
      ## Acceptance Criteria
-     - [ ] First acceptance criterion (specific, testable, checkbox format)
-     - [ ] Second acceptance criterion
-     - [ ] Third acceptance criterion
-     (at least 3-5 ACs)
+     - [ ] [Technically verifiable condition]
+     (3-6 ACs. Each must be specific, verifiable, and actionable.)
 
-     ## Technical Tasks
-     1. First technical task
-     2. Second technical task
-     (concrete implementation steps)
+     ## Implementation
+     1. [Step with specific file path]
+     2. [Concrete implementation step]
+     (Numbered, sequential.)
 
      ## Tests
-     - Test case 1
-     - Test case 2
-     (specific test scenarios)
+     - File: \`[specific test file path]\`
+     - [Specific test case]
+     - Or "N/A — infrastructure task"
+     - NEVER include manual tests
 
      ## Dependencies
-     - Dependency 1 (or "None")
+     - [Reference or "None"]
 
-     ## Standard Completion Criteria
-     - [ ] Tests written and passing
-     - [ ] TypeScript compiles without errors
-     - [ ] Linter passes
-     - [ ] Commit: \`feat(scope): story name [STORY-ID]\`
+     ## Completion
+     - [ ] Tests pass (or N/A)
+     - [ ] Build passes
+     - [ ] Commit: \`type(scope): description\`
 
    - If missing ACs: add 3-5 testable acceptance criteria as markdown checkboxes (\`- [ ] ...\`)
    - If missing model: set \`model: claude-sonnet-4-5-20250929\`

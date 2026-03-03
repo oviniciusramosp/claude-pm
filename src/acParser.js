@@ -49,17 +49,14 @@ export function formatAcsForPrompt(acList) {
   }
 
   const lines = [
-    '='.repeat(80),
-    `ACCEPTANCE CRITERIA REFERENCE TABLE (${acList.length} ACs)`,
-    '='.repeat(80),
-    '',
-    'Use these AC numbers for tracking. Do NOT paraphrase — reference by number only.',
+    `## AC Reference (${acList.length} ACs)`,
+    'Reference ACs by number only.',
     ''
   ];
 
   for (const ac of acList) {
-    const status = ac.checked ? '[DONE]' : '';
-    lines.push(`  AC-${ac.index}: ${ac.text}${status ? ' ' + status : ''}`);
+    const status = ac.checked ? ' [DONE]' : '';
+    lines.push(`AC-${ac.index}: ${ac.text}${status}`);
   }
 
   lines.push('');

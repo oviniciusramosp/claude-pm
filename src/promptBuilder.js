@@ -44,45 +44,19 @@ export function buildTaskPrompt(task, markdown, options = {}) {
   // AC tracking instructions: primary = edit the task file, secondary = JSON markers
   if (taskFilePath && acList.length > 0) {
     basePrompt.push(
-      '='.repeat(80),
-      'ACCEPTANCE CRITERIA TRACKING (MANDATORY)',
-      '='.repeat(80),
-      '',
-      `Your task file is at: ${taskFilePath}`,
-      '',
-      'As you complete each Acceptance Criteria, you MUST update the task file to check it off.',
-      'Use the Edit tool to change `- [ ]` to `- [x]` for each completed AC.',
-      '',
-      'Example: after completing AC-1, edit the task file to change:',
-      '  - [ ] First acceptance criterion',
-      'to:',
-      '  - [x] First acceptance criterion',
-      '',
-      'Do this for EACH AC as you complete it — do not wait until the end.',
-      'The orchestrator reads this file after execution. Any unchecked AC means task rejection.',
-      '',
-      'Additionally, emit a JSON marker on its own line for real-time progress tracking:',
-      '  {"ac_complete": <number>}',
-      '',
-      '='.repeat(80),
+      '## AC Tracking',
+      `Task file: ${taskFilePath}`,
+      'For each completed AC:',
+      '1. Edit the task file: change `- [ ]` to `- [x]`',
+      '2. Emit on its own line: `{"ac_complete": <number>}`',
+      'Do this as you go — not at the end. Unchecked ACs = task rejection.',
       ''
     );
   } else if (acList.length > 0) {
-    // Fallback: no file path available, use JSON markers only
     basePrompt.push(
-      '='.repeat(80),
-      'ACCEPTANCE CRITERIA TRACKING (MANDATORY)',
-      '='.repeat(80),
-      '',
-      'As you complete each AC, emit a JSON marker on its own line:',
-      '  {"ac_complete": <number>}',
-      '',
-      'Example: after completing AC-3, emit: {"ac_complete": 3}',
-      '',
-      'Emit markers as you go — do not wait until the end.',
-      'Do NOT include ac_complete inside the final response JSON.',
-      '',
-      '='.repeat(80),
+      '## AC Tracking',
+      'For each completed AC, emit on its own line: `{"ac_complete": <number>}`',
+      'Emit as you go. Do NOT include ac_complete in the final JSON.',
       ''
     );
   }
@@ -92,58 +66,12 @@ export function buildTaskPrompt(task, markdown, options = {}) {
     ''
   );
 
-  // Execution rules
-  basePrompt.push(
-    '='.repeat(80),
-    'EXECUTION RULES',
-    '='.repeat(80),
-    '',
-    '- Complete ALL Acceptance Criteria. Every single one.',
-    '- After completing each AC, update the task file checkbox (`- [ ]` → `- [x]`).',
-    '- Before finishing, re-read the AC reference table and verify every AC is done.',
-    '- If any AC is incomplete, complete it before emitting the final JSON.',
-    '- The orchestrator will reject the task if any checkbox remains unchecked.',
-    '- On successful completion, create a commit with a clear, objective message.',
-    '- Never include secrets in code, commits, or logs.',
-    '',
-    '='.repeat(80),
-    ''
-  );
-
   if (enableMultiAgents) {
     basePrompt.push(
-      '='.repeat(80),
-      'MULTI-AGENT EXECUTION (ENABLED)',
-      '='.repeat(80),
-      '',
-      'You are encouraged to use multiple agents in parallel when appropriate to improve speed and quality.',
-      '',
-      'When to use multi-agents:',
-      '- Complex tasks that can be broken down into independent sub-tasks.',
-      '- Tasks that involve multiple domains (e.g., frontend + backend, or UI + tests).',
-      '- Tasks where different agents have specialized skills.',
-      '',
-      'How to use multi-agents effectively:',
-      '- Use the Task tool to launch specialized agents for independent work.',
-      '- Launch multiple agents in parallel by sending multiple Task tool calls in a single message.',
-      '- Coordinate between agents by passing context and results.',
-      '- Ensure each agent has clear, focused responsibilities.',
-      '',
-      'Available agent types:',
-      '- Bash: Command execution specialist for git operations and terminal tasks.',
-      '- general-purpose: Multi-step tasks, code search, complex research.',
-      '- Explore: Fast codebase exploration and pattern searching.',
-      '- Plan: Software architecture and implementation planning.',
-      '',
-      'Example parallel execution:',
-      '- Launch a frontend agent to build UI components.',
-      '- Simultaneously launch a test agent to write test cases.',
-      '- Coordinate results and integrate when both complete.',
-      '',
-      'IMPORTANT: Only use multi-agents when it genuinely improves the task execution.',
-      'For simple, focused tasks, a single-agent approach is more efficient.',
-      '',
-      '='.repeat(80),
+      '## Multi-Agent Execution',
+      'Use the Task tool to launch parallel agents when sub-tasks are independent.',
+      'Agent types: Bash (git/terminal), general-purpose (multi-step), Explore (codebase search), Plan (architecture).',
+      'Launch multiple Task calls in one message for parallel work. Only use when genuinely faster than single-agent.',
       ''
     );
   }
@@ -168,24 +96,12 @@ export function buildTaskPrompt(task, markdown, options = {}) {
 
   // Response requirements
   basePrompt.push(
-    '='.repeat(80),
-    'RESPONSE REQUIREMENTS',
-    '='.repeat(80),
-    '',
-    'After completing all work, respond with a final JSON object on a single line:',
-    '',
-    '{"status":"done","summary":"...","notes":"...","files":["..."],"tests":"..."}',
-    '',
-    '- status: "done" only when ALL ACs are checked off. "blocked" if stuck.',
-    '- summary: What was accomplished.',
-    '- notes: Important details or decisions.',
-    '- files: Array of created/modified file paths.',
-    '- tests: Test results summary or "N/A".',
-    '',
-    'Before emitting "status":"done", verify all AC checkboxes in the task file are checked.',
-    'Do NOT include "ac_complete" in this final JSON.',
-    '',
-    '='.repeat(80),
+    '## Response',
+    'After all work, emit a final JSON on a single line:',
+    '`{"status":"done","summary":"...","notes":"...","files":["..."],"tests":"..."}`',
+    '- status: "done" only when ALL AC checkboxes are checked. "blocked" if stuck.',
+    '- Verify all ACs are checked before emitting "done". Do NOT include "ac_complete" here.',
+    '- On completion, create a commit with a clear message. Never include secrets.',
     ''
   );
 

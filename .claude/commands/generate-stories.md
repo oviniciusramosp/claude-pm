@@ -44,6 +44,22 @@ Each task will be executed autonomously by Claude Code in a single session. Writ
 - **Use a Discovery task** for complex decisions: choosing frameworks/libraries, defining API contracts, architectural patterns, database schema design, integration strategies.
 - **Use inline ACs** (within a task) for simpler research: checking if a package exists, reading existing code to understand a pattern, minor technology choices.
 
+### Task Consolidation (CRITICAL)
+
+**Fewer, larger tasks. Each task delivers a meaningful, testable increment.**
+
+- **MERGE trivial steps** into the first implementation task. Never create standalone tasks for: installing packages, creating config files, setting up project structure, adding TypeScript types/interfaces. These are STEPS within a larger task.
+- **Only split** when there is a genuine dependency boundary (Discovery output needed before implementation, or work in a fundamentally different domain).
+- A task completable by Claude in under 5 minutes is too small — merge it into its neighbor.
+- **Target: 2-7 tasks per Epic.** If you have more than 7, consolidate.
+
+### Model Optimization
+
+Write tasks so the simplest possible model can execute them:
+- Include explicit file paths, exact commands, expected outputs.
+- Avoid ambiguous language ("consider", "maybe", "if appropriate").
+- Default to Sonnet. Use Haiku for mechanical work. Reserve Opus for Discovery only.
+
 ### Incremental Delivery
 - Order tasks so each builds on the previous one — never assume something exists that hasn't been built yet.
 - Each task should produce a working, testable increment.
@@ -144,7 +160,7 @@ When in doubt, prefer Sonnet. Only use Opus when the task genuinely requires dee
 2. **Cross-epic awareness**: Review other epics' scope and stories on the board. Do NOT generate tasks that duplicate work in other epics. Note cross-epic dependencies in the Dependencies section.
 3. Each task should be completable by Claude Code in a single session.
 4. **Order tasks incrementally**: Discoveries first, then foundational tasks, then features that build on them.
-5. Generate between 2 and 15 tasks. Do not generate more than 15.
+5. Generate between 2 and 7 tasks. If you have more than 7, consolidate. Hard cap: 10.
 6. Use imperative language: "Research X", "Implement Y", "Add Z", "Create W".
 7. Reference specific file paths in implementation steps when possible.
 8. **NEVER include manual tests** — only automated tests (unit, integration, e2e).
