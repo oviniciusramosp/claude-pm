@@ -46,6 +46,7 @@ Board/                          Orchestrator                    Claude Code
 - **Node.js 20+**
 - **Claude Code CLI** — Install from [claude.ai/download](https://claude.ai/download) or via `npm install -g @anthropic-ai/claude-code`
 - **Claude OAuth Token** — For non-interactive execution (see [Setup](#3-generate-a-claude-oauth-token))
+- **mkcert** *(optional, recommended)* — Enables HTTPS so browser notifications work when accessing the panel from your phone or another device on the same network. Install once with `brew install mkcert`; the panel generates certificates automatically on first run.
 
 ## Quick Start
 
@@ -114,7 +115,11 @@ Then add task files (see [Writing Tasks](#writing-tasks) below).
 npm run panel
 ```
 
-This builds the React panel and opens it at `http://localhost:4100`. From the panel you can:
+This builds the React panel and opens it in your browser. If `mkcert` is installed, the panel starts on **HTTPS automatically** (certificates are generated on first run). Otherwise it falls back to HTTP.
+
+> **Browser notifications over LAN** require HTTPS. Install mkcert once with `brew install mkcert`, then `npm run panel` handles everything else automatically.
+
+From the panel you can:
 
 - Configure all settings through a visual form
 - Start/stop the automation API
@@ -496,7 +501,8 @@ These commands are available in any Claude Code session inside this project (via
 
 | Script | Purpose |
 |--------|---------|
-| `npm run panel` | Build and start the visual control panel (port 4100) |
+| `npm run panel` | Build and start the visual control panel (port 4100). Auto-generates HTTPS certs if mkcert is installed. |
+| `npm run panel:certs` | Regenerate HTTPS certificates (run again if your LAN IP changes) |
 | `npm run panel:public` | Build and start the panel with Cloudflare Tunnel for public access |
 | `npm run panel:dev` | Panel in hot-reload development mode |
 | `npm start` | Start automation API (port 3000) |
