@@ -58,7 +58,7 @@ function ClaudeCliPrerequisites({
   return (
     <div className="space-y-4">
       {/* Step 1 – Install CLI */}
-      <div className="rounded-lg border border-secondary bg-secondary p-3 sm:p-4">
+      <div className="rounded-lg border border-secondary bg-primary p-3 sm:p-4">
         <div className="flex items-start gap-2 sm:gap-3">
           <Badge type="pill-color" color="brand" size="sm" className="mt-0.5 shrink-0">1</Badge>
           <div className="min-w-0 flex-1 space-y-1">
@@ -100,7 +100,7 @@ function ClaudeCliPrerequisites({
 
       {/* Step 2 – Login (only visible after CLI is installed) */}
       {cliInstalled && (
-        <div className="rounded-lg border border-secondary bg-secondary p-3 sm:p-4">
+        <div className="rounded-lg border border-secondary bg-primary p-3 sm:p-4">
           <div className="flex items-start gap-2 sm:gap-3">
             <Badge type="pill-color" color="brand" size="sm" className="mt-0.5 shrink-0">2</Badge>
             <div className="min-w-0 flex-1 space-y-1">
@@ -205,7 +205,7 @@ export function SetupTab({
         <h2 className="truncate text-2xl font-bold text-primary tracking-tight">Setup</h2>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-6 pb-24">
         {SETUP_SECTIONS.map((section) => {
           // Sections beyond "claude" are gated by core config readiness.
           if (section.key !== 'claude' && !coreConfigReady) return null;
@@ -216,7 +216,11 @@ export function SetupTab({
           );
 
           return (
-            <div key={section.key} className="space-y-4">
+            <div
+              key={section.key}
+              className="bg-secondary_hover dark:bg-primary space-y-4 p-3"
+              style={{ borderRadius: 'var(--board-col-radius)' }}
+            >
               <div className="space-y-1">
                 <h3 className="m-0 text-md font-semibold text-primary">{section.title}</h3>
                 <p className="m-0 text-sm text-tertiary">{section.description}</p>
@@ -244,7 +248,7 @@ export function SetupTab({
                     const hasInlineActions = isSecretField || field.folderPicker;
 
                     return (
-                      <div key={field.key} className="rounded-lg border border-secondary bg-secondary p-3 sm:p-4">
+                      <div key={field.key} className="rounded-lg border border-secondary bg-primary p-3 sm:p-4">
                         <div className="flex items-start gap-2 sm:gap-3">
                           <Badge type="pill-color" color="brand" size="sm" className="mt-0.5 shrink-0">
                             {currentStep}
@@ -388,7 +392,7 @@ export function SetupTab({
                     if (!toggle) return null;
 
                     return (
-                      <div key={toggle.key} className="rounded-lg border border-secondary bg-secondary p-3 sm:p-4">
+                      <div key={toggle.key} className="rounded-lg border border-secondary bg-primary p-3 sm:p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex-1 space-y-1">
                             <p className="m-0 inline-flex items-center gap-2 text-sm font-medium text-secondary">
@@ -425,16 +429,7 @@ export function SetupTab({
         })}
       </div>
 
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-secondary pt-4">
-        <p className={cx('m-0 text-sm', saveDisabled ? 'text-warning-primary' : 'text-tertiary')}>
-          {hasBlockingErrors
-            ? 'Fix blocking errors before saving.'
-            : !allFieldsValidated
-              ? 'All fields must be validated before saving.'
-              : changedKeys.length === 0
-                ? 'There are no unsaved changes.'
-                : `${changedKeys.length} pending change${changedKeys.length > 1 ? 's' : ''}.`}
-        </p>
+      <div className="fixed bottom-6 right-6 z-50">
         <Button size="md" color="primary" iconLeading={Save01} isDisabled={saveDisabled} isLoading={Boolean(busy.save)} onPress={onSaveClick}>
           Save Configuration
         </Button>
