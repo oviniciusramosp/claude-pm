@@ -23,6 +23,7 @@ export interface ToggleConfig {
   icon: React.FC<{ className?: string }>;
   description: string;
   warning?: string;
+  required?: boolean;
 }
 
 export interface SetupSection {

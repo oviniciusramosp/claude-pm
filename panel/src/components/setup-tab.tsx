@@ -12,7 +12,6 @@ import {
   Settings01,
   XCircle
 } from '@untitledui/icons';
-import { Badge } from '@/components/base/badges/badges';
 import { Button } from '@/components/base/buttons/button';
 import { Input } from '@/components/base/input/input';
 import { Toggle } from '@/components/base/toggle/toggle';
@@ -60,7 +59,9 @@ function ClaudeCliPrerequisites({
       {/* Step 1 – Install CLI */}
       <div className="rounded-lg border border-secondary bg-primary p-3 sm:p-4">
         <div className="flex items-start gap-2 sm:gap-3">
-          <Badge type="pill-color" color="brand" size="sm" className="mt-0.5 shrink-0">1</Badge>
+          <div className="mt-0.5 shrink-0 flex size-6 items-center justify-center rounded-full bg-brand-600">
+            <span className="text-xs font-bold text-white">1</span>
+          </div>
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex items-center justify-between gap-2">
               <h4 className="m-0 text-sm font-semibold text-primary">Install Claude CLI</h4>
@@ -102,7 +103,9 @@ function ClaudeCliPrerequisites({
       {cliInstalled && (
         <div className="rounded-lg border border-secondary bg-primary p-3 sm:p-4">
           <div className="flex items-start gap-2 sm:gap-3">
-            <Badge type="pill-color" color="brand" size="sm" className="mt-0.5 shrink-0">2</Badge>
+            <div className="mt-0.5 shrink-0 flex size-6 items-center justify-center rounded-full bg-brand-600">
+              <span className="text-xs font-bold text-white">2</span>
+            </div>
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex items-center justify-between gap-2">
                 <h4 className="m-0 text-sm font-semibold text-primary">Log in to Claude</h4>
@@ -250,9 +253,9 @@ export function SetupTab({
                     return (
                       <div key={field.key} className="rounded-lg border border-secondary bg-primary p-3 sm:p-4">
                         <div className="flex items-start gap-2 sm:gap-3">
-                          <Badge type="pill-color" color="brand" size="sm" className="mt-0.5 shrink-0">
-                            {currentStep}
-                          </Badge>
+                          <div className="mt-0.5 shrink-0 flex size-6 items-center justify-center rounded-full bg-brand-600">
+                            <span className="text-xs font-bold text-white">{currentStep}</span>
+                          </div>
 
                           <div className="min-w-0 space-y-1">
                             <h4 className="m-0 text-sm font-semibold text-primary">
@@ -403,21 +406,26 @@ export function SetupTab({
                     return (
                       <div key={toggle.key} className="rounded-lg border border-secondary bg-primary p-3 sm:p-4">
                         <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1 space-y-1">
-                            <p className="m-0 inline-flex items-center gap-2 text-sm font-medium text-secondary">
-                              <Icon icon={toggle.icon} className="size-4 shrink-0 text-fg-quaternary" />
-                              <span>{toggle.label}</span>
-                            </p>
-                            <p className="m-0 text-sm text-tertiary">{toggle.description}</p>
+                          <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
+                            <div className="mt-0.5 shrink-0 flex size-6 items-center justify-center rounded-full bg-quaternary">
+                              <Icon icon={toggle.icon} className="size-3.5 text-fg-quaternary" />
+                            </div>
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <h4 className="m-0 text-sm font-semibold text-primary">{toggle.label}</h4>
+                              <p className="m-0 text-sm text-tertiary">{toggle.description}</p>
+                            </div>
                           </div>
 
                           <Toggle
                             aria-label={toggle.label}
                             size="md"
                             className="shrink-0"
-                            isSelected={Boolean(config[toggle.key])}
+                            isSelected={toggle.required ? true : Boolean(config[toggle.key])}
+                            isDisabled={toggle.required}
                             onChange={(isSelected) => {
-                              setConfig((prev) => ({ ...prev, [toggle.key]: isSelected }));
+                              if (!toggle.required) {
+                                setConfig((prev) => ({ ...prev, [toggle.key]: isSelected }));
+                              }
                             }}
                           />
                         </div>

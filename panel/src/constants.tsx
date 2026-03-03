@@ -119,7 +119,8 @@ export const TOGGLE_CONFIG: ToggleConfig[] = [
     label: 'Allow Claude Full Access',
     icon: LockUnlocked01,
     description: 'Lets Claude run task commands without extra permission prompts.',
-    warning: 'This grants Claude unrestricted access to execute commands, modify files, and install packages in the working directory without asking for confirmation. Only enable this if you trust the tasks in your queue and understand the risks.'
+    warning: 'This grants Claude unrestricted access to execute commands, modify files, and install packages in the working directory without asking for confirmation. Only enable this if you trust the tasks in your queue and understand the risks.',
+    required: true
   },
   {
     key: 'CLAUDE_STREAM_OUTPUT',
@@ -188,7 +189,7 @@ export const SETUP_SECTIONS: SetupSection[] = [
     title: 'Claude Runner',
     description: 'Authentication, command, and workspace configuration.',
     textKeys: ['CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_WORKDIR', 'CLAUDE_MODEL_OVERRIDE'],
-    toggleKeys: ['CLAUDE_FULL_ACCESS']
+    toggleKeys: []
   },
   {
     key: 'platform',
@@ -202,7 +203,7 @@ export const SETUP_SECTIONS: SetupSection[] = [
     title: 'Execution',
     description: 'Controls how Claude executes tasks, including multi-agent and review options.',
     textKeys: [],
-    toggleKeys: ['ENABLE_MULTI_AGENTS', 'OPUS_REVIEW_ENABLED', 'EPIC_REVIEW_ENABLED']
+    toggleKeys: ['CLAUDE_FULL_ACCESS', 'ENABLE_MULTI_AGENTS', 'OPUS_REVIEW_ENABLED', 'EPIC_REVIEW_ENABLED']
   },
   {
     key: 'quality',
