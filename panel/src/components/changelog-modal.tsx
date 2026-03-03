@@ -229,8 +229,8 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
                   <div className="pb-2">
                     {group.commits.map((commit) => {
                       const firstLine   = commit.message.split('\n')[0];
-                      const bodyLines   = commit.message.split('\n').slice(1).filter((l) => l.trim());
-                      const body        = bodyLines.join(' ').trim();
+                      // Skip subject (line 0) and the conventional blank separator (line 1)
+                      const body = commit.message.split('\n').slice(2).join('\n').trim();
                       const conv        = parseConventional(firstLine);
                       const subject     = conv?.subject ?? firstLine;
                       const CommitIcon  = conv ? (TYPE_ICON[conv.type] ?? GitCommit) : GitCommit;
