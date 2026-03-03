@@ -123,7 +123,6 @@ setInterval(fetchLatestGithubVersion, VERSION_CHECK_INTERVAL_MS);
 // ── GitHub Changelog ────────────────────────────────────────────────
 const changelogState = {
   commits: null,
-  tags: null,
   lastFetched: null,
   error: null
 };
@@ -131,9 +130,11 @@ const changelogState = {
 async function fetchChangelog() {
   try {
     const headers = { 'User-Agent': 'claude-pm-panel' };
-    const [commitsRes, tagsRes] = await Promise.all([
+
+    // Fetch recent commits and the list of commits that touched package.json in parallel
+    const [commitsRes, pkgCommitsRes] = await Promise.all([
       fetch(`https://api.github.com/repos/${GITHUB_REPO}/commits?per_page=50`, { headers }),
-      fetch(`https://api.github.com/repos/${GITHUB_REPO}/tags?per_page=50`, { headers })
+      fetch(`https://api.github.com/repos/${GITHUB_REPO}/commits?path=package.json&per_page=50`, { headers })
     ]);
 
     if (!commitsRes.ok) {
@@ -142,7 +143,29 @@ async function fetchChangelog() {
     }
 
     const commitsData = await commitsRes.json();
-    const tagsData = tagsRes.ok ? await tagsRes.json() : [];
+    const pkgCommitsData = pkgCommitsRes.ok ? await pkgCommitsRes.json() : [];
+
+    // Fetch package.json content for version-bumping commits (limit to 10 parallel calls)
+    const pkgShasToFetch = pkgCommitsData.slice(0, 10).map((c) => c.sha);
+    const versionMap = new Map(); // fullSha → semver string
+
+    await Promise.all(
+      pkgShasToFetch.map(async (sha) => {
+        try {
+          const res = await fetch(
+            `https://api.github.com/repos/${GITHUB_REPO}/contents/package.json?ref=${sha}`,
+            { headers }
+          );
+          if (!res.ok) return;
+          const data = await res.json();
+          const decoded = Buffer.from(data.content.replace(/\n/g, ''), 'base64').toString('utf8');
+          const pkg = JSON.parse(decoded);
+          if (pkg.version) versionMap.set(sha, pkg.version);
+        } catch {
+          // ignore individual fetch errors
+        }
+      })
+    );
 
     changelogState.commits = commitsData.map((c) => ({
       sha: c.sha.slice(0, 7),
@@ -150,12 +173,8 @@ async function fetchChangelog() {
       message: c.commit.message,
       date: c.commit.committer.date,
       author: c.commit.author.name,
-      url: c.html_url
-    }));
-
-    changelogState.tags = tagsData.map((t) => ({
-      name: t.name.replace(/^v/, ''),
-      sha: t.commit.sha
+      url: c.html_url,
+      version: versionMap.get(c.sha) || null
     }));
 
     changelogState.lastFetched = new Date().toISOString();
@@ -1783,7 +1802,7 @@ app.get('/api/changelog', async (_req, res) => {
     return res.status(502).json({ error: changelogState.error });
   }
 
-  res.json({ commits: changelogState.commits || [], tags: changelogState.tags || [], error: changelogState.error || null });
+  res.json({ commits: changelogState.commits || [], error: changelogState.error || null });
 });
 
 // Protect all /api/* routes (except /api/auth/* which handle their own auth)

@@ -8,6 +8,7 @@ import { Icon } from './icon';
 import { cx } from '@/utils/cx';
 import { handleModalKeyDown } from '@/utils/modal-keyboard';
 
+// ── Types ─────────────────────────────────────────────────────────────
 interface ChangelogCommit {
   sha: string;
   fullSha: string;
@@ -15,17 +16,14 @@ interface ChangelogCommit {
   date: string;
   author: string;
   url: string;
+  version: string | null;
 }
 
-interface ChangelogTag {
-  name: string; // semver without 'v'
-  sha: string;  // full commit SHA
-}
-
-interface VersionGroup {
-  version: string | null; // null = unreleased
+interface DateGroup {
+  key: string;           // local YYYY-M-D
+  label: string;         // "Today", "Yesterday", "3d ago", …
+  fullDate: string;      // "Mar 1, 2026"
   commits: ChangelogCommit[];
-  isNew: boolean;
 }
 
 interface Conventional {
@@ -34,7 +32,7 @@ interface Conventional {
   subject: string;
 }
 
-// ── Icon map per conventional commit type ────────────────────────────
+// ── Icon / colour maps ────────────────────────────────────────────────
 const TYPE_ICON: Record<string, React.ComponentType<any>> = {
   feat:     Stars01,
   fix:      Tool01,
@@ -63,9 +61,36 @@ const TYPE_COLOR: Record<string, string> = {
 
 // ── Helpers ──────────────────────────────────────────────────────────
 function parseConventional(line: string): Conventional | null {
-  const match = line.match(/^(\w+)(?:\(([^)]+)\))?!?: (.+)/);
-  if (!match) return null;
-  return { type: match[1], scope: match[2] || null, subject: match[3] };
+  const m = line.match(/^(\w+)(?:\(([^)]+)\))?!?: (.+)/);
+  if (!m) return null;
+  return { type: m[1], scope: m[2] || null, subject: m[3] };
+}
+
+/** Calendar-day key in local timezone (not UTC) */
+function localDateKey(isoDate: string): string {
+  const d = new Date(isoDate);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+/** Relative label using local calendar days so timezone doesn't skew "2d ago" */
+function formatRelativeDate(isoDate: string): string {
+  const now  = new Date();
+  const d    = new Date(isoDate);
+  const nowDay    = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const commitDay = new Date(d.getFullYear(),   d.getMonth(),   d.getDate());
+  const diffDays  = Math.round((nowDay.getTime() - commitDay.getTime()) / 86_400_000);
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7)   return `${diffDays}d ago`;
+  if (diffDays < 30)  return `${Math.floor(diffDays / 7)}w ago`;
+  if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`;
+  return `${Math.floor(diffDays / 365)}y ago`;
+}
+
+function formatDate(isoDate: string): string {
+  return new Date(isoDate).toLocaleDateString('en-US', {
+    year: 'numeric', month: 'short', day: 'numeric'
+  });
 }
 
 function parseSemver(v: string): [number, number, number] {
@@ -73,77 +98,57 @@ function parseSemver(v: string): [number, number, number] {
   return [a, b, c];
 }
 
-function compareSemver(a: string, b: string): number {
+function semverGt(a: string, b: string): boolean {
   const [aMaj, aMin, aPat] = parseSemver(a);
   const [bMaj, bMin, bPat] = parseSemver(b);
-  return aMaj !== bMaj ? aMaj - bMaj : aMin !== bMin ? aMin - bMin : aPat - bPat;
+  if (aMaj !== bMaj) return aMaj > bMaj;
+  if (aMin !== bMin) return aMin > bMin;
+  return aPat > bPat;
 }
 
-function groupByVersion(commits: ChangelogCommit[], tags: ChangelogTag[]): VersionGroup[] {
-  const shaToVersion = new Map<string, string>(tags.map((t) => [t.sha, t.name]));
-
-  const groups: VersionGroup[] = [];
-  let currentGroup: VersionGroup = { version: null, commits: [], isNew: false };
-
+/** Group flat commit list into calendar-day buckets (local timezone) */
+function groupByDate(commits: ChangelogCommit[]): DateGroup[] {
+  const groups: DateGroup[] = [];
   for (const commit of commits) {
-    const version = shaToVersion.get(commit.fullSha);
-    if (version !== undefined) {
-      if (currentGroup.commits.length > 0) groups.push(currentGroup);
-      currentGroup = { version, commits: [commit], isNew: false };
+    const key = localDateKey(commit.date);
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) {
+      last.commits.push(commit);
     } else {
-      currentGroup.commits.push(commit);
+      groups.push({
+        key,
+        label:    formatRelativeDate(commit.date),
+        fullDate: formatDate(commit.date),
+        commits:  [commit],
+      });
     }
   }
-  if (currentGroup.commits.length > 0) groups.push(currentGroup);
-
-  const currentVer = __APP_VERSION__;
-  for (const group of groups) {
-    group.isNew = group.version !== null && compareSemver(group.version, currentVer) > 0;
-  }
-
   return groups;
-}
-
-function formatRelativeDate(isoDate: string): string {
-  const diffDays = Math.floor((Date.now() - new Date(isoDate).getTime()) / 86_400_000);
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) return `${diffDays}d ago`;
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
-  if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`;
-  return `${Math.floor(diffDays / 365)}y ago`;
-}
-
-function formatDate(isoDate: string): string {
-  return new Date(isoDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 // ── Component ────────────────────────────────────────────────────────
 export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [groups, setGroups] = useState<VersionGroup[]>([]);
+  const [groups, setGroups]   = useState<DateGroup[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]     = useState<string | null>(null);
+  const [hasNew, setHasNew]   = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setLoading(true);
     setError(null);
     fetch('/api/changelog')
-      .then((res) => res.json())
+      .then((r) => r.json())
       .then((data) => {
         const commits: ChangelogCommit[] = data.commits || [];
-        const tags: ChangelogTag[] = data.tags || [];
-        if (data.error && !commits.length) {
-          setError(data.error);
-        } else {
-          setGroups(groupByVersion(commits, tags));
-        }
+        if (data.error && !commits.length) { setError(data.error); return; }
+        const currentVer = __APP_VERSION__;
+        setHasNew(commits.some((c) => c.version && semverGt(c.version, currentVer)));
+        setGroups(groupByDate(commits));
       })
-      .catch((err) => setError(err.message))
+      .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [open]);
-
-  const hasNewGroups = groups.some((g) => g.isNew);
 
   return (
     <ModalOverlay
@@ -157,12 +162,12 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
             className="w-full rounded-2xl bg-primary shadow-2xl"
             onKeyDown={(e) => handleModalKeyDown(e, onClose)}
           >
-            {/* Header */}
+            {/* ── Header ─────────────────────────────────────────── */}
             <div className="flex items-center justify-between gap-3 border-b border-secondary px-6 py-4">
               <div>
                 <h3 className="m-0 text-lg font-semibold text-primary">Changelog</h3>
                 <p className="m-0 text-sm text-tertiary">
-                  {hasNewGroups
+                  {hasNew
                     ? 'New updates available — you are running an older version'
                     : 'Recent updates to PM Automation'}
                 </p>
@@ -177,8 +182,8 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
               </button>
             </div>
 
-            {/* Body */}
-            <div className="max-h-[60vh] overflow-y-auto px-6 py-4">
+            {/* ── Body ───────────────────────────────────────────── */}
+            <div className="max-h-[60vh] overflow-y-auto px-6 py-2">
               {loading && (
                 <div className="flex items-center justify-center py-12">
                   <div className="size-6 animate-spin rounded-full border-2 border-brand-solid border-t-transparent" />
@@ -186,7 +191,7 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
               )}
 
               {!loading && error && groups.length === 0 && (
-                <div className="rounded-lg border border-dashed border-error-primary bg-utility-error-50 p-4 text-center text-sm text-error-primary">
+                <div className="my-4 rounded-lg border border-dashed border-error-primary bg-utility-error-50 p-4 text-center text-sm text-error-primary">
                   {error}
                 </div>
               )}
@@ -195,71 +200,69 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
                 <p className="py-8 text-center text-sm text-quaternary">No commits found.</p>
               )}
 
-              {groups.length > 0 && (
-                <div className="space-y-5">
-                  {groups.map((group) => (
-                    <div key={group.version ?? 'unreleased'} className="flex gap-4">
-                      {/* Version column */}
-                      <div className="w-[68px] shrink-0 pt-2 text-right">
-                        {group.version ? (
-                          <>
-                            <span className={cx(
-                              'font-mono text-xs font-bold',
-                              group.isNew ? 'text-brand-primary' : 'text-primary'
-                            )}>
-                              v{group.version}
-                            </span>
-                            {group.isNew && (
-                              <span className="mt-0.5 block text-[9px] font-semibold uppercase tracking-wide text-brand-primary">
-                                New
+              {groups.map((group) => (
+                <div key={group.key}>
+                  {/* Sticky date separator */}
+                  <div className="sticky top-0 z-10 -mx-6 bg-primary px-6 py-2">
+                    <div className="flex items-center gap-3">
+                      <div className="h-px flex-1 bg-secondary" />
+                      <span
+                        className="text-[11px] font-semibold uppercase tracking-wide text-quaternary"
+                        title={group.fullDate}
+                      >
+                        {group.label}
+                      </span>
+                      <div className="h-px flex-1 bg-secondary" />
+                    </div>
+                  </div>
+
+                  {/* Commits for this date */}
+                  <div className="pb-2">
+                    {group.commits.map((commit) => {
+                      const firstLine   = commit.message.split('\n')[0];
+                      const bodyLines   = commit.message.split('\n').slice(1).filter((l) => l.trim());
+                      const body        = bodyLines.join(' ').trim();
+                      const conv        = parseConventional(firstLine);
+                      const subject     = conv?.subject ?? firstLine;
+                      const CommitIcon  = conv ? (TYPE_ICON[conv.type] ?? GitCommit) : GitCommit;
+                      const iconColor   = conv ? (TYPE_COLOR[conv.type] ?? 'text-quaternary') : 'text-quaternary';
+                      const isNew       = Boolean(commit.version && semverGt(commit.version, __APP_VERSION__));
+
+                      return (
+                        <div
+                          key={commit.sha}
+                          className={cx(
+                            'group flex gap-4 rounded-lg px-2 py-2 transition hover:bg-primary_hover',
+                            isNew && 'bg-brand-primary/5'
+                          )}
+                        >
+                          {/* Version column */}
+                          <div className="w-[68px] shrink-0 pt-0.5 text-right">
+                            {commit.version ? (
+                              <span className={cx(
+                                'font-mono text-[10px] font-semibold',
+                                isNew ? 'text-brand-primary' : 'text-tertiary'
+                              )}>
+                                v{commit.version}
                               </span>
+                            ) : (
+                              <span className="font-mono text-[10px] text-quaternary">···</span>
                             )}
-                          </>
-                        ) : (
-                          <span className="font-mono text-xs text-quaternary">···</span>
-                        )}
-                      </div>
+                          </div>
 
-                      {/* Commits column */}
-                      <div className={cx(
-                        'flex-1 space-y-0.5 border-l pl-4',
-                        group.isNew ? 'border-brand-primary/40' : 'border-secondary'
-                      )}>
-                        {group.commits.map((commit, ci) => {
-                          const firstLine = commit.message.split('\n')[0];
-                          const conventional = parseConventional(firstLine);
-                          const subject = conventional?.subject ?? firstLine;
-                          const CommitIcon = conventional
-                            ? (TYPE_ICON[conventional.type] ?? GitCommit)
-                            : GitCommit;
-                          const iconColor = conventional
-                            ? (TYPE_COLOR[conventional.type] ?? 'text-quaternary')
-                            : 'text-quaternary';
-                          const dateKey = commit.date.slice(0, 10);
-                          const prevDateKey = ci > 0 ? group.commits[ci - 1].date.slice(0, 10) : null;
-                          const showDate = dateKey !== prevDateKey;
-
-                          return (
-                            <div
-                              key={commit.sha}
-                              className="group flex items-center gap-2 rounded-md px-2 py-1.5 transition hover:bg-primary_hover"
-                            >
-                              <span
-                                className="w-16 shrink-0 text-right font-mono text-[10px] text-quaternary"
-                                title={showDate ? formatDate(commit.date) : undefined}
-                              >
-                                {showDate ? formatRelativeDate(commit.date) : ''}
-                              </span>
-
+                          {/* Content column */}
+                          <div className={cx(
+                            'min-w-0 flex-1 border-l pl-4',
+                            isNew ? 'border-brand-primary/40' : 'border-secondary'
+                          )}>
+                            <div className="flex items-center gap-2">
                               <Icon
                                 icon={CommitIcon}
                                 className={cx('size-4 shrink-0', iconColor)}
                               />
-
-                              <p className="m-0 min-w-0 flex-1 truncate text-sm text-primary">
+                              <p className="m-0 min-w-0 flex-1 truncate text-sm font-medium text-primary">
                                 {subject}
                               </p>
-
                               <a
                                 href={commit.url}
                                 target="_blank"
@@ -271,16 +274,22 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
                                 <Icon icon={ArrowUpRight} className="size-3.5" />
                               </a>
                             </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
+
+                            {body && (
+                              <p className="m-0 mt-0.5 line-clamp-2 pl-6 text-xs text-tertiary">
+                                {body}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
 
-            {/* Footer */}
+            {/* ── Footer ─────────────────────────────────────────── */}
             <div className="flex items-center justify-between border-t border-secondary px-6 py-4">
               <a
                 href="https://github.com/oviniciusramosp/claude-pm/commits"
