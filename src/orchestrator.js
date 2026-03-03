@@ -54,13 +54,32 @@ function isOpusModel(modelName) {
   return normalize(modelName).includes('opus');
 }
 
-function isClaudeLimitError(message) {
-  const text = String(message || '').toLowerCase();
+function getErrorText(error) {
+  if (typeof error === 'string') return error.toLowerCase();
+  return [
+    String(error?.message || ''),
+    String(error?.stderr || ''),
+    String(error?.stdout || '')
+  ].join(' ').toLowerCase();
+}
+
+function isClaudeLimitError(error) {
+  const text = getErrorText(error);
   return (
     text.includes("you've hit your limit") ||
     text.includes('hit your limit') ||
     text.includes('quota') ||
     text.includes('usage limit')
+  );
+}
+
+function isClaudeAuthError(error) {
+  const text = getErrorText(error);
+  return (
+    text.includes('authentication_error') ||
+    text.includes('invalid bearer token') ||
+    text.includes('failed to authenticate') ||
+    text.includes('api error: 401')
   );
 }
 
@@ -607,7 +626,16 @@ export class Orchestrator {
             await this.boardClient.appendMarkdown(task.id, errorNote);
             await this.runStore.markFailed(task, `Opus review error: ${reviewError.message}`);
 
-            if (isClaudeLimitError(reviewError.message)) {
+            if (isClaudeAuthError(reviewError)) {
+              this.logger.error(
+                'Claude authentication failed — token may be expired. Run `claude setup-token` to refresh credentials, then restart the API.',
+                { expandableContent: { stderr: reviewError.stderr || null, exitCode: reviewError.exitCode ?? null } }
+              );
+              this.halted = true;
+              break;
+            }
+
+            if (isClaudeLimitError(reviewError)) {
               const resetHint = extractResetHint(reviewError.message);
               this.logger.warn(
                 `Claude usage limit reached during Opus review. Orchestrator halted until ${resetHint || 'unknown reset time'}.`
@@ -702,7 +730,16 @@ export class Orchestrator {
         await this.runStore.markFailed(task, error.message);
         const resetHint = extractResetHint(error.message);
 
-        if (isClaudeLimitError(error.message)) {
+        if (isClaudeAuthError(error)) {
+          this.logger.error(
+            'Claude authentication failed — token may be expired. Run `claude setup-token` to refresh credentials, then restart the API.',
+            { expandableContent: { stderr: error.stderr || null, exitCode: error.exitCode ?? null } }
+          );
+          this.halted = true;
+          break;
+        }
+
+        if (isClaudeLimitError(error)) {
           this.logger.warn(
             `Claude usage limit reached. Orchestrator halted until ${resetHint || 'unknown reset time'}.`
           );
@@ -1004,7 +1041,16 @@ export class Orchestrator {
             await this.boardClient.appendMarkdown(task.id, errorNote);
             await this.runStore.markFailed(task, `Opus review error: ${reviewError.message}`);
 
-            if (isClaudeLimitError(reviewError.message)) {
+            if (isClaudeAuthError(reviewError)) {
+              this.logger.error(
+                'Claude authentication failed — token may be expired. Run `claude setup-token` to refresh credentials, then restart the API.',
+                { expandableContent: { stderr: reviewError.stderr || null, exitCode: reviewError.exitCode ?? null } }
+              );
+              this.halted = true;
+              break;
+            }
+
+            if (isClaudeLimitError(reviewError)) {
               const resetHint = extractResetHint(reviewError.message);
               this.logger.warn(
                 `Claude usage limit reached during Opus review. Orchestrator halted until ${resetHint || 'unknown reset time'}.`
@@ -1099,7 +1145,16 @@ export class Orchestrator {
         await this.runStore.markFailed(task, error.message);
         const resetHint = extractResetHint(error.message);
 
-        if (isClaudeLimitError(error.message)) {
+        if (isClaudeAuthError(error)) {
+          this.logger.error(
+            'Claude authentication failed — token may be expired. Run `claude setup-token` to refresh credentials, then restart the API.',
+            { expandableContent: { stderr: error.stderr || null, exitCode: error.exitCode ?? null } }
+          );
+          this.halted = true;
+          break;
+        }
+
+        if (isClaudeLimitError(error)) {
           this.logger.warn(
             `Claude usage limit reached. Orchestrator halted until ${resetHint || 'unknown reset time'}.`
           );
@@ -1402,7 +1457,16 @@ export class Orchestrator {
           const errorNote = `## Epic Review Error (${new Date().toISOString()})\n${errorDetails.join('\n\n')}\n`;
           await this.boardClient.appendMarkdown(task.id, errorNote);
 
-          if (isClaudeLimitError(reviewError.message)) {
+          if (isClaudeAuthError(reviewError)) {
+            this.logger.error(
+              'Claude authentication failed — token may be expired. Run `claude setup-token` to refresh credentials, then restart the API.',
+              { expandableContent: { stderr: reviewError.stderr || null, exitCode: reviewError.exitCode ?? null } }
+            );
+            this.halted = true;
+            return;
+          }
+
+          if (isClaudeLimitError(reviewError)) {
             const resetHint = extractResetHint(reviewError.message);
             this.logger.warn(
               `Claude usage limit reached during Epic review. Orchestrator halted until ${resetHint || 'unknown reset time'}.`
