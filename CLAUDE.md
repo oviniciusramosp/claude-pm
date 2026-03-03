@@ -730,6 +730,7 @@ From the Operations tab:
 - `FORCE_TEST_RUN` - When true, Claude must run all tests and ensure they pass before finishing a task (default `false`).
 - `FORCE_COMMIT` - When true, Claude must create a commit before moving the task to Done (default `false`).
 - `INJECT_CLAUDE_MD` - When true, injects a managed section into the target project's CLAUDE.md with automation instructions (default `true`).
+- `PLATFORM_PRESET` - Platform-specific instructions preset. When set, injects platform guidance into the target project's CLAUDE.md. Valid values: `""` (none), `"ios"` (iOS/iPadOS — simulator management, xcodebuild flags, crash recovery). Default: `""`.
 - `CLAUDE_TIMEOUT_MS` - Claude execution timeout (default `4500000` = 75min). Should be higher than `WATCHDOG_INTERVAL_MS * WATCHDOG_MAX_WARNINGS`.
 - `CLAUDE_EXTRA_PROMPT` - Additional prompt text appended to every task.
 - `PORT` - Automation API port (default `3000`).

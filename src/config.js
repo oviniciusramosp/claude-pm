@@ -74,7 +74,8 @@ export const config = {
     forceCommit: boolean('FORCE_COMMIT', false),
     injectClaudeMd: boolean('INJECT_CLAUDE_MD', true),
     enableMultiAgents: boolean('ENABLE_MULTI_AGENTS', false),
-    autoVersionEnabled: boolean('AUTO_VERSION_ENABLED', false)
+    autoVersionEnabled: boolean('AUTO_VERSION_ENABLED', false),
+    platformPreset: process.env.PLATFORM_PRESET || ''
   },
   state: {
     runStorePath: path.resolve(process.cwd(), process.env.RUN_STORE_PATH || '.data/runs.json'),

@@ -10,16 +10,21 @@ function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export async function generateManagedContent() {
-  const baseContent = await loadTemplate('managed-claude.md');
+const VALID_PLATFORM_PRESETS = new Set(['ios']);
 
-  // Conditionally inject versioning rules when AUTO_VERSION_ENABLED is true
+export async function generateManagedContent() {
+  const parts = [await loadTemplate('managed-claude.md')];
+
   if (config.claude.autoVersionEnabled) {
-    const versioningRules = await loadTemplate('versioning-rules.md');
-    return `${baseContent}\n\n${versioningRules}`;
+    parts.push(await loadTemplate('versioning-rules.md'));
   }
 
-  return baseContent;
+  const preset = config.claude.platformPreset;
+  if (preset && VALID_PLATFORM_PRESETS.has(preset)) {
+    parts.push(await loadTemplate(`platform-${preset}.md`));
+  }
+
+  return parts.join('\n\n');
 }
 
 export async function syncClaudeMd(config, logger) {

@@ -33,6 +33,11 @@ export const CLAUDE_MODELS = [
 
 export const CLAUDE_TASK_MODELS = CLAUDE_MODELS.filter((m) => m.value !== '');
 
+export const PLATFORM_PRESETS = [
+  { value: '', label: 'None', description: 'No platform-specific instructions' },
+  { value: 'ios', label: 'iOS / iPadOS', description: 'Simulator management, xcodebuild flags, crash recovery' }
+] as const;
+
 export const CLAUDE_DEFAULT_TASK_MODEL = 'claude-sonnet-4-5-20250929';
 
 export const TEXT_FIELD_CONFIG: TextFieldConfig[] = [
@@ -87,6 +92,23 @@ export const TEXT_FIELD_CONFIG: TextFieldConfig[] = [
       ]
     },
     selectOptions: CLAUDE_MODELS
+  },
+  {
+    key: 'PLATFORM_PRESET',
+    label: 'Platform Preset',
+    icon: Server01,
+    placeholder: '',
+    description: 'Injects platform-specific instructions into the target project CLAUDE.md.',
+    help: {
+      title: 'Platform Presets',
+      summary: 'Add platform-specific guidance for Claude when executing tasks.',
+      steps: [
+        'Select a platform to inject best-practice instructions.',
+        'iOS: Simulator health checks, xcodebuild flags, crash recovery, build patterns.',
+        'Instructions are injected into the managed CLAUDE.md section on each API restart.'
+      ]
+    },
+    selectOptions: PLATFORM_PRESETS
   }
 ];
 
@@ -166,6 +188,13 @@ export const SETUP_SECTIONS: SetupSection[] = [
     description: 'Authentication, command, and workspace configuration.',
     textKeys: ['CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_WORKDIR', 'CLAUDE_MODEL_OVERRIDE'],
     toggleKeys: ['CLAUDE_FULL_ACCESS']
+  },
+  {
+    key: 'platform',
+    title: 'Platform',
+    description: 'Platform-specific instructions injected into the target project.',
+    textKeys: ['PLATFORM_PRESET'],
+    toggleKeys: []
   },
   {
     key: 'execution',

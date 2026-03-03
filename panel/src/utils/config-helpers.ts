@@ -31,7 +31,8 @@ export function buildInitialConfig(): Record<string, string | boolean> {
     EPIC_REVIEW_ENABLED: false,
     FORCE_TEST_CREATION: false,
     FORCE_TEST_RUN: false,
-    FORCE_COMMIT: false
+    FORCE_COMMIT: false,
+    PLATFORM_PRESET: ''
   };
 }
 
@@ -110,6 +111,14 @@ export function validateFieldValue(key: string, rawValue: unknown): ValidationRe
     }
 
     return { level: 'success', message: 'Model override active.' };
+  }
+
+  if (key === 'PLATFORM_PRESET') {
+    if (!value) {
+      return { level: 'success', message: 'No platform instructions injected.' };
+    }
+
+    return { level: 'success', message: 'Platform instructions will be injected into CLAUDE.md.' };
   }
 
   return { level: 'neutral', message: '' };
