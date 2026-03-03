@@ -751,7 +751,7 @@ function AppInner({ mode = 'light', themeMode = 'system', setThemeMode = (_m) =>
         <div className={cx(
           'flex w-full min-h-0 flex-1 flex-col px-4 sm:px-6 lg:px-8',
           activeTab === NAV_TAB_KEYS.feed ? 'overflow-hidden py-6' : 'overflow-y-auto py-6',
-          activeTab === NAV_TAB_KEYS.board ? 'max-w-[1400px]' : 'max-w-[1000px]'
+          'max-w-[1200px]'
         )}>
           {activeTab === NAV_TAB_KEYS.setup ? (
             <SetupTab
