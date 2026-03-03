@@ -3748,6 +3748,13 @@ Review this Epic and produce an improved version optimized for Claude Code task 
 - ❌ "Completion" / "Standard Completion Criteria"
 - ❌ Manual testing or manual QA references
 
+**TASK CONSOLIDATION PRINCIPLE:**
+- The Epic should be written so that task generation produces **2-7 consolidated tasks** (not 10-15 micro-tasks).
+- Each Scope bullet should map to a substantial, one-shot task — not a micro-step.
+- Trivial steps (install deps, config files, TypeScript types) are STEPS within a larger task, never standalone tasks.
+- Only flag "(needs Discovery)" when a genuine research decision is needed — not for every technical choice.
+- Write Scope bullets with enough technical detail that a simpler model (Sonnet) can execute the resulting tasks without ambiguity.
+
 **CROSS-EPIC AWARENESS:**
 - If <board_context> is provided, check for scope overlap and note dependencies on other epics
 </review_instructions>
