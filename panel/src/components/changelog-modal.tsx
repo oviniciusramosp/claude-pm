@@ -276,7 +276,7 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
                             </div>
 
                             {body && (
-                              <p className="m-0 mt-0.5 line-clamp-2 pl-6 text-xs text-tertiary">
+                              <p className="m-0 mt-0.5 whitespace-pre-wrap pl-6 text-xs text-tertiary">
                                 {body}
                               </p>
                             )}
