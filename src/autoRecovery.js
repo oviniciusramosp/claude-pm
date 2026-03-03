@@ -188,16 +188,22 @@ export class AutoRecovery {
    * Reset recovery attempts for a task (called after successful completion)
    */
   reset(taskId) {
+    const had = this.attemptMap.has(taskId);
     this.attemptMap.delete(taskId);
-    logger.info(`RECOVERY - Reset recovery counter for task "${taskId}"`);
+    if (had) {
+      logger.info(`RECOVERY - Recovery counter cleared for task "${taskId}"`);
+    }
   }
 
   /**
    * Reset recovery attempts for an epic (called after successful completion)
    */
   resetEpic(epicId) {
+    const had = this.epicAttemptMap.has(epicId);
     this.epicAttemptMap.delete(epicId);
-    logger.info(`RECOVERY - Reset recovery counter for epic "${epicId}"`);
+    if (had) {
+      logger.info(`RECOVERY - Recovery counter cleared for epic "${epicId}"`);
+    }
   }
 
   /**
