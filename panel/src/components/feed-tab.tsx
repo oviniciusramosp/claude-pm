@@ -761,7 +761,8 @@ export function FeedTab({
 
       <div
         ref={logFeedRef}
-        className="min-h-0 min-w-0 flex-1 space-y-2 overflow-y-auto overflow-x-hidden"
+        className="min-h-0 min-w-0 flex-1 space-y-2 overflow-y-auto overflow-x-hidden bg-secondary_hover dark:bg-primary p-3"
+        style={{ borderRadius: 'var(--board-col-radius)' }}
       >
         {groupedLogs.map((item, index) => {
           // Check if this is a progressive log group
