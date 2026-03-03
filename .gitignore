@@ -5,3 +5,4 @@ panel/dist/
 npm-debug.log*
 .claude/*
 !.claude/commands/
+.certs/

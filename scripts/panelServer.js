@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
+import https from 'node:https';
 import path from 'node:path';
 import os from 'node:os';
 import { spawn, execFile } from 'node:child_process';
@@ -43,6 +44,11 @@ function envEnabled(value, fallback = false) {
 const panelAutoOpen = envEnabled(process.env.PANEL_AUTO_OPEN, true);
 const panelAutoStartApi = envEnabled(process.env.PANEL_AUTO_START_API, false);
 const isPublicMode = process.argv.includes('--public');
+
+// ── HTTPS cert paths (generated via `npm run panel:certs`) ─────────────
+const certFile = process.env.PANEL_HTTPS_CERT || path.join(cwd, '.certs', 'cert.pem');
+const keyFile = process.env.PANEL_HTTPS_KEY || path.join(cwd, '.certs', 'key.pem');
+let httpsEnabled = false;
 
 // ── Network helpers ────────────────────────────────────────────────────
 
@@ -1773,9 +1779,10 @@ app.get('/api/auth/providers', (_req, res) => {
 
 app.get('/api/server/info', (_req, res) => {
   const lanIp = getLocalNetworkIp();
+  const scheme = httpsEnabled ? 'https' : 'http';
   res.json({
-    localUrl: `http://localhost:${panelPort}`,
-    lanUrl: lanIp ? `http://${lanIp}:${panelPort}` : null,
+    localUrl: `${scheme}://localhost:${panelPort}`,
+    lanUrl: lanIp ? `${scheme}://${lanIp}:${panelPort}` : null,
     tunnelUrl: tunnelState.url,
     tunnelStatus: tunnelState.status,
     tunnelError: tunnelState.error,
@@ -7062,9 +7069,26 @@ async function startServer() {
   const boardDir = resolveBoardDir(env);
   const claudeWorkdir = path.resolve(cwd, env.CLAUDE_WORKDIR || '.');
 
-  const server = app.listen(panelPort, () => {
-    const url = `http://localhost:${panelPort}`;
+  // Detect HTTPS certs (generated via `npm run panel:certs`)
+  let certOptions = null;
+  try {
+    certOptions = {
+      cert: fsSync.readFileSync(certFile),
+      key: fsSync.readFileSync(keyFile),
+    };
+    httpsEnabled = true;
+  } catch {
+    // No certs found — fall back to HTTP
+  }
+
+  const scheme = httpsEnabled ? 'https' : 'http';
+
+  function onListening() {
+    const url = `${scheme}://localhost:${panelPort}`;
     console.log(`✅ Joy UI panel started: ${url}`);
+    if (httpsEnabled) {
+      console.log('🔐 HTTPS enabled (locally-trusted certificate).');
+    }
     console.log('ℹ️ Use this panel to configure .env, start API, and watch live logs.');
     console.log(`📁 Board directory: ${boardDir}`);
     console.log(`🔧 Claude working directory: ${claudeWorkdir}`);
@@ -7082,14 +7106,18 @@ async function startServer() {
     } else {
       const lanIp = getLocalNetworkIp();
       if (lanIp) {
-        console.log(`📱 LAN access: http://${lanIp}:${panelPort}`);
+        console.log(`📱 LAN access: ${scheme}://${lanIp}:${panelPort}`);
       }
     }
 
     autoStartApiIfNeeded().catch((error) => {
       pushLog('error', LOG_SOURCE.panel, `Failed API auto-start check: ${error.message}`);
     });
-  });
+  }
+
+  const server = httpsEnabled
+    ? https.createServer(certOptions, app).listen(panelPort, onListening)
+    : app.listen(panelPort, onListening);
 
   server.on('error', (error) => {
     console.error(`❌ Failed to start panel server: ${error.message}`);
