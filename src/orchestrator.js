@@ -710,7 +710,15 @@ export class Orchestrator {
           break;
         }
 
-        this.logger.error(`Failed to execute task "${taskLabel(task)}": ${error.message}`);
+        this.logger.error(`Failed to execute task "${taskLabel(task)}": ${error.message}`, {
+          expandableContent: {
+            stderr: error.stderr || null,
+            stdout: error.stdout || null,
+            exitCode: error.exitCode ?? null,
+            signal: error.signal || null,
+            stack: error.stack || null
+          }
+        });
 
         const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
         if (shouldHalt) {
@@ -1099,7 +1107,15 @@ export class Orchestrator {
           break;
         }
 
-        this.logger.error(`Failed to execute task "${taskLabel(task)}": ${error.message}`);
+        this.logger.error(`Failed to execute task "${taskLabel(task)}": ${error.message}`, {
+          expandableContent: {
+            stderr: error.stderr || null,
+            stdout: error.stdout || null,
+            exitCode: error.exitCode ?? null,
+            signal: error.signal || null,
+            stack: error.stack || null
+          }
+        });
 
         const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
         if (shouldHalt) {
