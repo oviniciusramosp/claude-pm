@@ -85,6 +85,7 @@ export const TEXT_FIELD_CONFIG: TextFieldConfig[] = [
     help: {
       title: 'Claude Model Selection',
       summary: 'Choose which Claude model to use for task execution.',
+      bulletList: true,
       steps: [
         'Use Automatic to use the model specified in each task.',
         'Or select a model to override all task models.',

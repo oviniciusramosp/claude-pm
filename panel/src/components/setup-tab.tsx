@@ -263,11 +263,19 @@ export function SetupTab({
                         </div>
 
                         {field.help?.steps?.length ? (
-                          <ol className="mt-3 list-decimal space-y-1 pl-6 text-sm text-tertiary sm:ml-9 sm:pl-4">
-                            {field.help.steps.map((step, i) => (
-                              <li key={i}>{step}</li>
-                            ))}
-                          </ol>
+                          field.help.bulletList ? (
+                            <ul className="mt-3 list-disc space-y-1 pl-6 text-sm text-tertiary sm:ml-9 sm:pl-4">
+                              {field.help.steps.map((step, i) => (
+                                <li key={i}>{step}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <ol className="mt-3 list-decimal space-y-1 pl-6 text-sm text-tertiary sm:ml-9 sm:pl-4">
+                              {field.help.steps.map((step, i) => (
+                                <li key={i}>{step}</li>
+                              ))}
+                            </ol>
+                          )
                         ) : null}
 
                         <div className="mt-4 sm:ml-9">
@@ -373,17 +381,18 @@ export function SetupTab({
                               {field.selectOptions.find((opt) => opt.value === config[field.key])?.description}
                             </p>
                           ) : null}
+
+                          {field.key === 'CLAUDE_WORKDIR' && coreConfigReady && (
+                            <div className="mt-3">
+                              <BoardValidationAlert apiBaseUrl={apiBaseUrl} />
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
                   })}
                 </div>
               ) : null}
-
-              {/* Board Validation Alert — shown after workdir field */}
-              {section.key === 'claude' && coreConfigReady && (
-                <BoardValidationAlert apiBaseUrl={apiBaseUrl} />
-              )}
 
               {section.toggleKeys.length > 0 ? (
                 <div className={cx('space-y-3', visibleTextKeys.length > 0 ? 'mt-1' : '')}>

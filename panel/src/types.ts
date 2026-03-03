@@ -10,6 +10,7 @@ export interface TextFieldConfig {
     title: string;
     summary: string;
     steps: React.ReactNode[];
+    bulletList?: boolean;
   };
   password?: boolean;
   folderPicker?: boolean;
