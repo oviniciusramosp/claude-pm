@@ -123,28 +123,41 @@ setInterval(fetchLatestGithubVersion, VERSION_CHECK_INTERVAL_MS);
 // ── GitHub Changelog ────────────────────────────────────────────────
 const changelogState = {
   commits: null,
+  tags: null,
   lastFetched: null,
   error: null
 };
 
 async function fetchChangelog() {
   try {
-    const response = await fetch(
-      `https://api.github.com/repos/${GITHUB_REPO}/commits?per_page=50`,
-      { headers: { 'User-Agent': 'claude-pm-panel' } }
-    );
-    if (!response.ok) {
-      changelogState.error = `GitHub API returned ${response.status}`;
+    const headers = { 'User-Agent': 'claude-pm-panel' };
+    const [commitsRes, tagsRes] = await Promise.all([
+      fetch(`https://api.github.com/repos/${GITHUB_REPO}/commits?per_page=50`, { headers }),
+      fetch(`https://api.github.com/repos/${GITHUB_REPO}/tags?per_page=50`, { headers })
+    ]);
+
+    if (!commitsRes.ok) {
+      changelogState.error = `GitHub API returned ${commitsRes.status}`;
       return;
     }
-    const data = await response.json();
-    changelogState.commits = data.map((c) => ({
+
+    const commitsData = await commitsRes.json();
+    const tagsData = tagsRes.ok ? await tagsRes.json() : [];
+
+    changelogState.commits = commitsData.map((c) => ({
       sha: c.sha.slice(0, 7),
+      fullSha: c.sha,
       message: c.commit.message,
       date: c.commit.committer.date,
       author: c.commit.author.name,
       url: c.html_url
     }));
+
+    changelogState.tags = tagsData.map((t) => ({
+      name: t.name.replace(/^v/, ''),
+      sha: t.commit.sha
+    }));
+
     changelogState.lastFetched = new Date().toISOString();
     changelogState.error = null;
   } catch (err) {
@@ -1770,7 +1783,7 @@ app.get('/api/changelog', async (_req, res) => {
     return res.status(502).json({ error: changelogState.error });
   }
 
-  res.json({ commits: changelogState.commits || [], error: changelogState.error || null });
+  res.json({ commits: changelogState.commits || [], tags: changelogState.tags || [], error: changelogState.error || null });
 });
 
 // Protect all /api/* routes (except /api/auth/* which handle their own auth)
