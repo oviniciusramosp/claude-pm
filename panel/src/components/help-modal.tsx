@@ -1,6 +1,6 @@
 // panel/src/components/help-modal.tsx
 
-import { BookOpen01, Columns03, GitCommit, Play, Settings01, TerminalBrowser, X } from '@untitledui/icons';
+import { Bell01, BookOpen01, Columns03, GitCommit, Play, Settings01, TerminalBrowser, X } from '@untitledui/icons';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
 import { handleModalKeyDown } from '@/utils/modal-keyboard';
@@ -60,6 +60,18 @@ const SECTIONS: Section[] = [
     items: [
       'View recent commits and diffs in your working directory.',
       'Click any commit to see full details and changed files.',
+    ],
+  },
+  {
+    icon: Bell01,
+    title: 'Notifications',
+    color: 'text-yellow-500',
+    items: [
+      'Open "Notifications" in the sidebar to configure alerts for task completion, epic completion, and errors.',
+      'Browser notifications appear even when the tab is in the background — grant permission once and they work automatically.',
+      'Sound alerts play directly in the tab using generated tones (no files needed): an ascending chime for tasks, a four-note fanfare for epics, and a descending buzz for errors.',
+      'Each event type has its own toggle so you can mix and match. Use the "Preview" button to hear a sound before enabling it.',
+      'Volume and all toggles are saved in the browser and persist across sessions.',
     ],
   },
 ];
