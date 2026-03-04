@@ -174,12 +174,173 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     npxRepo: 'vercel-labs/agent-skills',
     npxSkill: 'vercel-composition-patterns',
     category: 'Architecture'
+  },
+  // iOS/Swift skills — AvdLee
+  {
+    id: 'swiftui-expert-skill',
+    name: 'SwiftUI Expert',
+    description: 'State management, view composition, performance, and iOS 26+ Liquid Glass adoption.',
+    url: 'https://github.com/AvdLee/SwiftUI-Agent-Skill',
+    icon: Columns03,
+    installPath: 'swiftui-expert-skill',
+    platforms: ['ios'],
+    installMethod: 'npx-skills',
+    npxRepo: 'https://github.com/AvdLee/SwiftUI-Agent-Skill',
+    npxSkill: 'swiftui-expert-skill',
+    category: 'UI'
+  },
+  {
+    id: 'swift-testing-expert',
+    name: 'Swift Testing Expert',
+    description: 'Modern Swift Testing APIs, XCTest migration, parameterized tests, and async parallel execution.',
+    url: 'https://github.com/AvdLee/Swift-Testing-Agent-Skill',
+    icon: Beaker01,
+    installPath: 'swift-testing-expert',
+    platforms: ['ios'],
+    installMethod: 'npx-skills',
+    npxRepo: 'https://github.com/AvdLee/Swift-Testing-Agent-Skill',
+    npxSkill: 'swift-testing-expert',
+    category: 'Testing'
+  },
+  {
+    id: 'swift-concurrency',
+    name: 'Swift Concurrency',
+    description: 'Safe async/await patterns, actor isolation, Sendable safety, and Swift 6+ migration guidance.',
+    url: 'https://github.com/AvdLee/Swift-Concurrency-Agent-Skill',
+    icon: Activity,
+    installPath: 'swift-concurrency',
+    platforms: ['ios'],
+    installMethod: 'npx-skills',
+    npxRepo: 'https://github.com/AvdLee/Swift-Concurrency-Agent-Skill',
+    npxSkill: 'swift-concurrency',
+    category: 'Concurrency'
+  },
+  // iOS/Swift skills — Dimillian
+  {
+    id: 'ios-debugger-agent',
+    name: 'iOS Debugger Agent',
+    description: 'Build, run, and debug iOS apps on simulators with UI interaction, log capture, and crash analysis.',
+    url: 'https://github.com/Dimillian/Skills',
+    icon: TerminalBrowser,
+    installPath: 'ios-debugger-agent',
+    platforms: ['ios'],
+    installMethod: 'npx-skills',
+    npxRepo: 'https://github.com/Dimillian/Skills',
+    npxSkill: 'ios-debugger-agent',
+    category: 'Tooling'
+  },
+  {
+    id: 'swiftui-liquid-glass',
+    name: 'SwiftUI Liquid Glass',
+    description: 'Implement native Liquid Glass API in SwiftUI interfaces for iOS 26+.',
+    url: 'https://github.com/Dimillian/Skills',
+    icon: Palette,
+    installPath: 'swiftui-liquid-glass',
+    platforms: ['ios'],
+    installMethod: 'npx-skills',
+    npxRepo: 'https://github.com/Dimillian/Skills',
+    npxSkill: 'swiftui-liquid-glass',
+    category: 'UI'
+  },
+  {
+    id: 'swiftui-ui-patterns',
+    name: 'SwiftUI UI Patterns',
+    description: 'View composition, state ownership, and component selection guidance for SwiftUI apps.',
+    url: 'https://github.com/Dimillian/Skills',
+    icon: LayersThree01,
+    installPath: 'swiftui-ui-patterns',
+    platforms: ['ios'],
+    installMethod: 'npx-skills',
+    npxRepo: 'https://github.com/Dimillian/Skills',
+    npxSkill: 'swiftui-ui-patterns',
+    category: 'Patterns'
+  },
+  {
+    id: 'swiftui-view-refactor',
+    name: 'SwiftUI View Refactor',
+    description: 'Standardize view structure, enforce MVVM patterns, and improve dependency injection in SwiftUI.',
+    url: 'https://github.com/Dimillian/Skills',
+    icon: RefreshCw01,
+    installPath: 'swiftui-view-refactor',
+    platforms: ['ios'],
+    installMethod: 'npx-skills',
+    npxRepo: 'https://github.com/Dimillian/Skills',
+    npxSkill: 'swiftui-view-refactor',
+    category: 'Patterns'
+  },
+  {
+    id: 'swiftui-performance-audit',
+    name: 'SwiftUI Performance Audit',
+    description: 'Identify and remediate SwiftUI rendering bottlenecks, redundant updates, and layout issues.',
+    url: 'https://github.com/Dimillian/Skills',
+    icon: CpuChip02,
+    installPath: 'swiftui-performance-audit',
+    platforms: ['ios'],
+    installMethod: 'npx-skills',
+    npxRepo: 'https://github.com/Dimillian/Skills',
+    npxSkill: 'swiftui-performance-audit',
+    category: 'Performance'
+  },
+  {
+    id: 'app-store-changelog',
+    name: 'App Store Changelog',
+    description: 'Generate user-facing App Store release notes from git history following Apple guidelines.',
+    url: 'https://github.com/Dimillian/Skills',
+    icon: File03,
+    installPath: 'app-store-changelog',
+    platforms: ['ios'],
+    installMethod: 'npx-skills',
+    npxRepo: 'https://github.com/Dimillian/Skills',
+    npxSkill: 'app-store-changelog',
+    category: 'Tooling'
+  },
+  {
+    id: 'swift-concurrency-expert',
+    name: 'Swift Concurrency Expert',
+    description: 'Deep review and fixes for Swift 6.2+ concurrency, actor isolation, and data-race safety.',
+    url: 'https://github.com/Dimillian/Skills',
+    icon: Activity,
+    installPath: 'swift-concurrency-expert',
+    platforms: ['ios'],
+    installMethod: 'npx-skills',
+    npxRepo: 'https://github.com/Dimillian/Skills',
+    npxSkill: 'swift-concurrency-expert',
+    category: 'Concurrency'
+  },
+  // macOS skills — Dimillian
+  {
+    id: 'macos-spm-app-packaging',
+    name: 'macOS SPM Packaging',
+    description: 'Scaffold and package macOS SwiftPM apps without Xcode project files.',
+    url: 'https://github.com/Dimillian/Skills',
+    icon: Monitor01,
+    installPath: 'macos-spm-app-packaging',
+    platforms: ['macos'],
+    installMethod: 'npx-skills',
+    npxRepo: 'https://github.com/Dimillian/Skills',
+    npxSkill: 'macos-spm-app-packaging',
+    category: 'Tooling'
+  },
+  // React Web skills — Dimillian
+  {
+    id: 'react-component-performance',
+    name: 'React Component Performance',
+    description: 'Optimize React rendering, reduce unnecessary re-renders, and improve component efficiency.',
+    url: 'https://github.com/Dimillian/Skills',
+    icon: CpuChip02,
+    installPath: 'react-component-performance',
+    platforms: ['react-web'],
+    installMethod: 'npx-skills',
+    npxRepo: 'https://github.com/Dimillian/Skills',
+    npxSkill: 'react-component-performance',
+    category: 'Performance'
   }
 ];
 
 export const PLATFORM_PRESETS = [
   { value: '', label: 'None', description: 'No platform-specific instructions', icon: SlashCircle01 },
   { value: 'ios', label: 'iOS / iPadOS', description: 'Simulator management, xcodebuild flags, crash recovery', icon: Phone01 },
+  { value: 'macos', label: 'macOS', description: 'SwiftPM app packaging, AppKit patterns, and macOS-specific tooling', icon: Monitor01 },
   { value: 'react-native', label: 'React Native (Android / iOS)', description: 'Cross-platform mobile with Expo or bare React Native', icon: Atom01 },
   { value: 'android', label: 'Android', description: 'Android native development with Gradle and ADB tooling', icon: Monitor01, disabled: true, badge: { text: 'Soon', color: 'gray' } },
   { value: 'react-web', label: 'React Web', description: 'React web apps with Vite, Next.js, or Create React App', icon: Globe01 }
