@@ -50,6 +50,14 @@ export interface RecommendedSkill {
    *  git-clone covers all of them. */
   installPath?: string;
   platforms: string[]; // empty = available for all platforms
+  /** Install method. Defaults to 'git' (git clone). Use 'npx-skills' for
+   *  skills distributed via the skills.sh registry (npx skills add). */
+  installMethod?: 'git' | 'npx-skills';
+  /** For installMethod='npx-skills': the repo shorthand or URL passed to
+   *  `npx skills add`, e.g. 'vercel-labs/agent-skills'. */
+  npxRepo?: string;
+  /** For installMethod='npx-skills': the --skill flag value. */
+  npxSkill?: string;
 }
 
 export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
@@ -96,6 +104,18 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     icon: CpuChip02,
     installPath: 'callstack-agent-skills',
     platforms: ['react-native']
+  },
+  {
+    id: 'vercel-react-native-skills',
+    name: 'Vercel React Native',
+    description: 'React Native patterns and tooling from Vercel Labs — routing, data fetching, deployment, and performance.',
+    url: 'https://skills.sh/vercel-labs/agent-skills/vercel-react-native-skills',
+    icon: Monitor01,
+    installPath: 'vercel-react-native-skills',
+    platforms: ['react-native'],
+    installMethod: 'npx-skills',
+    npxRepo: 'vercel-labs/agent-skills',
+    npxSkill: 'vercel-react-native-skills'
   }
 ];
 

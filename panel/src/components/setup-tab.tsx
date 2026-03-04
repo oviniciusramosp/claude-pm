@@ -161,10 +161,20 @@ function RecommendedSkillsSection({
     const key = stateKey(skill);
     setStates((prev) => ({ ...prev, [key]: 'loading' as SkillInstallState }));
     try {
+      const body: Record<string, string> = {
+        url: skill.url,
+        installPath: skill.installPath ?? skill.id,
+        scope
+      };
+      if (skill.installMethod === 'npx-skills') {
+        body.installMethod = 'npx-skills';
+        if (skill.npxRepo) body.npxRepo = skill.npxRepo;
+        if (skill.npxSkill) body.npxSkill = skill.npxSkill;
+      }
       const res = await fetch(`${apiBaseUrl}/api/skills/install`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: skill.url, installPath: skill.installPath ?? skill.id, scope })
+        body: JSON.stringify(body)
       });
       const data = await res.json();
       setStates((prev) => ({ ...prev, [key]: data.ok ? 'installed' : 'error' }));

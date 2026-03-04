@@ -1900,7 +1900,55 @@ app.get('/api/claude/cli-status', async (_req, res) => {
 });
 
 app.post('/api/skills/install', async (req, res) => {
-  const { url, installPath, scope } = req.body || {};
+  const { url, installPath, scope, installMethod, npxRepo, npxSkill } = req.body || {};
+
+  // --- npx skills add (skills.sh registry) ---
+  if (installMethod === 'npx-skills') {
+    if (!npxRepo || typeof npxRepo !== 'string') {
+      return res.status(400).json({ ok: false, error: 'Missing npxRepo' });
+    }
+
+    const displayName = npxSkill || installPath || npxRepo;
+    const isGlobal = scope !== 'local';
+
+    let cwd = process.cwd();
+    if (!isGlobal) {
+      const env = await readEnvPairs();
+      const workdir = env.CLAUDE_WORKDIR;
+      if (!workdir) {
+        return res.json({ ok: false, error: 'CLAUDE_WORKDIR is not configured. Set it in Setup first.' });
+      }
+      cwd = workdir;
+    }
+
+    const args = ['skills', 'add', npxRepo];
+    if (npxSkill) args.push('--skill', npxSkill);
+    if (isGlobal) args.push('--global');
+    args.push('-y');
+
+    const result = await new Promise((resolve) => {
+      const child = spawn('npx', args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        cwd
+      });
+      let stderr = '';
+      let stdout = '';
+      child.stdout.on('data', (d) => { stdout += String(d); });
+      child.stderr.on('data', (d) => { stderr += String(d); });
+      child.on('close', (code) => resolve({ code, stderr, stdout }));
+      child.on('error', (err) => resolve({ code: 1, stderr: err.message, stdout: '' }));
+    });
+
+    if (result.code !== 0) {
+      pushLog('error', LOG_SOURCE.panel, `Failed to install skill "${displayName}"`, { stderr: result.stderr, stdout: result.stdout });
+      return res.json({ ok: false, error: result.stderr || 'npx skills add failed' });
+    }
+
+    pushLog('success', LOG_SOURCE.panel, `Skill installed: ${displayName}`);
+    return res.json({ ok: true });
+  }
+
+  // --- git clone ---
   if (!url || typeof url !== 'string') {
     return res.status(400).json({ ok: false, error: 'Missing url' });
   }
