@@ -19,6 +19,7 @@ import {
   Monitor01,
   Phone01,
   PlayCircle,
+  RefreshCw01,
   Server01,
   Settings01,
   SlashCircle01,
@@ -43,6 +44,7 @@ export interface RecommendedSkill {
   name: string;
   description: string;
   url: string;
+  icon: (props: { className?: string }) => unknown;
   /** Directory name under ~/.claude/skills/ to clone into. Defaults to id.
    *  Skills that share the same repo use the same installPath so a single
    *  git-clone covers all of them. */
@@ -56,6 +58,7 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     name: 'UI/UX Pro Max',
     description: 'Advanced UI/UX design patterns and best practices for modern interfaces.',
     url: 'https://github.com/nextlevelbuilder/ui-ux-pro-max-skill',
+    icon: Columns03,
     platforms: []
   },
   {
@@ -63,6 +66,7 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     name: 'Expo App Design',
     description: 'Build native UIs with Expo Router, DOM components, SwiftUI bridges, and Jetpack Compose.',
     url: 'https://github.com/expo/skills',
+    icon: Phone01,
     installPath: 'expo-skills',
     platforms: ['react-native']
   },
@@ -71,6 +75,7 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     name: 'Upgrading Expo',
     description: 'Step-by-step guidance for upgrading Expo SDK versions and resolving breaking changes.',
     url: 'https://github.com/expo/skills',
+    icon: RefreshCw01,
     installPath: 'expo-skills',
     platforms: ['react-native']
   },
@@ -79,6 +84,7 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     name: 'Expo Deployment',
     description: 'Deploy Expo apps to the App Store and Play Store with EAS Build and EAS Submit.',
     url: 'https://github.com/expo/skills',
+    icon: Globe01,
     installPath: 'expo-skills',
     platforms: ['react-native']
   }

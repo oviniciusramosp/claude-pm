@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   AlertCircle,
-  Atom01,
   CheckCircle,
   Eye,
   EyeOff,
@@ -177,6 +176,22 @@ function RecommendedSkillsSection({
     }
   };
 
+  // Deduplicate by installPath so skills sharing a repo only trigger one clone.
+  const uniqueToInstall = relevantSkills.filter((skill, idx, arr) => {
+    const path = skill.installPath ?? skill.id;
+    return arr.findIndex((s) => (s.installPath ?? s.id) === path) === idx;
+  });
+
+  const installAll = async () => {
+    for (const skill of uniqueToInstall) {
+      const state = states[stateKey(skill)] || 'idle';
+      if (state !== 'installed') await install(skill);
+    }
+  };
+
+  const anyLoading = uniqueToInstall.some((s) => (states[stateKey(s)] || 'idle') === 'loading');
+  const allInstalled = uniqueToInstall.every((s) => (states[stateKey(s)] || 'idle') === 'installed');
+
   const platformLabel = PLATFORM_PRESETS.find((p) => p.value === platform)?.label;
   const description = platformLabel
     ? `Skills recommended for ${platformLabel}.`
@@ -197,23 +212,37 @@ function RecommendedSkillsSection({
           <p className="m-0 text-sm text-tertiary">{description}</p>
         </div>
 
-        {/* Scope toggle */}
-        <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-secondary p-0.5">
-          {(['global', 'local'] as InstallScope[]).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setScope(s)}
-              className={cx(
-                'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
-                scope === s
-                  ? 'bg-primary text-primary shadow-xs'
-                  : 'text-tertiary hover:text-secondary'
-              )}
-            >
-              {s === 'global' ? 'Global' : 'Local'}
-            </button>
-          ))}
+        <div className="flex shrink-0 items-center gap-2">
+          {/* Install All */}
+          <Button
+            size="sm"
+            color={allInstalled ? 'secondary' : 'primary'}
+            isDisabled={anyLoading || allInstalled}
+            isLoading={anyLoading}
+            iconLeading={allInstalled ? CheckCircle : undefined}
+            onPress={installAll}
+          >
+            {allInstalled ? 'All Installed' : 'Install All'}
+          </Button>
+
+          {/* Scope toggle */}
+          <div className="flex items-center gap-0.5 rounded-lg bg-secondary p-0.5">
+            {(['global', 'local'] as InstallScope[]).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setScope(s)}
+                className={cx(
+                  'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                  scope === s
+                    ? 'bg-primary text-primary shadow-xs'
+                    : 'text-tertiary hover:text-secondary'
+                )}
+              >
+                {s === 'global' ? 'Global' : 'Local'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -229,7 +258,7 @@ function RecommendedSkillsSection({
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
                   <div className="mt-0.5 shrink-0 flex size-6 items-center justify-center rounded-full bg-quaternary">
-                    <Icon icon={Atom01} className="size-3.5 text-fg-quaternary" />
+                    <Icon icon={skill.icon as Parameters<typeof Icon>[0]['icon']} className="size-3.5 text-fg-quaternary" />
                   </div>
                   <div className="min-w-0 flex-1 space-y-0.5">
                     <h4 className="m-0 text-sm font-semibold text-primary">{skill.name}</h4>
