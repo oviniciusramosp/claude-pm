@@ -87,6 +87,15 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     icon: Globe01,
     installPath: 'expo-skills',
     platforms: ['react-native']
+  },
+  {
+    id: 'react-native-best-practices',
+    name: 'React Native Best Practices',
+    description: 'Performance optimization guidelines for FPS, TTI, bundle size, memory leaks, re-renders, and animations.',
+    url: 'https://github.com/callstackincubator/agent-skills',
+    icon: CpuChip02,
+    installPath: 'callstack-agent-skills',
+    platforms: ['react-native']
   }
 ];
 
