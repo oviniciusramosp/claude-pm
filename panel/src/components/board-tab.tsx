@@ -1,8 +1,10 @@
 // panel/src/components/board-tab.tsx
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+// @ts-ignore — react-dom is installed but @types/react-dom is not
+import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
-import { CheckCircle, ChevronDown, Columns03, CpuChip01, Folder, FolderPlus, Lightbulb02, Plus, RefreshCw01, Stars01, Target02, Tool01, Users01 } from '@untitledui/icons';
+import { AlertCircle, CheckCircle, ChevronDown, Columns03, CpuChip01, Folder, FolderPlus, Lightbulb02, Plus, RefreshCw01, Stars01, Target02, Tool01, Users01 } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
 import { Tooltip, TooltipTrigger } from './base/tooltip/tooltip';
 import { cx } from '@/utils/cx';
@@ -287,6 +289,56 @@ const TASK_FIX_OPTIONS = [
   { key: 'acs', label: 'Verify ACs', description: 'Verify ACs against codebase', icon: Target02 },
 ] as const;
 
+// ── Shared portal dropdown logic ─────────────────────────────────────
+// Module-level registry so any open dropdown closes when another opens.
+const openDropdownClosers = new Set<() => void>();
+
+function usePortalDropdown() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState(null as { top: number; right: number } | null);
+  const triggerRef = useRef(null as HTMLDivElement | null);
+  const menuRef = useRef(null as HTMLDivElement | null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const close = () => setIsOpen(false);
+    openDropdownClosers.add(close);
+
+    function handleMouseDown(event: any) {
+      const inMenu = menuRef.current?.contains(event.target) ?? false;
+      const inTrigger = triggerRef.current?.contains(event.target) ?? false;
+      if (!inMenu && !inTrigger) setIsOpen(false);
+    }
+    function handleScroll() { setIsOpen(false); }
+
+    document.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('scroll', handleScroll, true);
+    return () => {
+      openDropdownClosers.delete(close);
+      document.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('scroll', handleScroll, true);
+    };
+  }, [isOpen]);
+
+  function toggle() {
+    if (isOpen) {
+      setIsOpen(false);
+      return;
+    }
+    // Close all other open dropdowns before opening this one
+    openDropdownClosers.forEach((close) => close());
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    }
+    setIsOpen(true);
+  }
+
+  return { isOpen, setIsOpen, menuPos, triggerRef, menuRef, toggle };
+}
+// ─────────────────────────────────────────────────────────────────────
+
 function EpicFixDropdown({
   epicId,
   onFix,
@@ -300,49 +352,23 @@ function EpicFixDropdown({
   isAnyOperationRunning: boolean;
   currentFixType: string | null;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const { isOpen, setIsOpen, menuPos, triggerRef, menuRef, toggle } = usePortalDropdown();
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [isOpen]);
+  function handleToggle() {
+    if (isAnyOperationRunning) return;
+    toggle();
+  }
 
   const runningLabel = EPIC_FIX_OPTIONS.find((o) => o.key === currentFixType)?.label || currentFixType;
 
-  return (
-    <div className="relative" ref={dropdownRef}>
-      <Tooltip
-        title={isFixing ? `${runningLabel}...` : 'Fix tasks'}
-        description={isFixing ? 'Fix operation in progress' : 'Open fix options menu'}
-      >
-        <TooltipTrigger
-          onPress={() => { if (!isAnyOperationRunning) setIsOpen(!isOpen); }}
-          isDisabled={isAnyOperationRunning}
-          className={cx(
-            'flex h-6 items-center gap-0.5 rounded-sm px-2 text-xs transition',
-            isFixing
-              ? 'text-utility-warning-600 bg-utility-warning-50'
-              : isAnyOperationRunning
-                ? 'text-quaternary cursor-not-allowed'
-                : 'text-tertiary hover:text-utility-warning-600 hover:bg-utility-warning-50'
-          )}
+  const menu: ReactNode = isOpen && menuPos
+    ? createPortal(
+        <div
+          ref={menuRef}
+          style={{ position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 9999 }}
+          className="w-56 rounded-lg border border-secondary bg-primary shadow-lg py-1"
+          onClick={(e: any) => e.stopPropagation()}
         >
-          {isFixing
-            ? <RefreshCw01 className="size-3 animate-spin" />
-            : <Tool01 className="size-3" />}
-          <ChevronDown className={cx('size-2.5 transition-transform', isOpen && 'rotate-180')} />
-        </TooltipTrigger>
-      </Tooltip>
-      {isOpen && (
-        <div className="absolute top-full right-0 z-50 mt-1 w-56 rounded-lg border border-secondary bg-primary shadow-lg py-1">
           {EPIC_FIX_OPTIONS.map((option) => {
             const isRunning = isFixing && currentFixType === option.key;
             const OptionIcon = option.icon;
@@ -350,24 +376,16 @@ function EpicFixDropdown({
               <button
                 key={option.key}
                 type="button"
-                onClick={(e: React.MouseEvent) => {
-                  e.stopPropagation();
-                  onFix(epicId, option.key);
-                  setIsOpen(false);
-                }}
+                onClick={(e: any) => { e.stopPropagation(); onFix(epicId, option.key); setIsOpen(false); }}
                 disabled={isFixing}
                 className={cx(
                   'w-full flex items-start gap-2.5 px-3 py-2 text-left transition',
-                  isFixing && !isRunning
-                    ? 'cursor-not-allowed opacity-50'
-                    : 'hover:bg-primary_hover',
+                  isFixing && !isRunning ? 'cursor-not-allowed opacity-50' : 'hover:bg-primary_hover',
                   isRunning && 'bg-utility-warning-50'
                 )}
               >
                 <div className="mt-0.5 shrink-0">
-                  {isRunning
-                    ? <RefreshCw01 className="size-3.5 text-utility-warning-600 animate-spin" />
-                    : <OptionIcon className="size-3.5 text-tertiary" />}
+                  {isRunning ? <RefreshCw01 className="size-3.5 text-utility-warning-600 animate-spin" /> : <OptionIcon className="size-3.5 text-tertiary" />}
                 </div>
                 <div className="min-w-0">
                   <div className="text-xs font-medium text-primary">{option.label}</div>
@@ -376,8 +394,35 @@ function EpicFixDropdown({
               </button>
             );
           })}
-        </div>
-      )}
+        </div>,
+        document.body
+      )
+    : null;
+
+  return (
+    <div ref={triggerRef} onClick={(e: any) => e.stopPropagation()}>
+      <Tooltip
+        title={isFixing ? `${runningLabel}...` : 'Fix tasks'}
+        description={isFixing ? 'Fix operation in progress' : 'Open fix options menu'}
+        children={
+          <TooltipTrigger
+            onPress={handleToggle}
+            isDisabled={isAnyOperationRunning}
+            className={cx(
+              'flex h-6 items-center gap-0.5 rounded-sm px-2 text-xs transition',
+              isFixing
+                ? 'text-utility-warning-600 bg-utility-warning-50'
+                : isAnyOperationRunning
+                  ? 'text-quaternary cursor-not-allowed'
+                  : 'text-tertiary hover:text-utility-warning-600 hover:bg-utility-warning-50'
+            )}
+          >
+            {isFixing ? <RefreshCw01 className="size-3 animate-spin" /> : <Tool01 className="size-3" />}
+            <ChevronDown className={cx('size-2.5 transition-transform', isOpen && 'rotate-180')} />
+          </TooltipTrigger>
+        }
+      />
+      {menu}
     </div>
   );
 }
@@ -397,31 +442,61 @@ function TaskFixDropdown({
   isAnyOperationRunning: boolean;
   currentFixType: string | null;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const { isOpen, setIsOpen, menuPos, triggerRef, menuRef, toggle } = usePortalDropdown();
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [isOpen]);
+  function handleToggle() {
+    if (isAnyOperationRunning) return;
+    toggle();
+  }
 
   const runningLabel = TASK_FIX_OPTIONS.find((o) => o.key === currentFixType)?.label || currentFixType;
 
+  const menu: ReactNode = isOpen && menuPos
+    ? createPortal(
+        <div
+          ref={menuRef}
+          style={{ position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 9999 }}
+          className="w-56 rounded-lg border border-secondary bg-primary shadow-lg py-1"
+          onClick={(e: any) => e.stopPropagation()}
+        >
+          {TASK_FIX_OPTIONS.map((option) => {
+            const isRunning = isFixing && currentFixType === option.key;
+            const OptionIcon = option.icon;
+            return (
+              <button
+                key={option.key}
+                type="button"
+                onClick={(e: any) => { e.stopPropagation(); onFix(taskId, option.key); setIsOpen(false); }}
+                disabled={isFixing}
+                className={cx(
+                  'w-full flex items-start gap-2.5 px-3 py-2 text-left transition',
+                  isFixing && !isRunning ? 'cursor-not-allowed opacity-50' : 'hover:bg-primary_hover',
+                  isRunning && 'bg-utility-warning-50'
+                )}
+              >
+                <div className="mt-0.5 shrink-0">
+                  {isRunning ? <RefreshCw01 className="size-3.5 text-utility-warning-600 animate-spin" /> : <OptionIcon className="size-3.5 text-tertiary" />}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-primary">{option.label}</div>
+                  <div className="text-[10px] text-tertiary leading-tight">{option.description}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>,
+        document.body
+      )
+    : null;
+
   return (
-    <div className="relative" ref={dropdownRef} onClick={(e: any) => e.stopPropagation()}>
+    <div ref={triggerRef} onClick={(e: any) => e.stopPropagation()}>
       <Tooltip
         title={isFixing ? `${runningLabel}...` : 'Fix task'}
         description={isFixing ? 'Fix operation in progress' : 'Open fix options menu'}
       >
         <TooltipTrigger
-          onPress={() => { if (!isAnyOperationRunning) setIsOpen(!isOpen); }}
+          onPress={handleToggle}
           isDisabled={isAnyOperationRunning}
           className={cx(
             'flex h-6 items-center gap-0.5 rounded-sm px-2 text-xs transition',
@@ -433,49 +508,11 @@ function TaskFixDropdown({
             isFixing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
           )}
         >
-          {isFixing
-            ? <RefreshCw01 className="size-3 animate-spin" />
-            : <Tool01 className="size-3" />}
+          {isFixing ? <RefreshCw01 className="size-3 animate-spin" /> : <Tool01 className="size-3" />}
           <ChevronDown className={cx('size-2.5 transition-transform', isOpen && 'rotate-180')} />
         </TooltipTrigger>
       </Tooltip>
-      {isOpen && (
-        <div className="absolute top-full right-0 z-50 mt-1 w-56 rounded-lg border border-secondary bg-primary shadow-lg py-1">
-          {TASK_FIX_OPTIONS.map((option) => {
-            const isRunning = isFixing && currentFixType === option.key;
-            const OptionIcon = option.icon;
-            return (
-              <button
-                key={option.key}
-                type="button"
-                onClick={(e: any) => {
-                  e.stopPropagation();
-                  onFix(taskId, option.key);
-                  setIsOpen(false);
-                }}
-                disabled={isFixing}
-                className={cx(
-                  'w-full flex items-start gap-2.5 px-3 py-2 text-left transition',
-                  isFixing && !isRunning
-                    ? 'cursor-not-allowed opacity-50'
-                    : 'hover:bg-primary_hover',
-                  isRunning && 'bg-utility-warning-50'
-                )}
-              >
-                <div className="mt-0.5 shrink-0">
-                  {isRunning
-                    ? <RefreshCw01 className="size-3.5 text-utility-warning-600 animate-spin" />
-                    : <OptionIcon className="size-3.5 text-tertiary" />}
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-medium text-primary">{option.label}</div>
-                  <div className="text-[10px] text-tertiary leading-tight">{option.description}</div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {menu}
     </div>
   );
 }
@@ -547,6 +584,15 @@ function BoardCard({ task, epic, allTasks, onClick, onFix, fixStatus, allFixStat
       {progressTotal > 0 && (
         <div className="absolute top-4 right-4">
           <AcDonut done={progressDone} total={progressTotal} label={epic ? 'tasks' : 'ACs'} />
+        </div>
+      )}
+      {!epic && progressTotal === 0 && (
+        <div className="absolute top-4 right-4">
+          <Tooltip title="No Acceptance Criteria" description="This task has no ACs defined. Add checkboxes (- [ ] ...) to the task body." placement="top">
+            <TooltipTrigger className="shrink-0 cursor-default">
+              <Icon icon={AlertCircle} className="size-5 text-utility-warning-500" />
+            </TooltipTrigger>
+          </Tooltip>
         </div>
       )}
 
