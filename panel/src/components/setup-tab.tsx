@@ -140,23 +140,20 @@ type SkillInstallState = 'idle' | 'loading' | 'installed' | 'error';
 type InstallScope = 'global' | 'local';
 
 function RecommendedSkillsSection({
+  stepNumber,
+  skills,
   platform,
   apiBaseUrl,
   workdir
 }: {
+  stepNumber: number;
+  skills: RecommendedSkill[];
   platform: string;
   apiBaseUrl: string;
   workdir: string;
 }) {
-  const relevantSkills = RECOMMENDED_SKILLS.filter(
-    (s) => s.platforms.length === 0 || s.platforms.includes(platform)
-  );
-
   const [scope, setScope] = useState<InstallScope>('global');
-  // State is keyed by "scope:installPath" so each scope tracks install state independently.
   const [states, setStates] = useState<Record<string, SkillInstallState>>({});
-
-  if (relevantSkills.length === 0) return null;
 
   const stateKey = (skill: RecommendedSkill) => `${scope}:${skill.installPath ?? skill.id}`;
 
@@ -176,16 +173,14 @@ function RecommendedSkillsSection({
     }
   };
 
-  // Deduplicate by installPath so skills sharing a repo only trigger one clone.
-  const uniqueToInstall = relevantSkills.filter((skill, idx, arr) => {
-    const path = skill.installPath ?? skill.id;
-    return arr.findIndex((s) => (s.installPath ?? s.id) === path) === idx;
+  const uniqueToInstall = skills.filter((skill, idx, arr) => {
+    const p = skill.installPath ?? skill.id;
+    return arr.findIndex((s) => (s.installPath ?? s.id) === p) === idx;
   });
 
   const installAll = async () => {
     for (const skill of uniqueToInstall) {
-      const state = states[stateKey(skill)] || 'idle';
-      if (state !== 'installed') await install(skill);
+      if ((states[stateKey(skill)] || 'idle') !== 'installed') await install(skill);
     }
   };
 
@@ -197,24 +192,26 @@ function RecommendedSkillsSection({
     ? `Skills recommended for ${platformLabel}.`
     : 'Skills recommended for your setup.';
 
-  const localPath = workdir ? `${workdir}/.claude/skills/` : '.claude/skills/';
-  const globalPath = '~/.claude/skills/';
-  const installHint = scope === 'global' ? globalPath : localPath;
+  const installHint = scope === 'global'
+    ? '~/.claude/skills/'
+    : (workdir ? `${workdir}/.claude/skills/` : '.claude/skills/');
 
   return (
-    <div
-      className="bg-secondary_hover dark:bg-primary space-y-4 p-3"
-      style={{ borderRadius: 'var(--board-col-radius)' }}
-    >
-      <div className="space-y-1 pt-2 px-3 sm:px-4">
-        <h3 className="m-0 text-md font-semibold text-primary">Recommended Skills</h3>
-        <p className="m-0 text-sm text-tertiary">{description}</p>
+    <div className="rounded-lg border border-secondary bg-primary p-3 sm:p-4">
+      {/* Step header — matches the pattern of all other numbered cards */}
+      <div className="flex items-start gap-2 sm:gap-3">
+        <div className="mt-0.5 shrink-0 flex size-6 items-center justify-center rounded-full bg-brand-600">
+          <span className="text-xs font-bold text-white">{stepNumber}</span>
+        </div>
+        <div className="min-w-0 flex-1 space-y-1">
+          <h4 className="m-0 text-sm font-semibold text-primary">Recommended Skills</h4>
+          <p className="m-0 text-sm text-tertiary">{description}</p>
+        </div>
       </div>
 
       {/* Scope toggle + path + Install All */}
-      <div className="flex items-center justify-between gap-3 px-3 sm:px-4">
+      <div className="mt-4 sm:ml-9 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
-          {/* Scope toggle */}
           <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-secondary p-0.5">
             {(['global', 'local'] as InstallScope[]).map((s) => (
               <button
@@ -223,9 +220,7 @@ function RecommendedSkillsSection({
                 onClick={() => setScope(s)}
                 className={cx(
                   'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
-                  scope === s
-                    ? 'bg-primary text-primary shadow-xs'
-                    : 'text-tertiary hover:text-secondary'
+                  scope === s ? 'bg-primary text-primary shadow-xs' : 'text-tertiary hover:text-secondary'
                 )}
               >
                 {s === 'global' ? 'Global' : 'Local'}
@@ -235,7 +230,6 @@ function RecommendedSkillsSection({
           <span className="truncate text-xs text-quaternary font-mono">{installHint}</span>
         </div>
 
-        {/* Install All */}
         <Button
           size="sm"
           color={allInstalled ? 'secondary' : 'primary'}
@@ -249,34 +243,32 @@ function RecommendedSkillsSection({
         </Button>
       </div>
 
-      <div className="space-y-3">
-        {relevantSkills.map((skill) => {
+      {/* Skills table */}
+      <div className="mt-3 sm:ml-9 divide-y divide-secondary rounded-lg border border-secondary overflow-hidden">
+        {skills.map((skill) => {
           const state = states[stateKey(skill)] || 'idle';
           return (
-            <div key={skill.id} className="rounded-lg border border-secondary bg-primary p-3 sm:p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
-                  <div className="mt-0.5 shrink-0 flex size-6 items-center justify-center rounded-full bg-quaternary">
-                    <Icon icon={skill.icon as Parameters<typeof Icon>[0]['icon']} className="size-3.5 text-fg-quaternary" />
-                  </div>
-                  <div className="min-w-0 flex-1 space-y-0.5">
-                    <h4 className="m-0 text-sm font-semibold text-primary">{skill.name}</h4>
-                    <p className="m-0 text-sm text-tertiary">{skill.description}</p>
-                  </div>
+            <div key={skill.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+              <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                <div className="shrink-0 flex size-6 items-center justify-center rounded-full bg-quaternary">
+                  <Icon icon={skill.icon as Parameters<typeof Icon>[0]['icon']} className="size-3.5 text-fg-quaternary" />
                 </div>
-
-                <Button
-                  size="sm"
-                  color={state === 'installed' ? 'secondary' : state === 'error' ? 'secondary-destructive' : 'secondary'}
-                  isDisabled={state === 'loading' || state === 'installed'}
-                  isLoading={state === 'loading'}
-                  iconLeading={state === 'installed' ? CheckCircle : undefined}
-                  className="shrink-0"
-                  onPress={() => install(skill)}
-                >
-                  {state === 'installed' ? 'Installed' : state === 'error' ? 'Retry' : 'Install'}
-                </Button>
+                <div className="min-w-0 flex-1">
+                  <p className="m-0 text-sm font-semibold text-primary">{skill.name}</p>
+                  <p className="m-0 text-xs text-tertiary">{skill.description}</p>
+                </div>
               </div>
+              <Button
+                size="sm"
+                color={state === 'installed' ? 'secondary' : state === 'error' ? 'secondary-destructive' : 'secondary'}
+                isDisabled={state === 'loading' || state === 'installed'}
+                isLoading={state === 'loading'}
+                iconLeading={state === 'installed' ? CheckCircle : undefined}
+                className="shrink-0"
+                onPress={() => install(skill)}
+              >
+                {state === 'installed' ? 'Installed' : state === 'error' ? 'Retry' : 'Install'}
+              </Button>
             </div>
           );
         })}
@@ -552,13 +544,24 @@ export function SetupTab({
                 </div>
               ) : null}
 
-              {section.key === 'platform' && (
-                <RecommendedSkillsSection
-                  platform={config['PLATFORM_PRESET'] || ''}
-                  apiBaseUrl={apiBaseUrl}
-                  workdir={config['CLAUDE_WORKDIR'] || ''}
-                />
-              )}
+              {section.key === 'platform' && (() => {
+                const platform = config['PLATFORM_PRESET'] || '';
+                const skills = RECOMMENDED_SKILLS.filter(
+                  (s) => s.platforms.length === 0 || s.platforms.includes(platform)
+                );
+                if (skills.length === 0) return null;
+                stepNumber += 1;
+                const n = stepNumber;
+                return (
+                  <RecommendedSkillsSection
+                    stepNumber={n}
+                    skills={skills}
+                    platform={platform}
+                    apiBaseUrl={apiBaseUrl}
+                    workdir={config['CLAUDE_WORKDIR'] || ''}
+                  />
+                );
+              })()}
 
               {section.toggleKeys.length > 0 ? (
                 <div className={cx('space-y-3', visibleTextKeys.length > 0 ? 'mt-1' : '')}>
