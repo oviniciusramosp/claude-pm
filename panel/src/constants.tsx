@@ -14,9 +14,11 @@ import {
   GitCommit,
   Globe01,
   InfoCircle,
+  LayersThree01,
   LockUnlocked01,
   MessageChatCircle,
   Monitor01,
+  Palette,
   Phone01,
   PlayCircle,
   RefreshCw01,
@@ -116,6 +118,42 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     installMethod: 'npx-skills',
     npxRepo: 'vercel-labs/agent-skills',
     npxSkill: 'vercel-react-native-skills'
+  },
+  {
+    id: 'web-design-guidelines',
+    name: 'Web Design Guidelines',
+    description: 'Design guidelines and visual best practices for modern React web applications from Vercel Labs.',
+    url: 'https://skills.sh/vercel-labs/agent-skills/web-design-guidelines',
+    icon: Palette,
+    installPath: 'web-design-guidelines',
+    platforms: ['react-web'],
+    installMethod: 'npx-skills',
+    npxRepo: 'vercel-labs/agent-skills',
+    npxSkill: 'web-design-guidelines'
+  },
+  {
+    id: 'vercel-react-best-practices',
+    name: 'Vercel React Best Practices',
+    description: 'React best practices from Vercel Labs — component design, performance, and scalable patterns.',
+    url: 'https://skills.sh/vercel-labs/agent-skills/vercel-react-best-practices',
+    icon: Atom01,
+    installPath: 'vercel-react-best-practices',
+    platforms: ['react-web'],
+    installMethod: 'npx-skills',
+    npxRepo: 'vercel-labs/agent-skills',
+    npxSkill: 'vercel-react-best-practices'
+  },
+  {
+    id: 'vercel-composition-patterns',
+    name: 'Vercel Composition Patterns',
+    description: 'Component composition patterns from Vercel Labs — Server Components, streaming, and data fetching.',
+    url: 'https://skills.sh/vercel-labs/agent-skills/vercel-composition-patterns',
+    icon: LayersThree01,
+    installPath: 'vercel-composition-patterns',
+    platforms: ['react-web'],
+    installMethod: 'npx-skills',
+    npxRepo: 'vercel-labs/agent-skills',
+    npxSkill: 'vercel-composition-patterns'
   }
 ];
 
@@ -124,7 +162,7 @@ export const PLATFORM_PRESETS = [
   { value: 'ios', label: 'iOS / iPadOS', description: 'Simulator management, xcodebuild flags, crash recovery', icon: Phone01 },
   { value: 'react-native', label: 'React Native (Android / iOS)', description: 'Cross-platform mobile with Expo or bare React Native', icon: Atom01 },
   { value: 'android', label: 'Android', description: 'Android native development with Gradle and ADB tooling', icon: Monitor01, disabled: true, badge: { text: 'Soon', color: 'gray' } },
-  { value: 'react-web', label: 'React Web', description: 'React web apps with Vite, Next.js, or Create React App', icon: Globe01, disabled: true, badge: { text: 'Soon', color: 'gray' } }
+  { value: 'react-web', label: 'React Web', description: 'React web apps with Vite, Next.js, or Create React App', icon: Globe01 }
 ];
 
 export const CLAUDE_DEFAULT_TASK_MODEL = 'claude-sonnet-4-5-20250929';
