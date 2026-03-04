@@ -154,6 +154,19 @@ function RecommendedSkillsSection({
 }) {
   const [scope, setScope] = useState<InstallScope>('global');
   const [states, setStates] = useState<Record<string, SkillInstallState>>({});
+  const [activeCategory, setActiveCategory] = useState<string>('all');
+
+  // Derive unique categories from the full skills list (stable order)
+  const categories = skills.reduce<{ value: string; count: number }[]>((acc, s) => {
+    const existing = acc.find((c) => c.value === s.category);
+    if (existing) existing.count += 1;
+    else acc.push({ value: s.category, count: 1 });
+    return acc;
+  }, []);
+
+  const filteredSkills = activeCategory === 'all'
+    ? skills
+    : skills.filter((s) => s.category === activeCategory);
 
   const stateKey = (skill: RecommendedSkill) => `${scope}:${skill.installPath ?? skill.id}`;
 
@@ -183,7 +196,7 @@ function RecommendedSkillsSection({
     }
   };
 
-  const uniqueToInstall = skills.filter((skill, idx, arr) => {
+  const uniqueToInstall = filteredSkills.filter((skill, idx, arr) => {
     const p = skill.installPath ?? skill.id;
     return arr.findIndex((s) => (s.installPath ?? s.id) === p) === idx;
   });
@@ -208,7 +221,7 @@ function RecommendedSkillsSection({
 
   return (
     <div className="rounded-lg border border-secondary bg-primary p-3 sm:p-4">
-      {/* Step header — matches the pattern of all other numbered cards */}
+      {/* Step header */}
       <div className="flex items-start gap-2 sm:gap-3">
         <div className="mt-0.5 shrink-0 flex size-6 items-center justify-center rounded-full bg-brand-600">
           <span className="text-xs font-bold text-white">{stepNumber}</span>
@@ -219,26 +232,62 @@ function RecommendedSkillsSection({
         </div>
       </div>
 
-      {/* Scope toggle + path + Install All */}
-      <div className="mt-4 sm:ml-9 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-secondary p-0.5">
-            {(['global', 'local'] as InstallScope[]).map((s) => (
+      {/* Scope toggle + path hint */}
+      <div className="mt-3 sm:ml-9 flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-secondary p-0.5">
+          {(['global', 'local'] as InstallScope[]).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setScope(s)}
+              className={cx(
+                'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                scope === s ? 'bg-primary text-primary shadow-xs' : 'text-tertiary hover:text-secondary'
+              )}
+            >
+              {s === 'global' ? 'Global' : 'Local'}
+            </button>
+          ))}
+        </div>
+        <span className="truncate text-xs text-quaternary font-mono">{installHint}</span>
+      </div>
+
+      <div className="mt-3 sm:ml-9 border-t border-secondary" />
+
+      {/* Category chips + Install All */}
+      <div className="mt-3 sm:ml-9 flex flex-wrap items-center gap-2">
+        {/* Category chips */}
+        {categories.length > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={() => setActiveCategory('all')}
+              className={cx(
+                'rounded-full px-2.5 py-1 text-xs font-medium transition-colors',
+                activeCategory === 'all'
+                  ? 'bg-brand-600 text-white'
+                  : 'bg-secondary text-tertiary hover:text-secondary'
+              )}
+            >
+              All <span className="opacity-70">{skills.length}</span>
+            </button>
+            {categories.map((cat) => (
               <button
-                key={s}
+                key={cat.value}
                 type="button"
-                onClick={() => setScope(s)}
+                onClick={() => setActiveCategory(cat.value)}
                 className={cx(
-                  'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
-                  scope === s ? 'bg-primary text-primary shadow-xs' : 'text-tertiary hover:text-secondary'
+                  'rounded-full px-2.5 py-1 text-xs font-medium transition-colors',
+                  activeCategory === cat.value
+                    ? 'bg-brand-600 text-white'
+                    : 'bg-secondary text-tertiary hover:text-secondary'
                 )}
               >
-                {s === 'global' ? 'Global' : 'Local'}
+                {cat.value} <span className="opacity-70">{cat.count}</span>
               </button>
             ))}
-          </div>
-          <span className="truncate text-xs text-quaternary font-mono">{installHint}</span>
-        </div>
+          </>
+        )}
 
         <Button
           size="sm"
@@ -246,7 +295,7 @@ function RecommendedSkillsSection({
           isDisabled={anyLoading || allInstalled}
           isLoading={anyLoading}
           iconLeading={allInstalled ? CheckCircle : undefined}
-          className="shrink-0"
+          className="ml-auto shrink-0"
           onPress={installAll}
         >
           {allInstalled ? 'All Installed' : 'Install All'}
@@ -254,8 +303,8 @@ function RecommendedSkillsSection({
       </div>
 
       {/* Skills table */}
-      <div className="mt-3 sm:ml-9 divide-y divide-secondary rounded-lg border border-secondary overflow-hidden">
-        {skills.map((skill) => {
+      <div className="mt-3 sm:ml-9 divide-y divide-secondary">
+        {filteredSkills.map((skill) => {
           const state = states[stateKey(skill)] || 'idle';
           return (
             <div key={skill.id} className="flex items-center justify-between gap-3 px-3 py-2.5">

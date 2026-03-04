@@ -60,6 +60,8 @@ export interface RecommendedSkill {
   npxRepo?: string;
   /** For installMethod='npx-skills': the --skill flag value. */
   npxSkill?: string;
+  /** Category shown in the filter chips, e.g. 'Design', 'Performance'. */
+  category: string;
 }
 
 export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
@@ -69,7 +71,8 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     description: 'Advanced UI/UX design patterns and best practices for modern interfaces.',
     url: 'https://github.com/nextlevelbuilder/ui-ux-pro-max-skill',
     icon: Columns03,
-    platforms: []
+    platforms: [],
+    category: 'Design'
   },
   {
     id: 'expo-app-design',
@@ -81,7 +84,8 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     platforms: ['react-native'],
     installMethod: 'npx-skills',
     npxRepo: 'expo/skills',
-    npxSkill: 'building-native-ui'
+    npxSkill: 'building-native-ui',
+    category: 'Design'
   },
   {
     id: 'upgrading-expo',
@@ -93,7 +97,8 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     platforms: ['react-native'],
     installMethod: 'npx-skills',
     npxRepo: 'expo/skills',
-    npxSkill: 'upgrading-expo'
+    npxSkill: 'upgrading-expo',
+    category: 'Tooling'
   },
   {
     id: 'expo-deployment',
@@ -105,7 +110,8 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     platforms: ['react-native'],
     installMethod: 'npx-skills',
     npxRepo: 'expo/skills',
-    npxSkill: 'expo-deployment'
+    npxSkill: 'expo-deployment',
+    category: 'Deployment'
   },
   {
     id: 'react-native-best-practices',
@@ -114,7 +120,8 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     url: 'https://github.com/callstackincubator/agent-skills',
     icon: CpuChip02,
     installPath: 'callstack-agent-skills',
-    platforms: ['react-native']
+    platforms: ['react-native'],
+    category: 'Performance'
   },
   {
     id: 'vercel-react-native-skills',
@@ -126,7 +133,8 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     platforms: ['react-native'],
     installMethod: 'npx-skills',
     npxRepo: 'vercel-labs/agent-skills',
-    npxSkill: 'vercel-react-native-skills'
+    npxSkill: 'vercel-react-native-skills',
+    category: 'Patterns'
   },
   {
     id: 'web-design-guidelines',
@@ -138,7 +146,8 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     platforms: ['react-web'],
     installMethod: 'npx-skills',
     npxRepo: 'vercel-labs/agent-skills',
-    npxSkill: 'web-design-guidelines'
+    npxSkill: 'web-design-guidelines',
+    category: 'Design'
   },
   {
     id: 'vercel-react-best-practices',
@@ -150,7 +159,8 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     platforms: ['react-web'],
     installMethod: 'npx-skills',
     npxRepo: 'vercel-labs/agent-skills',
-    npxSkill: 'vercel-react-best-practices'
+    npxSkill: 'vercel-react-best-practices',
+    category: 'Patterns'
   },
   {
     id: 'vercel-composition-patterns',
@@ -162,7 +172,8 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     platforms: ['react-web'],
     installMethod: 'npx-skills',
     npxRepo: 'vercel-labs/agent-skills',
-    npxSkill: 'vercel-composition-patterns'
+    npxSkill: 'vercel-composition-patterns',
+    category: 'Architecture'
   }
 ];
 
