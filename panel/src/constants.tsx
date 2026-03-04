@@ -75,28 +75,37 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     id: 'expo-app-design',
     name: 'Expo App Design',
     description: 'Build native UIs with Expo Router, DOM components, SwiftUI bridges, and Jetpack Compose.',
-    url: 'https://github.com/expo/skills',
+    url: 'https://skills.sh/expo/skills/building-native-ui',
     icon: Phone01,
-    installPath: 'expo-skills',
-    platforms: ['react-native']
+    installPath: 'building-native-ui',
+    platforms: ['react-native'],
+    installMethod: 'npx-skills',
+    npxRepo: 'expo/skills',
+    npxSkill: 'building-native-ui'
   },
   {
     id: 'upgrading-expo',
     name: 'Upgrading Expo',
     description: 'Step-by-step guidance for upgrading Expo SDK versions and resolving breaking changes.',
-    url: 'https://github.com/expo/skills',
+    url: 'https://skills.sh/expo/skills/upgrading-expo',
     icon: RefreshCw01,
-    installPath: 'expo-skills',
-    platforms: ['react-native']
+    installPath: 'upgrading-expo',
+    platforms: ['react-native'],
+    installMethod: 'npx-skills',
+    npxRepo: 'expo/skills',
+    npxSkill: 'upgrading-expo'
   },
   {
     id: 'expo-deployment',
     name: 'Expo Deployment',
     description: 'Deploy Expo apps to the App Store and Play Store with EAS Build and EAS Submit.',
-    url: 'https://github.com/expo/skills',
+    url: 'https://skills.sh/expo/skills/expo-deployment',
     icon: Globe01,
-    installPath: 'expo-skills',
-    platforms: ['react-native']
+    installPath: 'expo-deployment',
+    platforms: ['react-native'],
+    installMethod: 'npx-skills',
+    npxRepo: 'expo/skills',
+    npxSkill: 'expo-deployment'
   },
   {
     id: 'react-native-best-practices',
