@@ -1900,12 +1900,14 @@ app.get('/api/claude/cli-status', async (_req, res) => {
 });
 
 app.post('/api/skills/install', async (req, res) => {
-  const { url, id } = req.body || {};
+  const { url, installPath } = req.body || {};
   if (!url || typeof url !== 'string') {
     return res.status(400).json({ ok: false, error: 'Missing url' });
   }
 
-  const name = (id && typeof id === 'string') ? id : (url.split('/').pop() || 'skill');
+  const name = (installPath && typeof installPath === 'string')
+    ? installPath
+    : (url.split('/').pop() || 'skill');
   const skillsDir = path.join(os.homedir(), '.claude', 'skills');
   const targetDir = path.join(skillsDir, name);
 
@@ -1939,7 +1941,7 @@ app.post('/api/skills/install', async (req, res) => {
 });
 
 app.get('/api/skills/status', async (req, res) => {
-  const id = String(req.query.id || '');
+  const id = String(req.query.installPath || req.query.id || '');
   if (!id) return res.status(400).json({ installed: false });
 
   const targetDir = path.join(os.homedir(), '.claude', 'skills', id);

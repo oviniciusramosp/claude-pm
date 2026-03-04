@@ -43,6 +43,10 @@ export interface RecommendedSkill {
   name: string;
   description: string;
   url: string;
+  /** Directory name under ~/.claude/skills/ to clone into. Defaults to id.
+   *  Skills that share the same repo use the same installPath so a single
+   *  git-clone covers all of them. */
+  installPath?: string;
   platforms: string[]; // empty = available for all platforms
 }
 
@@ -53,13 +57,37 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     description: 'Advanced UI/UX design patterns and best practices for modern interfaces.',
     url: 'https://github.com/nextlevelbuilder/ui-ux-pro-max-skill',
     platforms: []
+  },
+  {
+    id: 'expo-app-design',
+    name: 'Expo App Design',
+    description: 'Build native UIs with Expo Router, DOM components, SwiftUI bridges, and Jetpack Compose.',
+    url: 'https://github.com/expo/skills',
+    installPath: 'expo-skills',
+    platforms: ['react-native']
+  },
+  {
+    id: 'upgrading-expo',
+    name: 'Upgrading Expo',
+    description: 'Step-by-step guidance for upgrading Expo SDK versions and resolving breaking changes.',
+    url: 'https://github.com/expo/skills',
+    installPath: 'expo-skills',
+    platforms: ['react-native']
+  },
+  {
+    id: 'expo-deployment',
+    name: 'Expo Deployment',
+    description: 'Deploy Expo apps to the App Store and Play Store with EAS Build and EAS Submit.',
+    url: 'https://github.com/expo/skills',
+    installPath: 'expo-skills',
+    platforms: ['react-native']
   }
 ];
 
 export const PLATFORM_PRESETS = [
   { value: '', label: 'None', description: 'No platform-specific instructions', icon: SlashCircle01 },
   { value: 'ios', label: 'iOS / iPadOS', description: 'Simulator management, xcodebuild flags, crash recovery', icon: Phone01 },
-  { value: 'react-native', label: 'React Native (Android / iOS)', description: 'Cross-platform mobile with Expo or bare React Native', icon: Atom01, disabled: true, badge: { text: 'Soon', color: 'gray' } },
+  { value: 'react-native', label: 'React Native (Android / iOS)', description: 'Cross-platform mobile with Expo or bare React Native', icon: Atom01 },
   { value: 'android', label: 'Android', description: 'Android native development with Gradle and ADB tooling', icon: Monitor01, disabled: true, badge: { text: 'Soon', color: 'gray' } },
   { value: 'react-web', label: 'React Web', description: 'React web apps with Vite, Next.js, or Create React App', icon: Globe01, disabled: true, badge: { text: 'Soon', color: 'gray' } }
 ];

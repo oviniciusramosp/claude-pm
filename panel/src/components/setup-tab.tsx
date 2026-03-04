@@ -144,22 +144,30 @@ function RecommendedSkillsSection({ platform, apiBaseUrl }: { platform: string; 
     (s) => s.platforms.length === 0 || s.platforms.includes(platform)
   );
 
+  // State is keyed by installPath (or id), so skills sharing a repo share install state.
   const [states, setStates] = useState<Record<string, SkillInstallState>>({});
 
   if (relevantSkills.length === 0) return null;
 
+  const stateKey = (skill: RecommendedSkill) => skill.installPath ?? skill.id;
+
   const install = async (skill: RecommendedSkill) => {
-    setStates((prev) => ({ ...prev, [skill.id]: 'loading' }));
+    const key = stateKey(skill);
+    // Mark all skills sharing the same installPath as loading
+    setStates((prev) => {
+      const next = { ...prev, [key]: 'loading' as SkillInstallState };
+      return next;
+    });
     try {
       const res = await fetch(`${apiBaseUrl}/api/skills/install`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: skill.url, id: skill.id })
+        body: JSON.stringify({ url: skill.url, installPath: skill.installPath ?? skill.id })
       });
       const data = await res.json();
-      setStates((prev) => ({ ...prev, [skill.id]: data.ok ? 'installed' : 'error' }));
+      setStates((prev) => ({ ...prev, [key]: data.ok ? 'installed' : 'error' }));
     } catch {
-      setStates((prev) => ({ ...prev, [skill.id]: 'error' }));
+      setStates((prev) => ({ ...prev, [key]: 'error' }));
     }
   };
 
@@ -180,7 +188,7 @@ function RecommendedSkillsSection({ platform, apiBaseUrl }: { platform: string; 
 
       <div className="space-y-3">
         {relevantSkills.map((skill) => {
-          const state = states[skill.id] || 'idle';
+          const state = states[stateKey(skill)] || 'idle';
           return (
             <div key={skill.id} className="rounded-lg border border-secondary bg-primary p-3 sm:p-4">
               <div className="flex items-center justify-between gap-3">
