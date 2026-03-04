@@ -1900,7 +1900,7 @@ app.get('/api/claude/cli-status', async (_req, res) => {
 });
 
 app.post('/api/skills/install', async (req, res) => {
-  const { url, installPath } = req.body || {};
+  const { url, installPath, scope } = req.body || {};
   if (!url || typeof url !== 'string') {
     return res.status(400).json({ ok: false, error: 'Missing url' });
   }
@@ -1908,7 +1908,19 @@ app.post('/api/skills/install', async (req, res) => {
   const name = (installPath && typeof installPath === 'string')
     ? installPath
     : (url.split('/').pop() || 'skill');
-  const skillsDir = path.join(os.homedir(), '.claude', 'skills');
+
+  let skillsDir;
+  if (scope === 'local') {
+    const env = await readEnvPairs();
+    const workdir = env.CLAUDE_WORKDIR;
+    if (!workdir) {
+      return res.json({ ok: false, error: 'CLAUDE_WORKDIR is not configured. Set it in Setup first.' });
+    }
+    skillsDir = path.join(workdir, '.claude', 'skills');
+  } else {
+    skillsDir = path.join(os.homedir(), '.claude', 'skills');
+  }
+
   const targetDir = path.join(skillsDir, name);
 
   // Already installed

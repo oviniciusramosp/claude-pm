@@ -138,31 +138,37 @@ function ClaudeCliPrerequisites({
 }
 
 type SkillInstallState = 'idle' | 'loading' | 'installed' | 'error';
+type InstallScope = 'global' | 'local';
 
-function RecommendedSkillsSection({ platform, apiBaseUrl }: { platform: string; apiBaseUrl: string }) {
+function RecommendedSkillsSection({
+  platform,
+  apiBaseUrl,
+  workdir
+}: {
+  platform: string;
+  apiBaseUrl: string;
+  workdir: string;
+}) {
   const relevantSkills = RECOMMENDED_SKILLS.filter(
     (s) => s.platforms.length === 0 || s.platforms.includes(platform)
   );
 
-  // State is keyed by installPath (or id), so skills sharing a repo share install state.
+  const [scope, setScope] = useState<InstallScope>('global');
+  // State is keyed by "scope:installPath" so each scope tracks install state independently.
   const [states, setStates] = useState<Record<string, SkillInstallState>>({});
 
   if (relevantSkills.length === 0) return null;
 
-  const stateKey = (skill: RecommendedSkill) => skill.installPath ?? skill.id;
+  const stateKey = (skill: RecommendedSkill) => `${scope}:${skill.installPath ?? skill.id}`;
 
   const install = async (skill: RecommendedSkill) => {
     const key = stateKey(skill);
-    // Mark all skills sharing the same installPath as loading
-    setStates((prev) => {
-      const next = { ...prev, [key]: 'loading' as SkillInstallState };
-      return next;
-    });
+    setStates((prev) => ({ ...prev, [key]: 'loading' as SkillInstallState }));
     try {
       const res = await fetch(`${apiBaseUrl}/api/skills/install`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: skill.url, installPath: skill.installPath ?? skill.id })
+        body: JSON.stringify({ url: skill.url, installPath: skill.installPath ?? skill.id, scope })
       });
       const data = await res.json();
       setStates((prev) => ({ ...prev, [key]: data.ok ? 'installed' : 'error' }));
@@ -176,15 +182,44 @@ function RecommendedSkillsSection({ platform, apiBaseUrl }: { platform: string; 
     ? `Skills recommended for ${platformLabel}.`
     : 'Skills recommended for your setup.';
 
+  const localPath = workdir ? `${workdir}/.claude/skills/` : '.claude/skills/';
+  const globalPath = '~/.claude/skills/';
+  const installHint = scope === 'global' ? globalPath : localPath;
+
   return (
     <div
       className="bg-secondary_hover dark:bg-primary space-y-4 p-3"
       style={{ borderRadius: 'var(--board-col-radius)' }}
     >
-      <div className="space-y-1 pt-2 px-3 sm:px-4">
-        <h3 className="m-0 text-md font-semibold text-primary">Recommended Skills</h3>
-        <p className="m-0 text-sm text-tertiary">{description}</p>
+      <div className="flex items-start justify-between gap-3 pt-2 px-3 sm:px-4">
+        <div className="space-y-1">
+          <h3 className="m-0 text-md font-semibold text-primary">Recommended Skills</h3>
+          <p className="m-0 text-sm text-tertiary">{description}</p>
+        </div>
+
+        {/* Scope toggle */}
+        <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-secondary p-0.5">
+          {(['global', 'local'] as InstallScope[]).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setScope(s)}
+              className={cx(
+                'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                scope === s
+                  ? 'bg-primary text-primary shadow-xs'
+                  : 'text-tertiary hover:text-secondary'
+              )}
+            >
+              {s === 'global' ? 'Global' : 'Local'}
+            </button>
+          ))}
+        </div>
       </div>
+
+      <p className="m-0 px-3 sm:px-4 -mt-2 text-xs text-quaternary font-mono truncate">
+        {installHint}
+      </p>
 
       <div className="space-y-3">
         {relevantSkills.map((skill) => {
@@ -493,6 +528,7 @@ export function SetupTab({
                 <RecommendedSkillsSection
                   platform={config['PLATFORM_PRESET'] || ''}
                   apiBaseUrl={apiBaseUrl}
+                  workdir={config['CLAUDE_WORKDIR'] || ''}
                 />
               )}
 
