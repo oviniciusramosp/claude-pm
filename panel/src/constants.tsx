@@ -38,6 +38,24 @@ export const CLAUDE_MODELS = [
 
 export const CLAUDE_TASK_MODELS = CLAUDE_MODELS.filter((m) => m.value !== '');
 
+export interface RecommendedSkill {
+  id: string;
+  name: string;
+  description: string;
+  url: string;
+  platforms: string[]; // empty = available for all platforms
+}
+
+export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
+  {
+    id: 'ui-ux-pro-max',
+    name: 'UI/UX Pro Max',
+    description: 'Advanced UI/UX design patterns and best practices for modern interfaces.',
+    url: 'https://github.com/nextlevelbuilder/ui-ux-pro-max-skill',
+    platforms: []
+  }
+];
+
 export const PLATFORM_PRESETS = [
   { value: '', label: 'None', description: 'No platform-specific instructions', icon: SlashCircle01 },
   { value: 'ios', label: 'iOS / iPadOS', description: 'Simulator management, xcodebuild flags, crash recovery', icon: Phone01 },

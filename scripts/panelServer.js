@@ -1899,6 +1899,58 @@ app.get('/api/claude/cli-status', async (_req, res) => {
   });
 });
 
+app.post('/api/skills/install', async (req, res) => {
+  const { url, id } = req.body || {};
+  if (!url || typeof url !== 'string') {
+    return res.status(400).json({ ok: false, error: 'Missing url' });
+  }
+
+  const name = (id && typeof id === 'string') ? id : (url.split('/').pop() || 'skill');
+  const skillsDir = path.join(os.homedir(), '.claude', 'skills');
+  const targetDir = path.join(skillsDir, name);
+
+  // Already installed
+  try {
+    await fs.access(targetDir);
+    return res.json({ ok: true, already: true });
+  } catch {
+    // Not yet installed
+  }
+
+  await fs.mkdir(skillsDir, { recursive: true });
+
+  const result = await new Promise((resolve) => {
+    const child = spawn('git', ['clone', url, targetDir], {
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    let stderr = '';
+    child.stderr.on('data', (d) => { stderr += String(d); });
+    child.on('close', (code) => resolve({ code, stderr }));
+    child.on('error', (err) => resolve({ code: 1, stderr: err.message }));
+  });
+
+  if (result.code !== 0) {
+    pushLog('error', LOG_SOURCE.panel, `Failed to install skill "${name}"`, { stderr: result.stderr });
+    return res.json({ ok: false, error: result.stderr || 'git clone failed' });
+  }
+
+  pushLog('success', LOG_SOURCE.panel, `Skill installed: ${name}`);
+  res.json({ ok: true });
+});
+
+app.get('/api/skills/status', async (req, res) => {
+  const id = String(req.query.id || '');
+  if (!id) return res.status(400).json({ installed: false });
+
+  const targetDir = path.join(os.homedir(), '.claude', 'skills', id);
+  try {
+    await fs.access(targetDir);
+    res.json({ installed: true });
+  } catch {
+    res.json({ installed: false });
+  }
+});
+
 app.get('/api/logs', (_req, res) => {
   res.json({
     lines: logHistory

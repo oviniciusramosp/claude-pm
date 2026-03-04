@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   AlertCircle,
+  Atom01,
   CheckCircle,
   Eye,
   EyeOff,
@@ -21,7 +22,10 @@ import { cx } from '@/utils/cx';
 import {
   SETUP_SECTIONS,
   TEXT_FIELD_BY_KEY,
-  TOGGLE_BY_KEY
+  TOGGLE_BY_KEY,
+  PLATFORM_PRESETS,
+  RECOMMENDED_SKILLS,
+  type RecommendedSkill
 } from '../constants';
 import { Icon } from './icon';
 import { BoardValidationAlert } from './board-validation-alert';
@@ -129,6 +133,83 @@ function ClaudeCliPrerequisites({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+type SkillInstallState = 'idle' | 'loading' | 'installed' | 'error';
+
+function RecommendedSkillsSection({ platform, apiBaseUrl }: { platform: string; apiBaseUrl: string }) {
+  const relevantSkills = RECOMMENDED_SKILLS.filter(
+    (s) => s.platforms.length === 0 || s.platforms.includes(platform)
+  );
+
+  const [states, setStates] = useState<Record<string, SkillInstallState>>({});
+
+  if (relevantSkills.length === 0) return null;
+
+  const install = async (skill: RecommendedSkill) => {
+    setStates((prev) => ({ ...prev, [skill.id]: 'loading' }));
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/skills/install`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: skill.url, id: skill.id })
+      });
+      const data = await res.json();
+      setStates((prev) => ({ ...prev, [skill.id]: data.ok ? 'installed' : 'error' }));
+    } catch {
+      setStates((prev) => ({ ...prev, [skill.id]: 'error' }));
+    }
+  };
+
+  const platformLabel = PLATFORM_PRESETS.find((p) => p.value === platform)?.label;
+  const description = platformLabel
+    ? `Skills recommended for ${platformLabel}.`
+    : 'Skills recommended for your setup.';
+
+  return (
+    <div
+      className="bg-secondary_hover dark:bg-primary space-y-4 p-3"
+      style={{ borderRadius: 'var(--board-col-radius)' }}
+    >
+      <div className="space-y-1 pt-2 px-3 sm:px-4">
+        <h3 className="m-0 text-md font-semibold text-primary">Recommended Skills</h3>
+        <p className="m-0 text-sm text-tertiary">{description}</p>
+      </div>
+
+      <div className="space-y-3">
+        {relevantSkills.map((skill) => {
+          const state = states[skill.id] || 'idle';
+          return (
+            <div key={skill.id} className="rounded-lg border border-secondary bg-primary p-3 sm:p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
+                  <div className="mt-0.5 shrink-0 flex size-6 items-center justify-center rounded-full bg-quaternary">
+                    <Icon icon={Atom01} className="size-3.5 text-fg-quaternary" />
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <h4 className="m-0 text-sm font-semibold text-primary">{skill.name}</h4>
+                    <p className="m-0 text-sm text-tertiary">{skill.description}</p>
+                  </div>
+                </div>
+
+                <Button
+                  size="sm"
+                  color={state === 'installed' ? 'secondary' : state === 'error' ? 'secondary-destructive' : 'secondary'}
+                  isDisabled={state === 'loading' || state === 'installed'}
+                  isLoading={state === 'loading'}
+                  iconLeading={state === 'installed' ? CheckCircle : undefined}
+                  className="shrink-0"
+                  onPress={() => install(skill)}
+                >
+                  {state === 'installed' ? 'Installed' : state === 'error' ? 'Retry' : 'Install'}
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -399,6 +480,13 @@ export function SetupTab({
                   })}
                 </div>
               ) : null}
+
+              {section.key === 'platform' && (
+                <RecommendedSkillsSection
+                  platform={config['PLATFORM_PRESET'] || ''}
+                  apiBaseUrl={apiBaseUrl}
+                />
+              )}
 
               {section.toggleKeys.length > 0 ? (
                 <div className={cx('space-y-3', visibleTextKeys.length > 0 ? 'mt-1' : '')}>
