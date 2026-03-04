@@ -134,7 +134,7 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     installMethod: 'npx-skills',
     npxRepo: 'vercel-labs/agent-skills',
     npxSkill: 'vercel-react-native-skills',
-    category: 'Patterns'
+    category: 'Best Practices'
   },
   {
     id: 'web-design-guidelines',
@@ -160,7 +160,7 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     installMethod: 'npx-skills',
     npxRepo: 'vercel-labs/agent-skills',
     npxSkill: 'vercel-react-best-practices',
-    category: 'Patterns'
+    category: 'Best Practices'
   },
   {
     id: 'vercel-composition-patterns',
@@ -253,7 +253,7 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     installMethod: 'npx-skills',
     npxRepo: 'https://github.com/Dimillian/Skills',
     npxSkill: 'swiftui-ui-patterns',
-    category: 'Patterns'
+    category: 'Architecture'
   },
   {
     id: 'swiftui-view-refactor',
@@ -266,7 +266,7 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     installMethod: 'npx-skills',
     npxRepo: 'https://github.com/Dimillian/Skills',
     npxSkill: 'swiftui-view-refactor',
-    category: 'Patterns'
+    category: 'Architecture'
   },
   {
     id: 'swiftui-performance-audit',
