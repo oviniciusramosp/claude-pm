@@ -206,27 +206,16 @@ function RecommendedSkillsSection({
       className="bg-secondary_hover dark:bg-primary space-y-4 p-3"
       style={{ borderRadius: 'var(--board-col-radius)' }}
     >
-      <div className="flex items-start justify-between gap-3 pt-2 px-3 sm:px-4">
-        <div className="space-y-1">
-          <h3 className="m-0 text-md font-semibold text-primary">Recommended Skills</h3>
-          <p className="m-0 text-sm text-tertiary">{description}</p>
-        </div>
+      <div className="space-y-1 pt-2 px-3 sm:px-4">
+        <h3 className="m-0 text-md font-semibold text-primary">Recommended Skills</h3>
+        <p className="m-0 text-sm text-tertiary">{description}</p>
+      </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          {/* Install All */}
-          <Button
-            size="sm"
-            color={allInstalled ? 'secondary' : 'primary'}
-            isDisabled={anyLoading || allInstalled}
-            isLoading={anyLoading}
-            iconLeading={allInstalled ? CheckCircle : undefined}
-            onPress={installAll}
-          >
-            {allInstalled ? 'All Installed' : 'Install All'}
-          </Button>
-
+      {/* Scope toggle + path + Install All */}
+      <div className="flex items-center justify-between gap-3 px-3 sm:px-4">
+        <div className="flex items-center gap-2 min-w-0">
           {/* Scope toggle */}
-          <div className="flex items-center gap-0.5 rounded-lg bg-secondary p-0.5">
+          <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-secondary p-0.5">
             {(['global', 'local'] as InstallScope[]).map((s) => (
               <button
                 key={s}
@@ -243,12 +232,22 @@ function RecommendedSkillsSection({
               </button>
             ))}
           </div>
+          <span className="truncate text-xs text-quaternary font-mono">{installHint}</span>
         </div>
-      </div>
 
-      <p className="m-0 px-3 sm:px-4 -mt-2 text-xs text-quaternary font-mono truncate">
-        {installHint}
-      </p>
+        {/* Install All */}
+        <Button
+          size="sm"
+          color={allInstalled ? 'secondary' : 'primary'}
+          isDisabled={anyLoading || allInstalled}
+          isLoading={anyLoading}
+          iconLeading={allInstalled ? CheckCircle : undefined}
+          className="shrink-0"
+          onPress={installAll}
+        >
+          {allInstalled ? 'All Installed' : 'Install All'}
+        </Button>
+      </div>
 
       <div className="space-y-3">
         {relevantSkills.map((skill) => {
