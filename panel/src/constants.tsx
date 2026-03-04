@@ -52,14 +52,17 @@ export interface RecommendedSkill {
    *  git-clone covers all of them. */
   installPath?: string;
   platforms: string[]; // empty = available for all platforms
-  /** Install method. Defaults to 'git' (git clone). Use 'npx-skills' for
-   *  skills distributed via the skills.sh registry (npx skills add). */
-  installMethod?: 'git' | 'npx-skills';
+  /** Install method. Defaults to 'git' (git clone full repo).
+   *  'npx-skills': installs via `npx skills add` (skills.sh registry).
+   *  'github-subdir': clones repo and extracts a specific subdirectory. */
+  installMethod?: 'git' | 'npx-skills' | 'github-subdir';
   /** For installMethod='npx-skills': the repo shorthand or URL passed to
    *  `npx skills add`, e.g. 'vercel-labs/agent-skills'. */
   npxRepo?: string;
   /** For installMethod='npx-skills': the --skill flag value. */
   npxSkill?: string;
+  /** For installMethod='github-subdir': the subdirectory within the repo to extract. */
+  subdir?: string;
   /** Category shown in the filter chips, e.g. 'Design', 'Performance'. */
   category: string;
 }
@@ -306,6 +309,43 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     npxRepo: 'https://github.com/Dimillian/Skills',
     npxSkill: 'swift-concurrency-expert',
     category: 'Concurrency'
+  },
+  // iOS/Swift skills — oviniciusramosp
+  {
+    id: 'ios-swiftui-core',
+    name: 'iOS SwiftUI Core',
+    description: 'Data persistence, concurrency, location, maps, weather, widgets, Vision/CoreML, camera, and accessibility for SwiftUI apps.',
+    url: 'https://github.com/oviniciusramosp/ios-claude-skills',
+    icon: Phone01,
+    installPath: 'ios-swiftui-core',
+    platforms: ['ios'],
+    installMethod: 'github-subdir',
+    subdir: 'ios-swiftui-core',
+    category: 'Core'
+  },
+  {
+    id: 'ios-ar-games',
+    name: 'iOS AR & Games',
+    description: 'ARKit, RealityKit, Metal, physics simulation, game loops, and entity-component systems.',
+    url: 'https://github.com/oviniciusramosp/ios-claude-skills',
+    icon: CpuChip02,
+    installPath: 'ios-ar-games',
+    platforms: ['ios'],
+    installMethod: 'github-subdir',
+    subdir: 'ios-ar-games',
+    category: 'AR & Games'
+  },
+  {
+    id: 'ios-audio-music',
+    name: 'iOS Audio & Music',
+    description: 'AVFoundation, AVAudioEngine, CoreMIDI, SoundAnalysis, ShazamKit, and Speech for audio processing and music production.',
+    url: 'https://github.com/oviniciusramosp/ios-claude-skills',
+    icon: Activity,
+    installPath: 'ios-audio-music',
+    platforms: ['ios'],
+    installMethod: 'github-subdir',
+    subdir: 'ios-audio-music',
+    category: 'Audio'
   },
   // macOS skills — Dimillian
   {

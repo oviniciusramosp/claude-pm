@@ -183,6 +183,9 @@ function RecommendedSkillsSection({
         body.installMethod = 'npx-skills';
         if (skill.npxRepo) body.npxRepo = skill.npxRepo;
         if (skill.npxSkill) body.npxSkill = skill.npxSkill;
+      } else if (skill.installMethod === 'github-subdir') {
+        body.installMethod = 'github-subdir';
+        if (skill.subdir) body.subdir = skill.subdir;
       }
       const res = await fetch(`${apiBaseUrl}/api/skills/install`, {
         method: 'POST',

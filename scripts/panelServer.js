@@ -1948,6 +1948,67 @@ app.post('/api/skills/install', async (req, res) => {
     return res.json({ ok: true });
   }
 
+  // --- github-subdir: clone repo and extract a specific subdirectory ---
+  if (installMethod === 'github-subdir') {
+    const { subdir } = req.body || {};
+    if (!url || typeof url !== 'string') return res.status(400).json({ ok: false, error: 'Missing url' });
+    if (!subdir || typeof subdir !== 'string') return res.status(400).json({ ok: false, error: 'Missing subdir' });
+
+    const name = (installPath && typeof installPath === 'string') ? installPath : subdir;
+
+    let skillsDir;
+    if (scope === 'local') {
+      const env = await readEnvPairs();
+      const workdir = env.CLAUDE_WORKDIR;
+      if (!workdir) return res.json({ ok: false, error: 'CLAUDE_WORKDIR is not configured. Set it in Setup first.' });
+      skillsDir = path.join(workdir, '.claude', 'skills');
+    } else {
+      skillsDir = path.join(os.homedir(), '.claude', 'skills');
+    }
+
+    const targetDir = path.join(skillsDir, name);
+
+    try { await fs.access(targetDir); return res.json({ ok: true, already: true }); } catch {}
+
+    await fs.mkdir(skillsDir, { recursive: true });
+
+    const tmpDir = path.join(os.tmpdir(), `claude-skill-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+
+    try {
+      const cloneResult = await new Promise((resolve) => {
+        const child = spawn('git', ['clone', '--depth=1', url, tmpDir], { stdio: ['ignore', 'pipe', 'pipe'] });
+        let stderr = '';
+        child.stderr.on('data', (d) => { stderr += String(d); });
+        child.on('close', (code) => resolve({ code, stderr }));
+        child.on('error', (err) => resolve({ code: 1, stderr: err.message }));
+      });
+
+      if (cloneResult.code !== 0) {
+        pushLog('error', LOG_SOURCE.panel, `Failed to install skill "${name}"`, { stderr: cloneResult.stderr });
+        return res.json({ ok: false, error: cloneResult.stderr || 'git clone failed' });
+      }
+
+      const subdirPath = path.join(tmpDir, subdir);
+      const cpResult = await new Promise((resolve) => {
+        const child = spawn('cp', ['-r', subdirPath, targetDir], { stdio: ['ignore', 'pipe', 'pipe'] });
+        let stderr = '';
+        child.stderr.on('data', (d) => { stderr += String(d); });
+        child.on('close', (code) => resolve({ code, stderr }));
+        child.on('error', (err) => resolve({ code: 1, stderr: err.message }));
+      });
+
+      if (cpResult.code !== 0) {
+        pushLog('error', LOG_SOURCE.panel, `Failed to install skill "${name}"`, { stderr: cpResult.stderr });
+        return res.json({ ok: false, error: cpResult.stderr || 'cp failed' });
+      }
+
+      pushLog('success', LOG_SOURCE.panel, `Skill installed: ${name}`);
+      return res.json({ ok: true });
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    }
+  }
+
   // --- git clone ---
   if (!url || typeof url !== 'string') {
     return res.status(400).json({ ok: false, error: 'Missing url' });
