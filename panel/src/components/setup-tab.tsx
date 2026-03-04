@@ -303,7 +303,7 @@ function RecommendedSkillsSection({
       </div>
 
       {/* Skills table */}
-      <div className="mt-3 sm:ml-9 divide-y divide-secondary">
+      <div className="mt-3 sm:ml-9 divide-y divide-secondary rounded-lg border border-secondary overflow-hidden">
         {filteredSkills.map((skill) => {
           const state = states[stateKey(skill)] || 'idle';
           return (
