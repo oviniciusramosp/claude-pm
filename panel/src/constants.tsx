@@ -392,6 +392,17 @@ export interface RecommendedMcp {
   args: string[];
   /** Category shown in the filter chips. */
   category: string;
+  /** Prerequisite tool that must be available before installing. */
+  prerequisite?: {
+    /** The command to check (e.g., 'uvx'). */
+    command: string;
+    /** Shell command to auto-install the prerequisite (e.g., 'brew install uv'). */
+    installCommand?: string;
+    /** Human-readable label for the prerequisite (e.g., 'uv'). */
+    label: string;
+    /** Hint shown if auto-install is not available. */
+    installHint?: string;
+  };
 }
 
 export const RECOMMENDED_MCPS: RecommendedMcp[] = [
@@ -404,7 +415,12 @@ export const RECOMMENDED_MCPS: RecommendedMcp[] = [
     platforms: ['ios', 'visionos', 'macos'],
     command: 'xcrun',
     args: ['mcpbridge'],
-    category: 'Build & Debug'
+    category: 'Build & Debug',
+    prerequisite: {
+      command: 'xcrun',
+      label: 'Xcode Command Line Tools',
+      installHint: 'Run: xcode-select --install'
+    }
   },
   {
     id: 'axiom',
@@ -415,7 +431,13 @@ export const RECOMMENDED_MCPS: RecommendedMcp[] = [
     platforms: ['ios', 'visionos', 'macos'],
     command: 'npx',
     args: ['-y', 'axiom-mcp'],
-    category: 'iOS Expertise'
+    category: 'iOS Expertise',
+    prerequisite: {
+      command: 'npx',
+      label: 'Node.js',
+      installCommand: 'brew install node',
+      installHint: 'Install Node.js from https://nodejs.org'
+    }
   },
   {
     id: 'blender',
@@ -426,7 +448,13 @@ export const RECOMMENDED_MCPS: RecommendedMcp[] = [
     platforms: ['visionos'],
     command: 'uvx',
     args: ['blender-mcp'],
-    category: '3D & Assets'
+    category: '3D & Assets',
+    prerequisite: {
+      command: 'uvx',
+      label: 'uv',
+      installCommand: 'brew install uv',
+      installHint: 'Install uv: https://docs.astral.sh/uv/'
+    }
   }
 ];
 

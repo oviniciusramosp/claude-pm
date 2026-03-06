@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   AlertCircle,
+  AlertTriangle,
   CheckCircle,
+  Download01,
   Eye,
   EyeOff,
   Folder,
@@ -341,7 +343,7 @@ function RecommendedSkillsSection({
   );
 }
 
-type McpInstallState = 'idle' | 'loading' | 'installed' | 'error';
+type McpInstallState = 'idle' | 'loading' | 'installed' | 'error' | 'prereq-missing' | 'prereq-installing';
 
 function RecommendedMcpsSection({
   stepNumber,
@@ -355,14 +357,76 @@ function RecommendedMcpsSection({
   apiBaseUrl: string;
 }) {
   const [states, setStates] = useState<Record<string, McpInstallState>>({});
+  const [prereqErrors, setPrereqErrors] = useState<Record<string, string>>({});
 
   const platformLabel = PLATFORM_PRESETS.find((p) => p.value === platform)?.label;
   const description = platformLabel
     ? `MCP servers recommended for ${platformLabel}. Gives Claude direct access to external tools.`
     : 'MCP servers recommended for your setup.';
 
+  const checkPrereq = async (mcp: RecommendedMcp): Promise<boolean> => {
+    if (!mcp.prerequisite) return true;
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/mcp/check-prereq?command=${encodeURIComponent(mcp.prerequisite.command)}`);
+      const data = await res.json();
+      return data.available === true;
+    } catch {
+      return false;
+    }
+  };
+
+  const installPrereq = async (mcp: RecommendedMcp): Promise<boolean> => {
+    const prereq = mcp.prerequisite;
+    if (!prereq?.installCommand) return false;
+
+    setStates((prev) => ({ ...prev, [mcp.id]: 'prereq-installing' }));
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/mcp/install-prereq`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ installCommand: prereq.installCommand })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setPrereqErrors((prev) => { const next = { ...prev }; delete next[mcp.id]; return next; });
+        return true;
+      }
+      setPrereqErrors((prev) => ({ ...prev, [mcp.id]: data.error || 'Install failed' }));
+      return false;
+    } catch {
+      setPrereqErrors((prev) => ({ ...prev, [mcp.id]: 'Network error' }));
+      return false;
+    }
+  };
+
   const install = async (mcp: RecommendedMcp) => {
-    setStates((prev) => ({ ...prev, [mcp.id]: 'loading' as McpInstallState }));
+    setStates((prev) => ({ ...prev, [mcp.id]: 'loading' }));
+    setPrereqErrors((prev) => { const next = { ...prev }; delete next[mcp.id]; return next; });
+
+    // Check prerequisite
+    const prereqAvailable = await checkPrereq(mcp);
+    if (!prereqAvailable) {
+      const prereq = mcp.prerequisite!;
+      if (prereq.installCommand) {
+        // Try auto-install
+        const installed = await installPrereq(mcp);
+        if (!installed) {
+          setStates((prev) => ({ ...prev, [mcp.id]: 'prereq-missing' }));
+          return;
+        }
+      } else {
+        // No auto-install available — show hint
+        setPrereqErrors((prev) => ({
+          ...prev,
+          [mcp.id]: prereq.installHint || `"${prereq.command}" is required but not found.`
+        }));
+        setStates((prev) => ({ ...prev, [mcp.id]: 'prereq-missing' }));
+        return;
+      }
+    }
+
+    // Prerequisite is available — proceed with MCP install
+    setStates((prev) => ({ ...prev, [mcp.id]: 'loading' }));
     try {
       const res = await fetch(`${apiBaseUrl}/api/mcp/install`, {
         method: 'POST',
@@ -383,11 +447,15 @@ function RecommendedMcpsSection({
 
   const installAll = async () => {
     for (const mcp of mcps) {
-      if ((states[mcp.id] || 'idle') !== 'installed') await install(mcp);
+      const st = states[mcp.id] || 'idle';
+      if (st !== 'installed') await install(mcp);
     }
   };
 
-  const anyLoading = mcps.some((m) => (states[m.id] || 'idle') === 'loading');
+  const anyLoading = mcps.some((m) => {
+    const s = states[m.id] || 'idle';
+    return s === 'loading' || s === 'prereq-installing';
+  });
   const allInstalled = mcps.every((m) => (states[m.id] || 'idle') === 'installed');
 
   return (
@@ -419,35 +487,47 @@ function RecommendedMcpsSection({
       <div className="mt-3 sm:ml-9 divide-y divide-secondary rounded-lg border border-secondary overflow-hidden">
         {mcps.map((mcp) => {
           const state = states[mcp.id] || 'idle';
+          const prereqError = prereqErrors[mcp.id];
           return (
-            <div key={mcp.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
-              <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-                <div className="shrink-0 flex size-6 items-center justify-center rounded-full bg-quaternary">
-                  <Icon icon={mcp.icon as Parameters<typeof Icon>[0]['icon']} className="size-3.5 text-fg-quaternary" />
+            <div key={mcp.id} className="flex flex-col px-3 py-2.5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                  <div className="shrink-0 flex size-6 items-center justify-center rounded-full bg-quaternary">
+                    <Icon icon={mcp.icon as Parameters<typeof Icon>[0]['icon']} className="size-3.5 text-fg-quaternary" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="m-0 text-sm font-semibold text-primary">{mcp.name}</p>
+                    <p className="m-0 text-xs text-tertiary">{mcp.description}</p>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="m-0 text-sm font-semibold text-primary">{mcp.name}</p>
-                  <p className="m-0 text-xs text-tertiary">{mcp.description}</p>
-                </div>
+                <Button
+                  size="sm"
+                  color={state === 'installed' ? 'secondary' : state === 'error' || state === 'prereq-missing' ? 'secondary-destructive' : 'secondary'}
+                  isDisabled={state === 'loading' || state === 'installed' || state === 'prereq-installing'}
+                  isLoading={state === 'loading' || state === 'prereq-installing'}
+                  iconLeading={state === 'installed' ? CheckCircle : state === 'prereq-installing' ? Download01 : undefined}
+                  className="shrink-0"
+                  onPress={() => install(mcp)}
+                >
+                  {state === 'installed' ? 'Added' : state === 'prereq-installing' ? 'Installing...' : state === 'error' || state === 'prereq-missing' ? 'Retry' : 'Add'}
+                </Button>
               </div>
-              <Button
-                size="sm"
-                color={state === 'installed' ? 'secondary' : state === 'error' ? 'secondary-destructive' : 'secondary'}
-                isDisabled={state === 'loading' || state === 'installed'}
-                isLoading={state === 'loading'}
-                iconLeading={state === 'installed' ? CheckCircle : undefined}
-                className="shrink-0"
-                onPress={() => install(mcp)}
-              >
-                {state === 'installed' ? 'Added' : state === 'error' ? 'Retry' : 'Add'}
-              </Button>
+              {prereqError && (
+                <div className="mt-1.5 ml-8 sm:ml-9 flex items-start gap-1.5 rounded-md bg-warning-secondary px-2.5 py-1.5">
+                  <Icon icon={AlertTriangle} className="size-3.5 shrink-0 mt-0.5 text-fg-warning-secondary" />
+                  <div className="text-xs text-warning-secondary">
+                    <span className="font-medium">Prerequisite missing: {mcp.prerequisite?.label}</span>
+                    <span className="block mt-0.5 text-tertiary">{prereqError}</span>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
       <p className="mt-2 sm:ml-9 text-xs text-quaternary">
-        MCP servers are added globally via <code className="rounded bg-quaternary px-1 py-0.5 font-mono text-xs">claude mcp add</code>.
+        MCP servers are added globally via <code className="rounded bg-quaternary px-1 py-0.5 font-mono text-xs">claude mcp add</code>. Prerequisites are installed automatically when possible.
       </p>
     </div>
   );

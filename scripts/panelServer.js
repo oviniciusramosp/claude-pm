@@ -2131,6 +2131,83 @@ app.post('/api/mcp/install', async (req, res) => {
   }
 });
 
+app.get('/api/mcp/check-prereq', async (req, res) => {
+  const command = String(req.query.command || '');
+  if (!command) return res.status(400).json({ available: false, error: 'Missing command' });
+
+  // Reject anything that isn't a simple command name
+  if (!/^[a-zA-Z0-9_-]+$/.test(command)) {
+    return res.status(400).json({ available: false, error: 'Invalid command name' });
+  }
+
+  try {
+    const result = await new Promise((resolve) => {
+      const child = spawn('which', [command], {
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      let stdout = '';
+      child.stdout.on('data', (d) => { stdout += String(d); });
+      child.on('close', (code) => resolve({ code, stdout: stdout.trim() }));
+      child.on('error', () => resolve({ code: 1, stdout: '' }));
+    });
+
+    res.json({ available: result.code === 0, path: result.stdout || null });
+  } catch {
+    res.json({ available: false });
+  }
+});
+
+app.post('/api/mcp/install-prereq', async (req, res) => {
+  const { installCommand } = req.body || {};
+  if (!installCommand || typeof installCommand !== 'string') {
+    return res.status(400).json({ ok: false, error: 'Missing installCommand' });
+  }
+
+  // Only allow known safe install commands
+  const allowedPatterns = [
+    /^brew install [a-zA-Z0-9_-]+$/,
+  ];
+  if (!allowedPatterns.some((p) => p.test(installCommand))) {
+    return res.status(400).json({ ok: false, error: `Install command not allowed: "${installCommand}". Please run it manually.` });
+  }
+
+  const parts = installCommand.split(' ');
+  const cmd = parts[0];
+  const cmdArgs = parts.slice(1);
+
+  pushLog('info', LOG_SOURCE.panel, `Installing prerequisite: ${installCommand}`);
+
+  try {
+    const result = await new Promise((resolve) => {
+      const child = spawn(cmd, cmdArgs, {
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (d) => { stdout += String(d); });
+      child.stderr.on('data', (d) => { stderr += String(d); });
+      child.on('close', (code) => resolve({ code, stdout, stderr }));
+      child.on('error', (err) => resolve({ code: 1, stdout: '', stderr: err.message }));
+    });
+
+    if (result.code !== 0) {
+      pushLog('error', LOG_SOURCE.panel, `Prerequisite install failed: ${installCommand}`, {
+        stderr: result.stderr || null,
+        stdout: result.stdout || null
+      });
+      return res.json({ ok: false, error: result.stderr || 'Install failed' });
+    }
+
+    pushLog('success', LOG_SOURCE.panel, `Prerequisite installed: ${installCommand}`);
+    return res.json({ ok: true });
+  } catch (err) {
+    pushLog('error', LOG_SOURCE.panel, `Prerequisite install failed: ${installCommand}`, {
+      stderr: err.message || null
+    });
+    return res.json({ ok: false, error: err.message });
+  }
+});
+
 app.get('/api/mcp/status', async (req, res) => {
   const id = String(req.query.id || '');
   if (!id) return res.status(400).json({ installed: false });
