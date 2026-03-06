@@ -2074,6 +2074,84 @@ app.get('/api/skills/status', async (req, res) => {
   }
 });
 
+// ── MCP Server Management ──────────────────────────────────────────────────
+
+app.post('/api/mcp/install', async (req, res) => {
+  const { id, command, args, scope } = req.body || {};
+  if (!id || !command) {
+    return res.status(400).json({ ok: false, error: 'Missing id or command' });
+  }
+
+  const mcpScope = scope === 'local' ? 'project' : 'user';
+  const displayName = id;
+
+  // For project scope, we need CLAUDE_WORKDIR
+  let cwd = process.cwd();
+  if (mcpScope === 'project') {
+    const env = await readEnvPairs();
+    const workdir = env.CLAUDE_WORKDIR;
+    if (!workdir) {
+      return res.json({ ok: false, error: 'CLAUDE_WORKDIR is not configured. Set it in Setup first.' });
+    }
+    cwd = workdir;
+  }
+
+  // claude mcp add <name> -s <scope> -- <command> [args...]
+  const cliArgs = ['mcp', 'add', id, '-s', mcpScope, '--', command, ...(args || [])];
+
+  try {
+    const result = await new Promise((resolve) => {
+      const child = spawn('claude', cliArgs, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        cwd
+      });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (d) => { stdout += String(d); });
+      child.stderr.on('data', (d) => { stderr += String(d); });
+      child.on('close', (code) => resolve({ code, stdout, stderr }));
+      child.on('error', (err) => resolve({ code: 1, stdout: '', stderr: err.message }));
+    });
+
+    if (result.code !== 0) {
+      pushLog('error', LOG_SOURCE.panel, `Failed to add MCP server "${displayName}"`, {
+        stderr: result.stderr || null,
+        stdout: result.stdout || null
+      });
+      return res.json({ ok: false, error: result.stderr || 'claude mcp add failed' });
+    }
+
+    pushLog('success', LOG_SOURCE.panel, `MCP server added: ${displayName}`);
+    return res.json({ ok: true });
+  } catch (err) {
+    pushLog('error', LOG_SOURCE.panel, `Failed to add MCP server "${displayName}"`, {
+      stderr: err.message || null
+    });
+    return res.json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/mcp/status', async (req, res) => {
+  const id = String(req.query.id || '');
+  if (!id) return res.status(400).json({ installed: false });
+
+  try {
+    const result = await new Promise((resolve) => {
+      const child = spawn('claude', ['mcp', 'get', id], {
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      let stdout = '';
+      child.stdout.on('data', (d) => { stdout += String(d); });
+      child.on('close', (code) => resolve({ code, stdout }));
+      child.on('error', () => resolve({ code: 1, stdout: '' }));
+    });
+
+    res.json({ installed: result.code === 0 });
+  } catch {
+    res.json({ installed: false });
+  }
+});
+
 app.get('/api/logs', (_req, res) => {
   res.json({
     lines: logHistory

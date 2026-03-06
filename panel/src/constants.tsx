@@ -9,6 +9,7 @@ import {
   CheckCircle,
   Columns03,
   CpuChip02,
+  Cube01,
   File03,
   Folder,
   GitCommit,
@@ -375,6 +376,57 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
     npxRepo: 'https://github.com/Dimillian/Skills',
     npxSkill: 'react-component-performance',
     category: 'Performance'
+  }
+];
+
+export interface RecommendedMcp {
+  id: string;
+  name: string;
+  description: string;
+  url: string;
+  icon: (props: { className?: string }) => unknown;
+  platforms: string[];
+  /** The command to run (e.g., 'xcrun', 'npx', 'uvx'). */
+  command: string;
+  /** Arguments for the command. */
+  args: string[];
+  /** Category shown in the filter chips. */
+  category: string;
+}
+
+export const RECOMMENDED_MCPS: RecommendedMcp[] = [
+  {
+    id: 'xcode',
+    name: 'Xcode MCP',
+    description: 'Apple\'s official MCP server — build, test, and debug Xcode projects directly from Claude. Requires Xcode 26+.',
+    url: 'https://developer.apple.com/xcode/',
+    icon: TerminalBrowser,
+    platforms: ['ios', 'visionos', 'macos'],
+    command: 'xcrun',
+    args: ['mcpbridge'],
+    category: 'Build & Debug'
+  },
+  {
+    id: 'axiom',
+    name: 'Axiom',
+    description: '133 iOS development skills — Metal shaders, Vision framework, RealityKit, SwiftUI, concurrency, and more.',
+    url: 'https://github.com/charleswiltgen/axiom',
+    icon: CpuChip02,
+    platforms: ['ios', 'visionos', 'macos'],
+    command: 'npx',
+    args: ['-y', 'axiom-mcp'],
+    category: 'iOS Expertise'
+  },
+  {
+    id: 'blender',
+    name: 'Blender MCP',
+    description: 'AI-assisted 3D modeling and scene manipulation in Blender. Create assets for RealityKit and visionOS.',
+    url: 'https://github.com/ahujasid/blender-mcp',
+    icon: Cube01,
+    platforms: ['visionos'],
+    command: 'uvx',
+    args: ['blender-mcp'],
+    category: '3D & Assets'
   }
 ];
 

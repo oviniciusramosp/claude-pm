@@ -24,7 +24,9 @@ import {
   TOGGLE_BY_KEY,
   PLATFORM_PRESETS,
   RECOMMENDED_SKILLS,
-  type RecommendedSkill
+  RECOMMENDED_MCPS,
+  type RecommendedSkill,
+  type RecommendedMcp
 } from '../constants';
 import { Icon } from './icon';
 import { BoardValidationAlert } from './board-validation-alert';
@@ -339,6 +341,118 @@ function RecommendedSkillsSection({
   );
 }
 
+type McpInstallState = 'idle' | 'loading' | 'installed' | 'error';
+
+function RecommendedMcpsSection({
+  stepNumber,
+  mcps,
+  platform,
+  apiBaseUrl
+}: {
+  stepNumber: number;
+  mcps: RecommendedMcp[];
+  platform: string;
+  apiBaseUrl: string;
+}) {
+  const [states, setStates] = useState<Record<string, McpInstallState>>({});
+
+  const platformLabel = PLATFORM_PRESETS.find((p) => p.value === platform)?.label;
+  const description = platformLabel
+    ? `MCP servers recommended for ${platformLabel}. Gives Claude direct access to external tools.`
+    : 'MCP servers recommended for your setup.';
+
+  const install = async (mcp: RecommendedMcp) => {
+    setStates((prev) => ({ ...prev, [mcp.id]: 'loading' as McpInstallState }));
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/mcp/install`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: mcp.id,
+          command: mcp.command,
+          args: mcp.args,
+          scope: 'global'
+        })
+      });
+      const data = await res.json();
+      setStates((prev) => ({ ...prev, [mcp.id]: data.ok ? 'installed' : 'error' }));
+    } catch {
+      setStates((prev) => ({ ...prev, [mcp.id]: 'error' }));
+    }
+  };
+
+  const installAll = async () => {
+    for (const mcp of mcps) {
+      if ((states[mcp.id] || 'idle') !== 'installed') await install(mcp);
+    }
+  };
+
+  const anyLoading = mcps.some((m) => (states[m.id] || 'idle') === 'loading');
+  const allInstalled = mcps.every((m) => (states[m.id] || 'idle') === 'installed');
+
+  return (
+    <div className="rounded-lg border border-secondary bg-primary p-3 sm:p-4">
+      <div className="flex items-start gap-2 sm:gap-3">
+        <div className="mt-0.5 shrink-0 flex size-6 items-center justify-center rounded-full bg-brand-600">
+          <span className="text-xs font-bold text-white">{stepNumber}</span>
+        </div>
+        <div className="min-w-0 flex-1 space-y-1">
+          <h4 className="m-0 text-sm font-semibold text-primary">Recommended MCP Servers</h4>
+          <p className="m-0 text-sm text-tertiary">{description}</p>
+        </div>
+      </div>
+
+      <div className="mt-3 sm:ml-9 flex items-center justify-end">
+        <Button
+          size="sm"
+          color={allInstalled ? 'secondary' : 'primary'}
+          isDisabled={anyLoading || allInstalled}
+          isLoading={anyLoading}
+          iconLeading={allInstalled ? CheckCircle : undefined}
+          className="shrink-0"
+          onPress={installAll}
+        >
+          {allInstalled ? 'All Added' : 'Add All'}
+        </Button>
+      </div>
+
+      <div className="mt-3 sm:ml-9 divide-y divide-secondary rounded-lg border border-secondary overflow-hidden">
+        {mcps.map((mcp) => {
+          const state = states[mcp.id] || 'idle';
+          return (
+            <div key={mcp.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+              <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                <div className="shrink-0 flex size-6 items-center justify-center rounded-full bg-quaternary">
+                  <Icon icon={mcp.icon as Parameters<typeof Icon>[0]['icon']} className="size-3.5 text-fg-quaternary" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="m-0 text-sm font-semibold text-primary">{mcp.name}</p>
+                  <p className="m-0 text-xs text-tertiary">{mcp.description}</p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                color={state === 'installed' ? 'secondary' : state === 'error' ? 'secondary-destructive' : 'secondary'}
+                isDisabled={state === 'loading' || state === 'installed'}
+                isLoading={state === 'loading'}
+                iconLeading={state === 'installed' ? CheckCircle : undefined}
+                className="shrink-0"
+                onPress={() => install(mcp)}
+              >
+                {state === 'installed' ? 'Added' : state === 'error' ? 'Retry' : 'Add'}
+              </Button>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="mt-2 sm:ml-9 text-xs text-quaternary">
+        MCP servers are added globally via <code className="rounded bg-quaternary px-1 py-0.5 font-mono text-xs">claude mcp add</code>.
+      </p>
+    </div>
+  );
+}
+
 export function SetupTab({
   config,
   setConfig,
@@ -608,20 +722,40 @@ export function SetupTab({
 
               {section.key === 'platform' && (() => {
                 const platform = config['PLATFORM_PRESET'] || '';
+                const mcps = RECOMMENDED_MCPS.filter(
+                  (m) => m.platforms.length === 0 || m.platforms.includes(platform)
+                );
                 const skills = RECOMMENDED_SKILLS.filter(
                   (s) => s.platforms.length === 0 || s.platforms.includes(platform)
                 );
-                if (skills.length === 0) return null;
-                stepNumber += 1;
-                const n = stepNumber;
                 return (
-                  <RecommendedSkillsSection
-                    stepNumber={n}
-                    skills={skills}
-                    platform={platform}
-                    apiBaseUrl={apiBaseUrl}
-                    workdir={config['CLAUDE_WORKDIR'] || ''}
-                  />
+                  <>
+                    {mcps.length > 0 && (() => {
+                      stepNumber += 1;
+                      const n = stepNumber;
+                      return (
+                        <RecommendedMcpsSection
+                          stepNumber={n}
+                          mcps={mcps}
+                          platform={platform}
+                          apiBaseUrl={apiBaseUrl}
+                        />
+                      );
+                    })()}
+                    {skills.length > 0 && (() => {
+                      stepNumber += 1;
+                      const n = stepNumber;
+                      return (
+                        <RecommendedSkillsSection
+                          stepNumber={n}
+                          skills={skills}
+                          platform={platform}
+                          apiBaseUrl={apiBaseUrl}
+                          workdir={config['CLAUDE_WORKDIR'] || ''}
+                        />
+                      );
+                    })()}
+                  </>
                 );
               })()}
 
