@@ -160,6 +160,32 @@ function RecommendedSkillsSection({
   const [states, setStates] = useState<Record<string, SkillInstallState>>({});
   const [activeCategory, setActiveCategory] = useState<string>('all');
 
+  // Check which skills are already installed on mount and when scope changes
+  useEffect(() => {
+    const uniqueIds = [...new Set(skills.map((s) => s.installPath ?? s.id))];
+    if (uniqueIds.length === 0) return;
+    fetch(`${apiBaseUrl}/api/skills/status-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: uniqueIds, scope })
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.results) {
+          setStates((prev) => {
+            const next = { ...prev };
+            for (const [id, installed] of Object.entries(data.results)) {
+              const key = `${scope}:${id}`;
+              if (installed) next[key] = 'installed';
+              else if (next[key] === 'installed') delete next[key];
+            }
+            return next;
+          });
+        }
+      })
+      .catch(() => {});
+  }, [skills, scope, apiBaseUrl]);
+
   // Derive unique categories from the full skills list (stable order)
   const categories = skills.reduce<{ value: string; count: number }[]>((acc, s) => {
     const existing = acc.find((c) => c.value === s.category);
@@ -358,6 +384,30 @@ function RecommendedMcpsSection({
 }) {
   const [states, setStates] = useState<Record<string, McpInstallState>>({});
   const [prereqErrors, setPrereqErrors] = useState<Record<string, string>>({});
+
+  // Check which MCPs are already installed on mount
+  useEffect(() => {
+    const ids = mcps.map((m) => m.id);
+    if (ids.length === 0) return;
+    fetch(`${apiBaseUrl}/api/mcp/status-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids })
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.results) {
+          setStates((prev) => {
+            const next = { ...prev };
+            for (const [id, installed] of Object.entries(data.results)) {
+              if (installed) next[id] = 'installed';
+            }
+            return next;
+          });
+        }
+      })
+      .catch(() => {});
+  }, [mcps, apiBaseUrl]);
 
   const platformLabel = PLATFORM_PRESETS.find((p) => p.value === platform)?.label;
   const description = platformLabel

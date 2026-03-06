@@ -2063,15 +2063,57 @@ app.post('/api/skills/install', async (req, res) => {
 
 app.get('/api/skills/status', async (req, res) => {
   const id = String(req.query.installPath || req.query.id || '');
+  const scope = String(req.query.scope || 'global');
   if (!id) return res.status(400).json({ installed: false });
 
-  const targetDir = path.join(os.homedir(), '.claude', 'skills', id);
+  let baseDir;
+  if (scope === 'local') {
+    const env = await readEnvPairs();
+    const workdir = env.CLAUDE_WORKDIR;
+    if (!workdir) return res.json({ installed: false });
+    baseDir = path.join(workdir, '.claude', 'skills');
+  } else {
+    baseDir = path.join(os.homedir(), '.claude', 'skills');
+  }
+
+  const targetDir = path.join(baseDir, id);
   try {
     await fs.access(targetDir);
     res.json({ installed: true });
   } catch {
     res.json({ installed: false });
   }
+});
+
+app.post('/api/skills/status-batch', async (req, res) => {
+  const { ids, scope } = req.body || {};
+  if (!Array.isArray(ids)) return res.status(400).json({ results: {} });
+
+  let baseDir;
+  if (scope === 'local') {
+    const env = await readEnvPairs();
+    const workdir = env.CLAUDE_WORKDIR;
+    if (!workdir) {
+      const results = Object.fromEntries(ids.map((id) => [id, false]));
+      return res.json({ results });
+    }
+    baseDir = path.join(workdir, '.claude', 'skills');
+  } else {
+    baseDir = path.join(os.homedir(), '.claude', 'skills');
+  }
+
+  const results = {};
+  await Promise.all(ids.map(async (id) => {
+    const targetDir = path.join(baseDir, String(id));
+    try {
+      await fs.access(targetDir);
+      results[id] = true;
+    } catch {
+      results[id] = false;
+    }
+  }));
+
+  res.json({ results });
 });
 
 // ── MCP Server Management ──────────────────────────────────────────────────
@@ -2227,6 +2269,29 @@ app.get('/api/mcp/status', async (req, res) => {
   } catch {
     res.json({ installed: false });
   }
+});
+
+app.post('/api/mcp/status-batch', async (req, res) => {
+  const { ids } = req.body || {};
+  if (!Array.isArray(ids)) return res.status(400).json({ results: {} });
+
+  const results = {};
+  await Promise.all(ids.map(async (id) => {
+    try {
+      const result = await new Promise((resolve) => {
+        const child = spawn('claude', ['mcp', 'get', String(id)], {
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+        child.on('close', (code) => resolve({ code }));
+        child.on('error', () => resolve({ code: 1 }));
+      });
+      results[id] = result.code === 0;
+    } catch {
+      results[id] = false;
+    }
+  }));
+
+  res.json({ results });
 });
 
 app.get('/api/logs', (_req, res) => {
