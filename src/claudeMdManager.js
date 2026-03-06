@@ -10,7 +10,7 @@ function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-const VALID_PLATFORM_PRESETS = new Set(['ios']);
+const VALID_PLATFORM_PRESETS = new Set(['ios', 'visionos']);
 
 export async function generateManagedContent() {
   const parts = [await loadTemplate('managed-claude.md')];
