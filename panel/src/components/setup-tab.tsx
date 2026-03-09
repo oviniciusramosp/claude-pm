@@ -5,6 +5,7 @@ import {
   AlertCircle,
   AlertTriangle,
   CheckCircle,
+  ChevronDown,
   Download01,
   Eye,
   EyeOff,
@@ -612,6 +613,27 @@ export function SetupTab({
   onSaveClick: () => void;
   apiBaseUrl: string;
 }) {
+  // --- Collapsible sections ---
+  const STORAGE_KEY = 'pm-setup-collapsed';
+  const [collapsedSections, setCollapsedSections] = useState(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      return stored ? new Set(JSON.parse(stored) as string[]) : new Set<string>();
+    } catch {
+      return new Set<string>();
+    }
+  });
+
+  const toggleSection = useCallback((key: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }, []);
+
   // --- CLI status (lifted from ClaudeCliPrerequisites) ---
   const [cliStatus, setCliStatus] = useState<CliStatus | null>(null);
   const [cliLoading, setCliLoading] = useState(true);
@@ -668,17 +690,27 @@ export function SetupTab({
             section.key === 'claude' ? fieldVisible[k] : true
           );
 
+          const isCollapsed = collapsedSections.has(section.key);
+
           return (
             <div
               key={section.key}
               className="bg-secondary_hover dark:bg-primary space-y-4 p-3"
               style={{ borderRadius: 'var(--board-col-radius)' }}
             >
-              <div className="space-y-1 pt-2 px-3 sm:px-4">
-                <h3 className="m-0 text-md font-semibold text-primary">{section.title}</h3>
-                <p className="m-0 text-sm text-tertiary">{section.description}</p>
-              </div>
+              <button
+                type="button"
+                onClick={() => toggleSection(section.key)}
+                className="flex w-full items-start justify-between gap-2 pt-2 px-3 sm:px-4 text-left"
+              >
+                <div className="space-y-1">
+                  <h3 className="m-0 text-md font-semibold text-primary">{section.title}</h3>
+                  <p className="m-0 text-sm text-tertiary">{section.description}</p>
+                </div>
+                <ChevronDown className={cx('mt-1 size-4 shrink-0 text-quaternary transition-transform', isCollapsed && '-rotate-90')} />
+              </button>
 
+              {!isCollapsed && <>
               {/* CLI Prerequisites as Steps 1 & 2 inside the first section */}
               {section.key === 'claude' && (
                 <ClaudeCliPrerequisites cliStatus={cliStatus} loading={cliLoading} onRefresh={fetchCliStatus} />
@@ -933,6 +965,7 @@ export function SetupTab({
                   })}
                 </div>
               ) : null}
+              </>}
             </div>
           );
         })}
