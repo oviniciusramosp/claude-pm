@@ -6125,7 +6125,7 @@ async function autoCompactMessages(session, logger) {
 
 /**
  * Run a Claude prompt with timeout handling and one automatic retry.
- * On first timeout, retries with a shorter prompt hint.
+ * On first timeout, retries with a longer timeout and a conciseness hint.
  */
 async function runClaudeWithRetry(prompt, model, timeoutMs, logger) {
   try {
@@ -6134,13 +6134,14 @@ async function runClaudeWithRetry(prompt, model, timeoutMs, logger) {
     const isTimeout = err.message && err.message.includes('timed out');
     if (!isTimeout) throw err;
 
-    logger.warn('Claude timed out, retrying with shorter timeout hint...');
+    // Retry with 2x timeout and a conciseness hint
+    const retryTimeoutMs = timeoutMs * 2;
+    logger.warn(`Claude timed out after ${Math.round(timeoutMs / 1000)}s, retrying with ${Math.round(retryTimeoutMs / 1000)}s timeout...`);
 
-    // Retry once: append a hint to keep the response shorter
     const retryPrompt = prompt + `\n\n<system_note>IMPORTANT: The previous attempt timed out. Please keep your response concise. For the <reply>, limit to 2-3 short paragraphs. For the <plan>, only update sections that changed — you can keep unchanged sections brief with "[no changes]" markers that you'll expand in the next turn.</system_note>`;
 
     try {
-      return await runClaudePromptViaApi(retryPrompt, model, timeoutMs);
+      return await runClaudePromptViaApi(retryPrompt, model, retryTimeoutMs);
     } catch (retryErr) {
       const isRetryTimeout = retryErr.message && retryErr.message.includes('timed out');
       if (isRetryTimeout) {
@@ -6857,7 +6858,7 @@ app.post('/api/ideas/chat', async (req, res) => {
     }
 
     const prompt = buildIdeaBrainstormWithPlanPrompt(session.messages, session.plan, boardContext);
-    const { reply: rawReply } = await runClaudeWithRetry(prompt, 'claude-opus-4-6', 180000, compactLogger);
+    const { reply: rawReply } = await runClaudeWithRetry(prompt, 'claude-opus-4-6', 600000, compactLogger);
 
     const { reply: parsedReply, plan: parsedPlan } = parseReplyAndPlan(rawReply);
     const normalizedReply = normalizeMarkdownNewlines(parsedReply);
