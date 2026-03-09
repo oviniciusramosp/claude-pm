@@ -552,33 +552,31 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
                   </div>
 
                   {/* Input area */}
-                  <div className="border-t border-secondary px-5 py-3 space-y-2">
-                    <div className="flex items-end gap-2">
+                  <div className="border-t border-secondary px-4 py-3 space-y-2">
+                    <div
+                      className="flex items-end gap-2 bg-primary p-2 shadow-xs ring-1 ring-primary ring-inset transition-shadow duration-100 ease-linear has-[:focus]:ring-2 has-[:focus]:ring-brand"
+                      style={{ borderRadius: 'var(--board-col-radius)', ['--inner-radius' as any]: 'calc(var(--board-col-radius) - 0.5rem)' }}
+                    >
                       <textarea
                         ref={textareaRef}
                         value={draft}
                         onChange={handleTextareaInput}
                         onKeyDown={handleKeyDown}
                         placeholder={hasConversation ? 'Type your response...' : 'Describe your product ideas...'}
-                        className="flex-1 resize-none rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary placeholder:text-placeholder focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                        className="min-w-0 flex-1 resize-none bg-transparent py-1 pl-2 text-sm text-primary outline-hidden placeholder:text-placeholder"
                         rows={2}
-                        style={{ minHeight: '60px', maxHeight: '200px' }}
+                        style={{ minHeight: '44px', maxHeight: '200px' }}
                         disabled={sending || generating}
                       />
                       <Button
                         size="sm"
                         color="primary"
+                        iconLeading={Send01}
+                        className="shrink-0 size-9! rounded-[var(--inner-radius)]! [&_svg]:!size-4"
                         onPress={handleSend}
                         isDisabled={!draft.trim() || sending || generating}
                         aria-label="Send message"
-                        className="shrink-0"
-                      >
-                        {sending ? (
-                          <RefreshCw01 className="size-4 animate-spin" />
-                        ) : (
-                          <Send01 className="size-4" />
-                        )}
-                      </Button>
+                      />
                     </div>
                     <p className="text-center text-xs text-quaternary">
                       Press Enter to send, Shift+Enter for new line
