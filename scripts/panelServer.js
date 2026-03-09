@@ -7426,7 +7426,7 @@ app.get('/api/git/log', async (req, res) => {
   } catch (error) {
     const msg = error.message || String(error);
     const isEmptyRepo = msg.includes('does not have any commits yet') || msg.includes('bad default revision');
-    const isNotGit = \!isEmptyRepo && (msg.includes('not a git repository') || msg.includes('fatal:'));
+    const isNotGit = !isEmptyRepo && (msg.includes('not a git repository') || msg.includes('fatal:'));
 
     if (isEmptyRepo) {
       let branch = 'main';
@@ -7602,81 +7602,105 @@ app.get('/api/knowledge-base/tree', async (_req, res) => {
     if (workdirClaudeMd) {
       groups.push({
         id: 'workdir-claude-md',
-        label: 'Project CLAUDE.md',
-        description: `Project instructions (${path.basename(claudeWorkdir)})`,
+        label: 'CLAUDE.md',
+        description: 'Project instructions',
         icon: 'file',
         basePath: claudeWorkdir,
         files: [workdirClaudeMd]
       });
     }
 
-    // 2. Workdir .claude/commands/ (target project slash commands)
+    // 2. Workdir .claude/commands/ (project slash commands / skills)
     const workdirCommandsDir = path.join(claudeWorkdir, '.claude', 'commands');
     const workdirCommandFiles = await listMdFiles(workdirCommandsDir, '.claude/commands');
     if (workdirCommandFiles.length > 0) {
       groups.push({
         id: 'workdir-commands',
         label: 'Slash Commands',
-        description: `${path.basename(claudeWorkdir)}/.claude/commands/`,
+        description: '.claude/commands/',
         icon: 'terminal',
         basePath: claudeWorkdir,
         files: workdirCommandFiles
       });
     }
 
-    // 3. Auto-memory files
+    // 3. Workdir .claude/settings.json (project settings)
+    const workdirSettingsFile = await fileMeta(path.join(claudeWorkdir, '.claude', 'settings.json'), '.claude/settings.json');
+    if (workdirSettingsFile) {
+      // Add as a file group so it can be viewed (not edited — JSON, but viewable)
+      groups.push({
+        id: 'workdir-settings',
+        label: 'Project Settings',
+        description: '.claude/settings.json',
+        icon: 'file',
+        basePath: claudeWorkdir,
+        files: [workdirSettingsFile]
+      });
+    }
+
+    // ── MCP Servers discovery ──
+    const mcpServers = [];
     const homeDir = os.homedir();
-    const memoryBaseDir = path.join(homeDir, '.claude', 'projects');
+
+    // 3a. Global MCP servers from ~/.claude.json
     try {
-      const projectDirs = await fs.readdir(memoryBaseDir, { withFileTypes: true });
-      for (const projDir of projectDirs) {
-        if (!projDir.isDirectory()) continue;
-        const memoryDir = path.join(memoryBaseDir, projDir.name, 'memory');
-        const memFiles = await listMdFiles(memoryDir, 'memory');
-        if (memFiles.length > 0) {
-          // Decode the project path from the directory name
-          const decodedPath = projDir.name.replace(/-/g, '/');
-          groups.push({
-            id: `memory-${projDir.name}`,
-            label: `Memory (${path.basename(decodedPath) || projDir.name})`,
-            description: `~/.claude/projects/${projDir.name}/memory/`,
-            icon: 'memory',
-            basePath: memoryDir,
-            files: memFiles
-          });
-        }
+      const globalConfigPath = path.join(homeDir, '.claude.json');
+      const globalConfig = JSON.parse(await fs.readFile(globalConfigPath, 'utf8'));
+      const globalMcps = globalConfig.mcpServers || {};
+      for (const [name, config] of Object.entries(globalMcps)) {
+        mcpServers.push({
+          name,
+          scope: 'user',
+          type: config.type || 'stdio',
+          command: config.command || null,
+          args: config.args || [],
+          url: config.url || null,
+          env: config.env ? Object.keys(config.env) : []
+        });
+      }
+
+      // 3b. Project-specific MCP servers from ~/.claude.json projects
+      const projectMcps = globalConfig.projects?.[claudeWorkdir]?.mcpServers || {};
+      for (const [name, config] of Object.entries(projectMcps)) {
+        // Skip if already listed as global
+        if (globalMcps[name]) continue;
+        mcpServers.push({
+          name,
+          scope: 'project',
+          type: config.type || 'stdio',
+          command: config.command || null,
+          args: config.args || [],
+          url: config.url || null,
+          env: config.env ? Object.keys(config.env) : []
+        });
       }
     } catch {
-      // No memory directory
+      // ~/.claude.json doesn't exist or is not valid JSON
     }
 
-    // 4. Global CLAUDE.md (~/.claude/CLAUDE.md)
-    const globalClaudeMd = await fileMeta(path.join(homeDir, '.claude', 'CLAUDE.md'), 'CLAUDE.md');
-    if (globalClaudeMd) {
-      groups.push({
-        id: 'global-claude-md',
-        label: 'Global CLAUDE.md',
-        description: '~/.claude/CLAUDE.md',
-        icon: 'file',
-        basePath: path.join(homeDir, '.claude'),
-        files: [globalClaudeMd]
-      });
+    // 3c. Project .mcp.json (workdir root)
+    try {
+      const mcpJsonPath = path.join(claudeWorkdir, '.mcp.json');
+      const mcpJsonConfig = JSON.parse(await fs.readFile(mcpJsonPath, 'utf8'));
+      const servers = mcpJsonConfig.mcpServers || mcpJsonConfig;
+      for (const [name, config] of Object.entries(servers)) {
+        // Skip if already listed
+        if (mcpServers.some((s) => s.name === name)) continue;
+        mcpServers.push({
+          name,
+          scope: 'project',
+          type: config.type || 'stdio',
+          command: config.command || null,
+          args: config.args || [],
+          url: config.url || null,
+          env: config.env ? Object.keys(config.env) : []
+        });
+      }
+    } catch {
+      // .mcp.json doesn't exist
     }
 
-    // 5. User-level CLAUDE.md (~/CLAUDE.md)
-    const userClaudeMd = await fileMeta(path.join(homeDir, 'CLAUDE.md'), 'CLAUDE.md');
-    if (userClaudeMd) {
-      groups.push({
-        id: 'user-claude-md',
-        label: 'User CLAUDE.md',
-        description: '~/CLAUDE.md',
-        icon: 'file',
-        basePath: homeDir,
-        files: [userClaudeMd]
-      });
-    }
-
-    res.json({ ok: true, groups });
+    res.json({ ok: true, groups, mcpServers });
   } catch (error) {
     res.status(500).json({ ok: false, message: error.message || 'Failed to list knowledge base files.' });
   }
@@ -7691,9 +7715,9 @@ app.get('/api/knowledge-base/file', async (req, res) => {
     return res.status(400).json({ ok: false, message: 'path query parameter is required.' });
   }
 
-  // Security: only allow .md files
-  if (!filePath.endsWith('.md')) {
-    return res.status(400).json({ ok: false, message: 'Only .md files can be read.' });
+  // Security: only allow .md and .json files
+  if (!filePath.endsWith('.md') && !filePath.endsWith('.json')) {
+    return res.status(400).json({ ok: false, message: 'Only .md and .json files can be read.' });
   }
 
   try {
@@ -7722,8 +7746,8 @@ app.post('/api/knowledge-base/file', async (req, res) => {
     return res.status(400).json({ ok: false, message: 'path is required.' });
   }
 
-  if (!filePath.endsWith('.md')) {
-    return res.status(400).json({ ok: false, message: 'Only .md files can be saved.' });
+  if (!filePath.endsWith('.md') && !filePath.endsWith('.json')) {
+    return res.status(400).json({ ok: false, message: 'Only .md and .json files can be saved.' });
   }
 
   if (content === undefined || content === null || typeof content !== 'string') {
