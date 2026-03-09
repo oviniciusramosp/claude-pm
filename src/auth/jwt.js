@@ -5,7 +5,11 @@ function getJwtSecret() {
   if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
   const generated = crypto.randomInt(100000, 999999).toString();
   process.env.JWT_SECRET = generated;
-  console.log(`\n🔑 JWT Secret (this session): ${generated}\n`);
+  // Only show the generated secret if no passkey is configured,
+  // since the user would need this code to authenticate
+  if (!process.env.AUTH_PASSKEY) {
+    console.log(`\n🔑 JWT Secret (this session): ${generated}\n`);
+  }
   return generated;
 }
 
