@@ -1451,21 +1451,24 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
             </button>
             {taskMenuOpen && (
               <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-lg border border-primary bg-primary shadow-lg py-1">
-                <button
-                  onClick={() => { setTaskMenuOpen(false); setCreateDefaultEpicId(undefined); setCreateModalOpen(true); }}
-                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-primary hover:bg-primary_hover transition-colors"
-                >
-                  <Plus className="size-4 shrink-0 text-tertiary" />
-                  Write a Task
-                </button>
-                <button
-                  onClick={handleGenerateAllEpics}
-                  title="Generate tasks for all Epics in Not Started"
-                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-primary hover:bg-primary_hover transition-colors"
-                >
-                  <Stars01 className="size-4 shrink-0 text-tertiary" />
-                  Generate All Tasks
-                </button>
+                <Tooltip title="Write a Task" description="Create a new task or epic manually" placement="left">
+                  <TooltipTrigger
+                    onPress={() => { setTaskMenuOpen(false); setCreateDefaultEpicId(undefined); setCreateModalOpen(true); }}
+                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-primary hover:bg-primary_hover transition-colors"
+                  >
+                    <Plus className="size-4 shrink-0 text-tertiary" />
+                    Write a Task
+                  </TooltipTrigger>
+                </Tooltip>
+                <Tooltip title="Generate All Tasks" description="Generate tasks for all Epics in Not Started" placement="left">
+                  <TooltipTrigger
+                    onPress={handleGenerateAllEpics}
+                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-primary hover:bg-primary_hover transition-colors"
+                  >
+                    <Stars01 className="size-4 shrink-0 text-tertiary" />
+                    Generate All Tasks
+                  </TooltipTrigger>
+                </Tooltip>
               </div>
             )}
           </div>
