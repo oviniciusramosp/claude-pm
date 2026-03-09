@@ -1,6 +1,6 @@
 // panel/src/components/help-modal.tsx
 
-import { Bell01, BookOpen01, Columns03, GitCommit, Play, Settings01, TerminalBrowser, X } from '@untitledui/icons';
+import { Bell01, BookOpen01, Columns03, File06, GitCommit, Play, Settings01, TerminalBrowser, X } from '@untitledui/icons';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
 import { handleModalKeyDown } from '@/utils/modal-keyboard';
@@ -51,6 +51,16 @@ const SECTIONS: Section[] = [
       'This is where you watch Claude work in real time. You can see it thinking, writing code, running commands, and checking off acceptance criteria as each one is completed.',
       'If something goes wrong or you\'re curious about what happened, the full output is here.',
       'You can also type directly in the chat box at the bottom to ask Claude questions or give it quick instructions mid-session.',
+    ],
+  },
+  {
+    icon: File06,
+    title: 'Knowledge Base',
+    color: 'text-cyan-500',
+    items: [
+      'Browse all .md files Claude has access to — CLAUDE.md, slash commands, and auto-memory files.',
+      'Click any file to view its contents. Click "Edit" to make changes, then "Save".',
+      'Use "Review with Claude" to ask Claude to improve a file. You can provide a specific instruction or let it do a general review.',
     ],
   },
   {

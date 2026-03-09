@@ -262,29 +262,39 @@ export function GitTab({ apiBaseUrl, showToast, refreshTrigger, setupComplete, o
         </div>
       </div>
 
-      {/* Error banner */}
+      {/* Error / empty state */}
       {gitError && !loading && (
-        <div className="rounded-lg border border-dashed border-error-primary bg-utility-error-50 p-4 text-sm text-error-primary">
-          <p className="font-medium">⚠️ Git History Unavailable</p>
-          <p className="mt-1">{gitError}</p>
-          {gitError.includes('Product Manager project') && (
-            <p className="mt-2 text-xs text-error-secondary">
-              The Git page is designed to show commits from your user project only, not from the automation system itself.
-            </p>
-          )}
-          {gitErrorCode === 'NOT_GIT_REPO' && (
-            <div className="mt-3">
-              <Button
-                size="sm"
-                color="primary"
-                iconLeading={FolderPlus}
-                onPress={() => setShowCreateRepo(true)}
-              >
-                Create Repository
-              </Button>
+        gitErrorCode === 'NOT_GIT_REPO' ? (
+          <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary">
+              <Icon icon={GitBranch02} className="text-tertiary" />
             </div>
-          )}
-        </div>
+            <div>
+              <p className="font-medium text-primary">No Git repository found</p>
+              <p className="mt-1 text-sm text-tertiary">
+                Initialize a repository in your project directory to track commits here.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              color="secondary"
+              iconLeading={FolderPlus}
+              onPress={() => setShowCreateRepo(true)}
+            >
+              Create Repository
+            </Button>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-secondary bg-secondary p-4 text-sm text-secondary">
+            <p className="font-medium text-primary">Git History Unavailable</p>
+            <p className="mt-1">{gitError}</p>
+            {gitError.includes('Product Manager project') && (
+              <p className="mt-2 text-xs text-tertiary">
+                The Git page is designed to show commits from your user project only, not from the automation system itself.
+              </p>
+            )}
+          </div>
+        )
       )}
 
       {/* Loading skeleton */}

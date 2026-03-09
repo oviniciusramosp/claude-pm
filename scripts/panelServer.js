@@ -7537,6 +7537,294 @@ app.post('/api/git/init', async (req, res) => {
   }
 });
 
+// ── Knowledge Base API ──────────────────────────────────────────────
+
+/**
+ * Discover all .md files Claude has access to, grouped by source.
+ */
+app.get('/api/knowledge-base/tree', async (_req, res) => {
+  const env = await readEnvPairs();
+  const claudeWorkdir = path.resolve(cwd, env.CLAUDE_WORKDIR || '.');
+  const groups = [];
+
+  // Helper: stat a file, return metadata or null
+  async function fileMeta(absPath, relPath) {
+    try {
+      const stat = await fs.stat(absPath);
+      return {
+        path: absPath,
+        name: path.basename(absPath),
+        relativePath: relPath,
+        size: stat.size,
+        modifiedAt: stat.mtime.toISOString()
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  // Helper: list .md files in a directory recursively (max 2 levels deep)
+  async function listMdFiles(dir, relBase, maxDepth = 2, depth = 0) {
+    const results = [];
+    try {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const absPath = path.join(dir, entry.name);
+        const relPath = relBase ? `${relBase}/${entry.name}` : entry.name;
+        if (entry.isFile() && entry.name.endsWith('.md')) {
+          const meta = await fileMeta(absPath, relPath);
+          if (meta) results.push(meta);
+        } else if (entry.isDirectory() && depth < maxDepth) {
+          const sub = await listMdFiles(absPath, relPath, maxDepth, depth + 1);
+          results.push(...sub);
+        }
+      }
+    } catch {
+      // Directory doesn't exist or is unreadable
+    }
+    return results;
+  }
+
+  try {
+    // 1. Project CLAUDE.md (claude-pm itself)
+    const pmClaudeMd = await fileMeta(path.join(cwd, 'CLAUDE.md'), 'CLAUDE.md');
+    if (pmClaudeMd) {
+      groups.push({
+        id: 'pm-claude-md',
+        label: 'PM CLAUDE.md',
+        description: 'Product Manager project instructions',
+        icon: 'file',
+        basePath: cwd,
+        files: [pmClaudeMd]
+      });
+    }
+
+    // 2. Workdir CLAUDE.md (target project)
+    if (claudeWorkdir !== cwd) {
+      const workdirClaudeMd = await fileMeta(path.join(claudeWorkdir, 'CLAUDE.md'), 'CLAUDE.md');
+      if (workdirClaudeMd) {
+        groups.push({
+          id: 'workdir-claude-md',
+          label: 'Project CLAUDE.md',
+          description: `Target project instructions (${path.basename(claudeWorkdir)})`,
+          icon: 'file',
+          basePath: claudeWorkdir,
+          files: [workdirClaudeMd]
+        });
+      }
+    }
+
+    // 3. .claude/commands/ (project slash commands)
+    const commandsDir = path.join(cwd, '.claude', 'commands');
+    const commandFiles = await listMdFiles(commandsDir, '.claude/commands');
+    if (commandFiles.length > 0) {
+      groups.push({
+        id: 'commands',
+        label: 'Slash Commands',
+        description: '.claude/commands/',
+        icon: 'terminal',
+        basePath: cwd,
+        files: commandFiles
+      });
+    }
+
+    // 4. Workdir .claude/commands/ (target project slash commands)
+    if (claudeWorkdir !== cwd) {
+      const workdirCommandsDir = path.join(claudeWorkdir, '.claude', 'commands');
+      const workdirCommandFiles = await listMdFiles(workdirCommandsDir, '.claude/commands');
+      if (workdirCommandFiles.length > 0) {
+        groups.push({
+          id: 'workdir-commands',
+          label: 'Project Slash Commands',
+          description: `${path.basename(claudeWorkdir)}/.claude/commands/`,
+          icon: 'terminal',
+          basePath: claudeWorkdir,
+          files: workdirCommandFiles
+        });
+      }
+    }
+
+    // 5. Auto-memory files
+    const homeDir = os.homedir();
+    const memoryBaseDir = path.join(homeDir, '.claude', 'projects');
+    try {
+      const projectDirs = await fs.readdir(memoryBaseDir, { withFileTypes: true });
+      for (const projDir of projectDirs) {
+        if (!projDir.isDirectory()) continue;
+        const memoryDir = path.join(memoryBaseDir, projDir.name, 'memory');
+        const memFiles = await listMdFiles(memoryDir, 'memory');
+        if (memFiles.length > 0) {
+          // Decode the project path from the directory name
+          const decodedPath = projDir.name.replace(/-/g, '/');
+          groups.push({
+            id: `memory-${projDir.name}`,
+            label: `Memory (${path.basename(decodedPath) || projDir.name})`,
+            description: `~/.claude/projects/${projDir.name}/memory/`,
+            icon: 'memory',
+            basePath: memoryDir,
+            files: memFiles
+          });
+        }
+      }
+    } catch {
+      // No memory directory
+    }
+
+    // 6. Global CLAUDE.md (~/.claude/CLAUDE.md)
+    const globalClaudeMd = await fileMeta(path.join(homeDir, '.claude', 'CLAUDE.md'), 'CLAUDE.md');
+    if (globalClaudeMd) {
+      groups.push({
+        id: 'global-claude-md',
+        label: 'Global CLAUDE.md',
+        description: '~/.claude/CLAUDE.md',
+        icon: 'file',
+        basePath: path.join(homeDir, '.claude'),
+        files: [globalClaudeMd]
+      });
+    }
+
+    // 7. User-level CLAUDE.md (~/CLAUDE.md)
+    const userClaudeMd = await fileMeta(path.join(homeDir, 'CLAUDE.md'), 'CLAUDE.md');
+    if (userClaudeMd) {
+      groups.push({
+        id: 'user-claude-md',
+        label: 'User CLAUDE.md',
+        description: '~/CLAUDE.md',
+        icon: 'file',
+        basePath: homeDir,
+        files: [userClaudeMd]
+      });
+    }
+
+    res.json({ ok: true, groups });
+  } catch (error) {
+    res.status(500).json({ ok: false, message: error.message || 'Failed to list knowledge base files.' });
+  }
+});
+
+/**
+ * Read a knowledge base file by absolute path.
+ */
+app.get('/api/knowledge-base/file', async (req, res) => {
+  const filePath = req.query.path;
+  if (!filePath || typeof filePath !== 'string') {
+    return res.status(400).json({ ok: false, message: 'path query parameter is required.' });
+  }
+
+  // Security: only allow .md files
+  if (!filePath.endsWith('.md')) {
+    return res.status(400).json({ ok: false, message: 'Only .md files can be read.' });
+  }
+
+  try {
+    const content = await fs.readFile(filePath, 'utf8');
+    const stat = await fs.stat(filePath);
+    res.json({
+      ok: true,
+      content,
+      name: path.basename(filePath),
+      size: stat.size,
+      modifiedAt: stat.mtime.toISOString()
+    });
+  } catch (error) {
+    const status = error.code === 'ENOENT' ? 404 : 500;
+    res.status(status).json({ ok: false, message: error.message || 'Failed to read file.' });
+  }
+});
+
+/**
+ * Save a knowledge base file by absolute path.
+ */
+app.post('/api/knowledge-base/file', async (req, res) => {
+  const { path: filePath, content } = req.body;
+
+  if (!filePath || typeof filePath !== 'string') {
+    return res.status(400).json({ ok: false, message: 'path is required.' });
+  }
+
+  if (!filePath.endsWith('.md')) {
+    return res.status(400).json({ ok: false, message: 'Only .md files can be saved.' });
+  }
+
+  if (content === undefined || content === null || typeof content !== 'string') {
+    return res.status(400).json({ ok: false, message: 'content is required.' });
+  }
+
+  try {
+    // Ensure parent directory exists
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, content, 'utf8');
+    pushLog('success', LOG_SOURCE.panel, `Knowledge base file saved: ${path.basename(filePath)}`);
+    res.json({ ok: true });
+  } catch (error) {
+    pushLog('error', LOG_SOURCE.panel, `Failed to save KB file: ${error.message}`);
+    res.status(500).json({ ok: false, message: error.message || 'Failed to save file.' });
+  }
+});
+
+/**
+ * AI-review a knowledge base file — ask Claude to enhance it.
+ */
+const kbReviewState = { running: false };
+app.post('/api/knowledge-base/review', async (req, res) => {
+  const { filePath, content, instruction } = req.body;
+
+  if (!content || typeof content !== 'string' || !content.trim()) {
+    return res.status(400).json({ ok: false, message: 'content is required.' });
+  }
+
+  if (kbReviewState.running) {
+    return res.status(409).json({ ok: false, message: 'A KB review is already in progress.' });
+  }
+
+  kbReviewState.running = true;
+  const fileName = filePath ? path.basename(filePath) : 'file';
+  pushLog('info', LOG_SOURCE.panel, `KB review requested: "${fileName}"`);
+
+  try {
+    const userInstruction = instruction && instruction.trim()
+      ? `\n\n<user_instruction>\n${instruction.trim()}\n</user_instruction>`
+      : '';
+
+    const prompt = `You are a technical writer improving a Claude Code knowledge base / instructions file.
+
+<file_name>${fileName}</file_name>
+
+<current_content>
+${content.trim()}
+</current_content>
+${userInstruction}
+
+<task>
+${instruction && instruction.trim()
+  ? 'Follow the user instruction above to modify the file content. Apply only the requested changes — do not reorganize or rewrite unrelated sections.'
+  : `Review and improve the file content:
+- Fix formatting, grammar, and clarity issues
+- Ensure consistent structure and hierarchy
+- Add missing sections if obvious gaps exist
+- Remove redundancy
+- Keep the same overall purpose and scope`}
+</task>
+
+<rules>
+- Return ONLY the improved file content — no explanations, no markdown fences, no preamble.
+- Preserve the original language (if in Portuguese, keep in Portuguese; if in English, keep in English).
+- Do not add emojis unless the original content uses them.
+- Keep the same YAML frontmatter format if present.
+- Preserve all existing sections unless they are clearly redundant.
+</rules>`;
+
+    const { reply } = await runClaudePromptViaApi(prompt, PANEL_DEFAULT_MODEL, 120000);
+    pushLog('success', LOG_SOURCE.claude, `KB review completed: "${fileName}"`);
+    res.json({ ok: true, improvedContent: reply.trim() });
+  } catch (error) {
+    pushLog('error', LOG_SOURCE.claude, `KB review failed: ${error.message}`);
+    res.status(500).json({ ok: false, message: error.message });
+  } finally {
+    kbReviewState.running = false;
+  }
+});
+
 // ── Global error handler — always return JSON, never HTML ───────────
 // Must be registered AFTER all routes (4-arg signature = Express error handler).
 // eslint-disable-next-line no-unused-vars

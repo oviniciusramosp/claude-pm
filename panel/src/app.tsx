@@ -28,6 +28,7 @@ import { SetupTab } from './components/setup-tab';
 import { FeedTab } from './components/feed-tab';
 import { BoardTab } from './components/board-tab';
 import { GitTab } from './components/git-tab';
+import { KnowledgeBaseTab } from './components/knowledge-base-tab';
 import { SaveConfirmModal } from './components/save-confirm-modal';
 import { ErrorDetailModal } from './components/error-detail-modal';
 import { DebugErrorsModal } from './components/debug-errors-modal';
@@ -179,10 +180,11 @@ function AppInner({ mode = 'light', themeMode = 'system', setThemeMode = (_m) =>
   const disabledTabs = useMemo(() => {
     const disabled = new Set<string>();
 
-    // Disable Feed, Board, Git if setup is incomplete
+    // Disable Feed, Board, Knowledge Base, Git if setup is incomplete
     if (!allFieldsValidated || hasBlockingErrors) {
       disabled.add(NAV_TAB_KEYS.feed);
       disabled.add(NAV_TAB_KEYS.board);
+      disabled.add(NAV_TAB_KEYS.knowledge_base);
       disabled.add(NAV_TAB_KEYS.git);
     }
 
@@ -332,7 +334,7 @@ function AppInner({ mode = 'light', themeMode = 'system', setThemeMode = (_m) =>
     setConfig(nextConfig);
     setSavedConfig(nextConfig);
     if (!didResolveInitialTabRef.current) {
-      const storedTab = (() => { try { const t = localStorage.getItem('pm_active_tab'); return (t === 'feed' || t === 'board' || t === 'git') ? t : null; } catch { return null; } })();
+      const storedTab = (() => { try { const t = localStorage.getItem('pm_active_tab'); return (t === 'feed' || t === 'board' || t === 'knowledge_base' || t === 'git') ? t : null; } catch { return null; } })();
       setActiveTab(isSetupConfigurationComplete(nextConfig) ? (storedTab ?? NAV_TAB_KEYS.board) : NAV_TAB_KEYS.setup);
       didResolveInitialTabRef.current = true;
     }
@@ -753,7 +755,7 @@ function AppInner({ mode = 'light', themeMode = 'system', setThemeMode = (_m) =>
 
         <div className={cx(
           'mx-auto flex w-full min-h-0 flex-1 flex-col px-4 sm:px-6 lg:px-8',
-          activeTab === NAV_TAB_KEYS.feed ? 'overflow-hidden py-6' : 'overflow-y-auto py-6',
+          (activeTab === NAV_TAB_KEYS.feed || activeTab === NAV_TAB_KEYS.knowledge_base) ? 'overflow-hidden py-6' : 'overflow-y-auto py-6',
           'max-w-[1200px]'
         )}>
           {activeTab === NAV_TAB_KEYS.setup ? (
@@ -784,6 +786,13 @@ function AppInner({ mode = 'light', themeMode = 'system', setThemeMode = (_m) =>
               onNavigateToSetup={() => setActiveTab(NAV_TAB_KEYS.setup)}
               apiRunning={apiRunning}
               onStartApi={() => runAction('startApi', '/api/process/api/start', 'API started')}
+            />
+          ) : activeTab === NAV_TAB_KEYS.knowledge_base ? (
+            <KnowledgeBaseTab
+              apiBaseUrl={apiBaseUrl}
+              showToast={showToast}
+              setupComplete={allFieldsValidated && !hasBlockingErrors}
+              onNavigateToSetup={() => setActiveTab(NAV_TAB_KEYS.setup)}
             />
           ) : activeTab === NAV_TAB_KEYS.git ? (
             <GitTab
