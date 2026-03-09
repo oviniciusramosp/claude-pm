@@ -162,7 +162,10 @@ function AppInner({ mode = 'light', themeMode = 'system', setThemeMode = (_m) =>
     return allKeys.filter((key) => !isSameConfigValue(key, config[key], savedConfig[key]));
   }, [config, savedConfig]);
 
-  const allFieldsValidated = useMemo(() => TEXT_FIELD_KEYS.every((key) => validationMap[key]?.level === 'success'), [validationMap]);
+  const allFieldsValidated = useMemo(() => TEXT_FIELD_KEYS.every((key) => {
+    const level = validationMap[key]?.level;
+    return level && level !== 'error';
+  }), [validationMap]);
   const saveDisabled = hasBlockingErrors || !allFieldsValidated || changedKeys.length === 0 || Boolean(busy.save);
 
   const apiManagedByPanel = status?.api?.status === 'running';
