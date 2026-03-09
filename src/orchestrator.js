@@ -578,26 +578,33 @@ export class Orchestrator extends EventEmitter {
       const headBefore = await getGitHead(this.config.claude.workdir);
 
       const failedAcUpdates = [];
+      let acUpdateQueue = Promise.resolve();
       const onAcComplete = (acRef) => {
-        if (acRef.type === 'numbered') {
-          this.boardClient.updateCheckboxesByIndex(task.id, [acRef.index]).then(() => {
-            this.logger.success(`AC completed: AC-${acRef.index}`);
-          }).catch((err) => {
-            this.logger.warn(`Failed to update AC checkbox AC-${acRef.index}: ${err.message}`);
+        // Reset watchdog timer on progress (prevents false-positive kills on long tasks)
+        this.watchdog.heartbeat();
+        // Serialize AC file writes to prevent concurrent modifications
+        acUpdateQueue = acUpdateQueue.then(async () => {
+          try {
+            if (acRef.type === 'numbered') {
+              await this.boardClient.updateCheckboxesByIndex(task.id, [acRef.index]);
+              this.logger.success(`AC completed: AC-${acRef.index}`);
+            } else {
+              await this.boardClient.updateCheckboxes(task.id, [acRef.text]);
+              this.logger.success(`AC completed: "${acRef.text}"`);
+            }
+          } catch (err) {
+            const label = acRef.type === 'numbered' ? `AC-${acRef.index}` : `"${acRef.text}"`;
+            this.logger.warn(`Failed to update AC checkbox ${label}: ${err.message}`);
             failedAcUpdates.push(acRef);
-          });
-        } else {
-          this.boardClient.updateCheckboxes(task.id, [acRef.text]).then(() => {
-            this.logger.success(`AC completed: "${acRef.text}"`);
-          }).catch((err) => {
-            this.logger.warn(`Failed to update AC checkbox "${acRef.text}": ${err.message}`);
-            failedAcUpdates.push(acRef);
-          });
-        }
+          }
+        });
       };
 
       try {
         let execution = await runClaudeTask(task, prompt, this.config, { signal, onAcComplete });
+
+        // Wait for any pending AC writes to settle before proceeding
+        await acUpdateQueue;
 
         // Retry any AC checkbox updates that failed during streaming
         if (failedAcUpdates.length > 0) {
@@ -1035,26 +1042,33 @@ export class Orchestrator extends EventEmitter {
       const headBefore = await getGitHead(this.config.claude.workdir);
 
       const failedAcUpdates = [];
+      let acUpdateQueue = Promise.resolve();
       const onAcComplete = (acRef) => {
-        if (acRef.type === 'numbered') {
-          this.boardClient.updateCheckboxesByIndex(task.id, [acRef.index]).then(() => {
-            this.logger.success(`AC completed: AC-${acRef.index}`);
-          }).catch((err) => {
-            this.logger.warn(`Failed to update AC checkbox AC-${acRef.index}: ${err.message}`);
+        // Reset watchdog timer on progress (prevents false-positive kills on long tasks)
+        this.watchdog.heartbeat();
+        // Serialize AC file writes to prevent concurrent modifications
+        acUpdateQueue = acUpdateQueue.then(async () => {
+          try {
+            if (acRef.type === 'numbered') {
+              await this.boardClient.updateCheckboxesByIndex(task.id, [acRef.index]);
+              this.logger.success(`AC completed: AC-${acRef.index}`);
+            } else {
+              await this.boardClient.updateCheckboxes(task.id, [acRef.text]);
+              this.logger.success(`AC completed: "${acRef.text}"`);
+            }
+          } catch (err) {
+            const label = acRef.type === 'numbered' ? `AC-${acRef.index}` : `"${acRef.text}"`;
+            this.logger.warn(`Failed to update AC checkbox ${label}: ${err.message}`);
             failedAcUpdates.push(acRef);
-          });
-        } else {
-          this.boardClient.updateCheckboxes(task.id, [acRef.text]).then(() => {
-            this.logger.success(`AC completed: "${acRef.text}"`);
-          }).catch((err) => {
-            this.logger.warn(`Failed to update AC checkbox "${acRef.text}": ${err.message}`);
-            failedAcUpdates.push(acRef);
-          });
-        }
+          }
+        });
       };
 
       try {
         let execution = await runClaudeTask(task, prompt, this.config, { signal, onAcComplete });
+
+        // Wait for any pending AC writes to settle before proceeding
+        await acUpdateQueue;
 
         // Retry any AC checkbox updates that failed during streaming
         if (failedAcUpdates.length > 0) {

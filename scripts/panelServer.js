@@ -4038,8 +4038,8 @@ app.post('/api/claude/chat', async (req, res) => {
   pushLog('info', LOG_SOURCE.chatUser, truncateText(message));
 
   try {
-    // Use Claude CLI via subprocess (OAuth token works correctly here)
-    const { reply, workdir } = await runClaudePrompt(message, model);
+    // Use Claude CLI via subprocess
+    const { reply, workdir } = await runClaudePromptViaApi(message, model);
     const normalizedReply = reply || '(Claude returned empty output)';
     pushLog('info', LOG_SOURCE.chatClaude, truncateText(normalizedReply));
     res.json({

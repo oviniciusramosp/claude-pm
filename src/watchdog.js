@@ -32,6 +32,16 @@ export class Watchdog {
     return { signal: this.abortController.signal };
   }
 
+  /**
+   * Reset the warning counter without stopping the watchdog.
+   * Called when the task shows signs of progress (e.g. AC completions, tool calls).
+   */
+  heartbeat() {
+    if (this.timer && this.warningCount > 0) {
+      this.warningCount = 0;
+    }
+  }
+
   check() {
     this.warningCount += 1;
 
