@@ -552,22 +552,26 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
                   </div>
 
                   {/* Input area */}
-                  <div className="border-t border-secondary px-4 py-3 space-y-2">
+                  <div className="border-t border-secondary px-4 py-3">
                     <div
                       className="flex items-end gap-2 bg-primary p-2 shadow-xs ring-1 ring-primary ring-inset transition-shadow duration-100 ease-linear has-[:focus]:ring-2 has-[:focus]:ring-brand"
                       style={{ borderRadius: 'var(--board-col-radius)', ['--inner-radius' as any]: 'calc(var(--board-col-radius) - 0.5rem)' }}
                     >
-                      <textarea
-                        ref={textareaRef}
-                        value={draft}
-                        onChange={handleTextareaInput}
-                        onKeyDown={handleKeyDown}
-                        placeholder={hasConversation ? 'Type your response...' : 'Describe your product ideas...'}
-                        className="min-w-0 flex-1 resize-none bg-transparent py-1 pl-2 text-sm text-primary outline-hidden placeholder:text-placeholder"
-                        rows={2}
-                        style={{ minHeight: '44px', maxHeight: '200px' }}
-                        disabled={sending || generating}
-                      />
+                      <Tooltip title="Press Enter to send, Shift+Enter for new line" delay={600}>
+                        <TooltipTrigger className="min-w-0 flex-1">
+                          <textarea
+                            ref={textareaRef}
+                            value={draft}
+                            onChange={handleTextareaInput}
+                            onKeyDown={handleKeyDown}
+                            placeholder={hasConversation ? 'Type your response...' : 'Describe your product ideas...'}
+                            className="min-w-0 w-full resize-none bg-transparent py-1 pl-2 text-sm text-primary outline-hidden placeholder:text-placeholder"
+                            rows={2}
+                            style={{ minHeight: '44px', maxHeight: '200px' }}
+                            disabled={sending || generating}
+                          />
+                        </TooltipTrigger>
+                      </Tooltip>
                       <Button
                         size="sm"
                         color="primary"
@@ -578,9 +582,6 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
                         aria-label="Send message"
                       />
                     </div>
-                    <p className="text-center text-xs text-quaternary">
-                      Press Enter to send, Shift+Enter for new line
-                    </p>
                   </div>
                 </div>
 
