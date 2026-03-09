@@ -2,21 +2,23 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  BookOpen01,
   ChevronDown,
   ChevronRight,
   Edit05,
   File06,
   Folder,
+  Globe01,
+  Lightbulb02,
   RefreshCw01,
   Save01,
+  Server01,
   Stars01,
   TerminalBrowser,
   X,
-  CornerUpLeft,
-  CpuChip01
+  CornerUpLeft
 } from '@untitledui/icons';
 import { Button } from '@/components/base/buttons/button';
+import { Badge } from '@/components/base/badges/badges';
 import { cx } from '@/utils/cx';
 import { Icon } from './icon';
 import { SetupRequiredBanner } from './setup-required-banner';
@@ -45,10 +47,19 @@ interface KBGroup {
   files: KBFile[];
 }
 
-const GROUP_ICONS: Record<string, typeof BookOpen01> = {
+interface MCPServer {
+  name: string;
+  scope: 'user' | 'project';
+  type: string;
+  command: string | null;
+  args: string[];
+  url: string | null;
+  env: string[];
+}
+
+const GROUP_ICONS: Record<string, typeof Lightbulb02> = {
   file: File06,
-  terminal: TerminalBrowser,
-  memory: CpuChip01
+  terminal: TerminalBrowser
 };
 
 function formatFileSize(bytes: number): string {
@@ -88,8 +99,16 @@ function SkeletonRow() {
   );
 }
 
+const MCP_TYPE_COLORS: Record<string, string> = {
+  stdio: 'gray',
+  sse: 'blue',
+  http: 'indigo',
+  ws: 'violet'
+};
+
 export function KnowledgeBaseTab({ apiBaseUrl, showToast, setupComplete, onNavigateToSetup }: KnowledgeBaseTabProps) {
   const [groups, setGroups] = useState<KBGroup[]>([]);
+  const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -103,6 +122,7 @@ export function KnowledgeBaseTab({ apiBaseUrl, showToast, setupComplete, onNavig
   const [reviewInstruction, setReviewInstruction] = useState('');
   const [showReviewInput, setShowReviewInput] = useState(false);
   const [preReviewContent, setPreReviewContent] = useState<string | null>(null);
+  const [mcpExpanded, setMcpExpanded] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mountedRef = useRef(true);
   const reviewAbortRef = useRef<AbortController | null>(null);
@@ -119,6 +139,7 @@ export function KnowledgeBaseTab({ apiBaseUrl, showToast, setupComplete, onNavig
       const payload = await response.json();
       if (payload.ok) {
         setGroups(payload.groups || []);
+        setMcpServers(payload.mcpServers || []);
         // Auto-expand all groups on first load
         if (expandedGroups.size === 0 && payload.groups?.length > 0) {
           setExpandedGroups(new Set(payload.groups.map((g: KBGroup) => g.id)));
@@ -126,7 +147,7 @@ export function KnowledgeBaseTab({ apiBaseUrl, showToast, setupComplete, onNavig
       }
     } catch {
       if (!mountedRef.current) return;
-      showToast('Failed to load knowledge base files.', 'danger');
+      showToast('Failed to load knowledge base.', 'danger');
     } finally {
       if (mountedRef.current) {
         setLoading(false);
@@ -270,13 +291,18 @@ export function KnowledgeBaseTab({ apiBaseUrl, showToast, setupComplete, onNavig
       {/* Header */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2 min-w-0">
-          <Icon icon={BookOpen01} className="size-5 shrink-0 text-tertiary" />
-          <h2 className="truncate text-2xl font-bold text-primary tracking-tight">Knowledge Base</h2>
+          <Icon icon={Lightbulb02} className="size-5 shrink-0 text-tertiary" />
+          <h2 className="truncate text-2xl font-bold text-primary tracking-tight">Knowledge</h2>
         </div>
-        {!loading && totalFiles > 0 && (
-          <span className="rounded-full bg-quaternary/30 px-2.5 py-0.5 text-xs font-medium text-tertiary">
-            {totalFiles} {totalFiles === 1 ? 'file' : 'files'}
-          </span>
+        {!loading && (
+          <div className="flex items-center gap-2">
+            {totalFiles > 0 && (
+              <Badge size="sm" color="gray">{totalFiles} {totalFiles === 1 ? 'file' : 'files'}</Badge>
+            )}
+            {mcpServers.length > 0 && (
+              <Badge size="sm" color="brand">{mcpServers.length} MCP {mcpServers.length === 1 ? 'server' : 'servers'}</Badge>
+            )}
+          </div>
         )}
         <div className="ml-auto">
           <Button
@@ -293,29 +319,29 @@ export function KnowledgeBaseTab({ apiBaseUrl, showToast, setupComplete, onNavig
 
       {/* Main layout: sidebar + content */}
       <div className="flex min-h-0 flex-1 gap-4">
-        {/* File tree sidebar */}
+        {/* Sidebar: file tree + MCP servers */}
         <div className="flex w-72 shrink-0 flex-col overflow-y-auto rounded-xl border border-secondary bg-primary">
           {loading ? (
             <div className="space-y-2 p-3">
               {Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} />)}
             </div>
-          ) : groups.length === 0 ? (
+          ) : (groups.length === 0 && mcpServers.length === 0) ? (
             <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
-              <Icon icon={BookOpen01} className="mb-3 size-8 text-quaternary" />
-              <p className="text-sm font-medium text-secondary">No files found</p>
+              <Icon icon={Lightbulb02} className="mb-3 size-8 text-quaternary" />
+              <p className="text-sm font-medium text-secondary">No knowledge files</p>
               <p className="mt-1 text-xs text-quaternary">
-                CLAUDE.md and memory files will appear here.
+                CLAUDE.md and slash commands will appear here.
               </p>
             </div>
           ) : (
             <div className="py-1">
+              {/* File groups */}
               {groups.map((group) => {
                 const isExpanded = expandedGroups.has(group.id);
                 const GroupIcon = GROUP_ICONS[group.icon] || Folder;
 
                 return (
                   <div key={group.id}>
-                    {/* Group header */}
                     <button
                       type="button"
                       className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-primary_hover transition"
@@ -335,7 +361,6 @@ export function KnowledgeBaseTab({ apiBaseUrl, showToast, setupComplete, onNavig
                       </span>
                     </button>
 
-                    {/* File list */}
                     {isExpanded && (
                       <div className="pb-1">
                         {group.files.map((file) => {
@@ -367,6 +392,61 @@ export function KnowledgeBaseTab({ apiBaseUrl, showToast, setupComplete, onNavig
                   </div>
                 );
               })}
+
+              {/* MCP Servers section */}
+              {mcpServers.length > 0 && (
+                <>
+                  {groups.length > 0 && <div className="mx-3 my-1 border-t border-secondary" />}
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-primary_hover transition"
+                    onClick={() => setMcpExpanded((prev) => !prev)}
+                  >
+                    <Icon
+                      icon={mcpExpanded ? ChevronDown : ChevronRight}
+                      className="size-3.5 shrink-0 text-quaternary"
+                    />
+                    <Icon icon={Server01} className="size-4 shrink-0 text-tertiary" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-semibold text-primary">MCP Servers</p>
+                      <p className="truncate text-[10px] text-quaternary">Connected tools</p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-quaternary/20 px-1.5 py-0.5 text-[10px] font-medium text-quaternary">
+                      {mcpServers.length}
+                    </span>
+                  </button>
+
+                  {mcpExpanded && (
+                    <div className="pb-1">
+                      {mcpServers.map((server) => (
+                        <div
+                          key={server.name}
+                          className="flex items-start gap-2 px-3 py-1.5 pl-9"
+                        >
+                          <Icon
+                            icon={server.type === 'stdio' ? TerminalBrowser : Globe01}
+                            className="mt-0.5 size-3.5 shrink-0 text-quaternary"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <p className="truncate text-xs font-medium text-primary">{server.name}</p>
+                              <Badge size="sm" color={(MCP_TYPE_COLORS[server.type] || 'gray') as any}>
+                                {server.type}
+                              </Badge>
+                            </div>
+                            <p className="truncate text-[10px] text-quaternary">
+                              {server.url || [server.command, ...(server.args || [])].filter(Boolean).join(' ')}
+                            </p>
+                            {server.scope === 'project' && (
+                              <Badge size="sm" color="indigo" className="mt-0.5">project</Badge>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>
@@ -398,14 +478,12 @@ export function KnowledgeBaseTab({ apiBaseUrl, showToast, setupComplete, onNavig
                 )}
 
                 <div className="ml-auto flex items-center gap-1.5">
-                  {/* Undo review */}
                   {preReviewContent !== null && !reviewing && (
                     <Button size="sm" color="tertiary" iconLeading={CornerUpLeft} onPress={undoReview}>
                       Undo Review
                     </Button>
                   )}
 
-                  {/* Review with Claude */}
                   {editing && (
                     <Button
                       size="sm"
@@ -424,7 +502,6 @@ export function KnowledgeBaseTab({ apiBaseUrl, showToast, setupComplete, onNavig
                     </Button>
                   )}
 
-                  {/* Edit / Cancel */}
                   {!editing ? (
                     <Button size="sm" color="tertiary" iconLeading={Edit05} onPress={() => setEditing(true)}>
                       Edit
@@ -449,7 +526,6 @@ export function KnowledgeBaseTab({ apiBaseUrl, showToast, setupComplete, onNavig
                     </Button>
                   )}
 
-                  {/* Save */}
                   {editing && hasChanges && (
                     <Button size="sm" color="primary" iconLeading={Save01} isLoading={saving} onPress={saveFile}>
                       Save

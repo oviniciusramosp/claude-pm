@@ -6,7 +6,7 @@ import {
   Asterisk02,
   Atom01,
   Beaker01,
-  BookOpen01,
+  Lightbulb02,
   CheckCircle,
   Columns03,
   CpuChip02,
@@ -702,7 +702,7 @@ export const SIDEBAR_NAV_ITEMS = [
   { key: NAV_TAB_KEYS.setup, label: 'Setup', icon: Settings01 },
   { key: NAV_TAB_KEYS.feed, label: 'Feed', icon: TerminalBrowser },
   { key: NAV_TAB_KEYS.board, label: 'Board', icon: Columns03 },
-  { key: NAV_TAB_KEYS.knowledge_base, label: 'Knowledge Base', icon: BookOpen01 },
+  { key: NAV_TAB_KEYS.knowledge_base, label: 'Knowledge', icon: Lightbulb02 },
   { key: NAV_TAB_KEYS.git, label: 'Git', icon: GitCommit }
 ] as const;
 

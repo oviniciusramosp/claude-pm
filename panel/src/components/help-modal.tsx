@@ -1,6 +1,6 @@
 // panel/src/components/help-modal.tsx
 
-import { Bell01, BookOpen01, Columns03, File06, GitCommit, Play, Settings01, TerminalBrowser, X } from '@untitledui/icons';
+import { Bell01, BookOpen01, Columns03, GitCommit, Lightbulb02, Play, Settings01, TerminalBrowser, X } from '@untitledui/icons';
 import { Dialog, Modal, ModalOverlay } from '@/components/application/modals/modal';
 import { Icon } from './icon';
 import { handleModalKeyDown } from '@/utils/modal-keyboard';
@@ -54,8 +54,8 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    icon: File06,
-    title: 'Knowledge Base',
+    icon: Lightbulb02,
+    title: 'Knowledge',
     color: 'text-cyan-500',
     items: [
       'Browse all .md files Claude has access to — CLAUDE.md, slash commands, and auto-memory files.',
