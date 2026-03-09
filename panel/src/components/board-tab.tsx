@@ -748,6 +748,8 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   const [boardExists, setBoardExists] = useState<boolean | null>(null);
   const [boardDir, setBoardDir] = useState<string | null>(null);
   const [creatingBoard, setCreatingBoard] = useState(false);
+  const [taskMenuOpen, setTaskMenuOpen] = useState(false);
+  const taskMenuRef = useRef(null as HTMLDivElement | null);
   const mountedRef = useRef(true);
 
   const checkBoardExists = useCallback(async (): Promise<boolean> => {
@@ -1268,6 +1270,19 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
     }
   }, [apiBaseUrl, showToast, startPollingGeneration, addGenerating, removeGenerating]);
 
+  const handleGenerateAllEpics = useCallback(async () => {
+    setTaskMenuOpen(false);
+    const epicsToGenerate = tasks.filter(
+      (t: BoardTask) => t.type === 'Epic' && t.status === 'Not Started' && !generatingEpicIds.has(t.id)
+    );
+    if (epicsToGenerate.length === 0) {
+      showToast('No Epics in Not Started without active generation', 'neutral');
+      return;
+    }
+    showToast(`Generating tasks for ${epicsToGenerate.length} Epic${epicsToGenerate.length > 1 ? 's' : ''}...`, 'neutral');
+    await Promise.all(epicsToGenerate.map((epic: BoardTask) => handleGenerateStories(epic.id)));
+  }, [tasks, generatingEpicIds, showToast, handleGenerateStories]);
+
   const handleFixEpic = useCallback(async (epicId: string, fixType: string) => {
     setFixingEpicId(epicId);
     setFixingEpicType(fixType);
@@ -1333,6 +1348,18 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
       fetchBoard(true);
     }
   }, [refreshTrigger, fetchBoard]);
+
+  // Close task menu on outside click
+  useEffect(() => {
+    if (!taskMenuOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (taskMenuRef.current && !taskMenuRef.current.contains(e.target as Node)) {
+        setTaskMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [taskMenuOpen]);
 
   const columns = useMemo(() => {
     const allColumns = BOARD_COLUMNS.map((col) => ({
@@ -1413,16 +1440,39 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
               <span>Plan</span>
             </TooltipTrigger>
           </Tooltip>
-          <Tooltip title="Create task" description="Create a new task or epic">
-            <TooltipTrigger
-              onPress={() => { setCreateDefaultEpicId(undefined); setCreateModalOpen(true); }}
-              aria-label="Create new task"
+          <div className="relative" ref={taskMenuRef}>
+            <button
+              onClick={() => setTaskMenuOpen((o: boolean) => !o)}
+              aria-label="Task menu"
               className="flex h-7 items-center gap-1.5 rounded-sm px-2 text-xs text-tertiary transition hover:bg-primary_hover hover:text-secondary"
             >
               <Plus className="size-3.5" />
               <span>Task</span>
-            </TooltipTrigger>
-          </Tooltip>
+            </button>
+            {taskMenuOpen && (
+              <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-lg border border-primary bg-primary shadow-lg py-1">
+                <button
+                  onClick={() => { setTaskMenuOpen(false); setCreateDefaultEpicId(undefined); setCreateModalOpen(true); }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-primary hover:bg-primary_hover transition-colors"
+                >
+                  <Plus className="size-4 shrink-0 text-tertiary" />
+                  Write a Task
+                </button>
+                <div className="relative group">
+                  <button
+                    onClick={handleGenerateAllEpics}
+                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-primary hover:bg-primary_hover transition-colors"
+                  >
+                    <Stars01 className="size-4 shrink-0 text-tertiary" />
+                    Generate All Tasks
+                  </button>
+                  <div className="pointer-events-none absolute left-1/2 bottom-full mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md bg-primary_solid px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity shadow-sm">
+                    Generate tasks for all Epics in Not Started
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
           <Tooltip title="Fix board order" description="Fix epic and story numbering to ensure sequential ordering">
             <TooltipTrigger
               onPress={fixBoardOrder}
