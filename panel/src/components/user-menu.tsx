@@ -21,7 +21,6 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
         )}
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-medium text-primary">{user.name}</p>
-          <p className="truncate text-xs text-tertiary">{user.email}</p>
         </div>
         <Button
           color="tertiary"
@@ -47,7 +46,6 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
         )}
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-primary">{user.name}</p>
-          <p className="truncate text-xs text-tertiary">{user.email}</p>
         </div>
       </div>
       <Button

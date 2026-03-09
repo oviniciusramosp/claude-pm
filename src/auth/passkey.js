@@ -31,7 +31,7 @@ export function generatePasskeyToken() {
   // Create a generic user object for passkey auth
   const user = {
     id: 'passkey:user',
-    email: 'passkey@local',
+    email: null,
     name: 'Authenticated User',
     provider: 'passkey',
     avatar: null
