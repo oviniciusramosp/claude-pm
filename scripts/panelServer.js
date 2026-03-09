@@ -6482,10 +6482,11 @@ async function deleteBrainstormLog(boardDir) {
  * Phase 1: Generate an Epic plan (list of outlines) from a brainstorm session.
  * Returns a JSON array of { name, priority, folderName, brief }.
  */
-function buildEpicPlanPrompt({ plan, messages, existingEpicNames, boardContext }) {
+function buildEpicPlanPrompt({ plan, messages, existingEpicNames, boardContext, nextEpicNumber }) {
   const existingList = existingEpicNames.length > 0
     ? existingEpicNames.map((n) => `- ${n}`).join('\n')
     : '(none)';
+  const startNum = nextEpicNumber || 1;
 
   // Include recent conversation messages for context when there is no plan
   const recentMessages = messages
@@ -6516,7 +6517,7 @@ Return ONLY a JSON array with NO additional text or code blocks:
   {
     "name": "Authentication System",
     "priority": "P0|P1|P2|P3",
-    "folderName": "E01-Authentication-System",
+    "folderName": "E${String(startNum).padStart(2, '0')}-Authentication-System",
     "brief": "One sentence describing what this Epic delivers."
   }
 ]
@@ -6524,18 +6525,19 @@ Return ONLY a JSON array with NO additional text or code blocks:
 Rules:
 - Return ONLY valid JSON array, no markdown, no code blocks, no explanation.
 - 1-15 Epics maximum.
-- folderName MUST follow the pattern E{NN}-{Slug}: NN is zero-padded sequential index (01, 02, 03, ...), Slug is PascalCase words separated by hyphens derived from the Epic name (e.g., Authentication-System).
-- The index in folderName must match the position in the array (first Epic = E01, second = E02, etc.).
+- folderName MUST follow the pattern E{NN}-{Slug}: NN is zero-padded sequential index starting from ${String(startNum).padStart(2, '0')}, Slug is PascalCase words separated by hyphens derived from the Epic name (e.g., E${String(startNum).padStart(2, '0')}-Authentication-System).
+- The first Epic in the array must use E${String(startNum).padStart(2, '0')}, the second E${String(startNum + 1).padStart(2, '0')}, and so on. Do NOT reuse numbers from existing Epics.
 - Do NOT include any Epic whose name matches an existing epic.
 - Order Epics logically: foundational infrastructure first, then features, then polish.
 - ALL output (name, folderName, brief) MUST be in English.
 </instructions>`;
 }
 
-function parseEpicPlanResponse(reply) {
+function parseEpicPlanResponse(reply, nextEpicNumber) {
   const text = String(reply || '').trim();
   const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
   const jsonStr = codeBlockMatch ? codeBlockMatch[1].trim() : text;
+  const startNum = nextEpicNumber || 1;
 
   let plan;
   try {
@@ -6553,13 +6555,13 @@ function parseEpicPlanResponse(reply) {
     .map((e, i) => ({
       name: e.name.trim(),
       priority: ['P0', 'P1', 'P2', 'P3'].includes(e.priority) ? e.priority : 'P1',
-      folderName: (e.folderName || '').trim() || `E${String(i + 1).padStart(2, '0')}-${slugFromTitle(e.name)}`,
+      folderName: (e.folderName || '').trim() || `E${String(startNum + i).padStart(2, '0')}-${slugFromTitle(e.name)}`,
       brief: e.brief || ''
     }))
     .slice(0, 15);
 }
 
-function buildSingleEpicPrompt(epicSection, epicIndex, totalEpics, fullPlan, boardContext) {
+function buildSingleEpicPrompt(epicSection, epicIndex, totalEpics, fullPlan, boardContext, outlineFolderName) {
   return `You are a technical architect preparing work packages for an AI coding assistant (Claude Code). Convert ONE section of a plan document into a structured Epic optimized for automated execution.
 
 <role>
@@ -6593,7 +6595,7 @@ This avoids JSON escaping issues with long markdown strings.
 First, emit a small JSON metadata line, then the separator "---BODY---", then the full markdown body as plain text.
 
 EXAMPLE FORMAT:
-{"name": "Authentication System", "folderName": "E${String(epicIndex).padStart(2, '0')}-Authentication-System", "priority": "P1"}
+{"name": "Authentication System", "folderName": "${outlineFolderName || `E${String(epicIndex).padStart(2, '0')}-Authentication-System`}", "priority": "P1"}
 ---BODY---
 # Authentication System Epic
 
@@ -7021,11 +7023,14 @@ app.post('/api/ideas/generate-epics', async (req, res) => {
         await autoCompactMessages(session, compactLogger);
 
         pushLog('info', LOG_SOURCE.panel, 'Planning Epics from brainstorm...');
+        const nextNumbers = await client.getNextNumbers();
+        const nextEpicNumber = nextNumbers.nextEpic;
         const planPrompt = buildEpicPlanPrompt({
           plan,
           messages: session.messages,
           existingEpicNames,
-          boardContext
+          boardContext,
+          nextEpicNumber
         });
         let planReply;
         try {
@@ -7041,7 +7046,7 @@ app.post('/api/ideas/generate-epics', async (req, res) => {
           throw planErr;
         }
 
-        epicPlan = parseEpicPlanResponse(planReply);
+        epicPlan = parseEpicPlanResponse(planReply, nextEpicNumber);
         generateEpicsState.plan = epicPlan;
         epicsToGenerate = epicPlan;
         generateEpicsState.total = epicPlan.length;
@@ -7056,7 +7061,7 @@ app.post('/api/ideas/generate-epics', async (req, res) => {
           // Build a synthetic plan section from the outline (name + brief)
           const epicSection = `## ${outline.name}\n\n${outline.brief}`;
           const epicPrompt = buildSingleEpicPrompt(
-            epicSection, i + 1, epicsToGenerate.length, plan, boardContext
+            epicSection, i + 1, epicsToGenerate.length, plan, boardContext, outline.folderName
           );
           const { reply: epicReply } = await runClaudePromptViaApi(epicPrompt, PANEL_DEFAULT_MODEL);
           const epic = parseSingleEpicResponse(String(epicReply || '').trim(), i + 1);
