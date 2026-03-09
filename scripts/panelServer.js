@@ -6070,17 +6070,25 @@ Return ONLY the summary, no preamble or explanation.`;
  *
  * Returns { messages, compacted } — the (possibly compacted) message array and a flag.
  */
-const COMPACT_AFTER_PAIRS = 8;
-const KEEP_RECENT_PAIRS = 3;
-const TOKEN_THRESHOLD = 12000;
+// Compact early and often — the plan already carries accumulated state, so the
+// conversation history is mostly redundant once a plan exists.  We keep only the
+// last 2 user-assistant pairs verbatim and summarize the rest.
+const COMPACT_AFTER_PAIRS = 3;
+const KEEP_RECENT_PAIRS = 2;
+const TOKEN_THRESHOLD = 6000;
 
 async function autoCompactMessages(session, logger) {
   const msgs = session.messages;
   const pairs = Math.floor(msgs.length / 2);
   const totalTokens = estimateTokens(msgs.map(m => m.content).join('\n'));
 
-  // Check if compaction is needed
-  if (pairs < COMPACT_AFTER_PAIRS && totalTokens < TOKEN_THRESHOLD) {
+  // When the session has a plan, the bar for compaction is much lower because
+  // the plan document already captures all decisions made so far.
+  const hasPlan = !!(session.plan && session.plan.trim());
+  const effectivePairThreshold = hasPlan ? Math.min(COMPACT_AFTER_PAIRS, 3) : COMPACT_AFTER_PAIRS;
+  const effectiveTokenThreshold = hasPlan ? Math.min(TOKEN_THRESHOLD, 4000) : TOKEN_THRESHOLD;
+
+  if (pairs < effectivePairThreshold && totalTokens < effectiveTokenThreshold) {
     return { messages: msgs, compacted: false };
   }
 
@@ -6869,6 +6877,11 @@ app.post('/api/ideas/chat', async (req, res) => {
     // Update session plan if Claude returned one
     if (parsedPlan) {
       session.plan = parsedPlan;
+
+      // Plan was updated — proactively compact the conversation now so the
+      // next turn starts with a lean prompt.  The plan already captures all
+      // decisions, so older messages are largely redundant.
+      await autoCompactMessages(session, compactLogger);
     }
 
     // Persist session to disk so it survives modal close / server restart
