@@ -703,7 +703,7 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
                 </div>
                 <Button
                   size="md"
-                  color="primary"
+                  color={generating ? 'secondary' : 'primary'}
                   iconLeading={generating ? RefreshCw01 : Lightbulb02}
                   onPress={handleGenerateEpics}
                   isDisabled={!plan.trim() || sending || generating}
