@@ -255,6 +255,14 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
         })
       });
 
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        showToast(`Server returned unexpected response (${response.status}). Please try again.`, 'danger');
+        setMessages(prev => prev.slice(0, -1));
+        setDraft(msg);
+        return;
+      }
+
       const data = await response.json();
 
       if (!response.ok) {
@@ -353,6 +361,12 @@ export function IdeaToEpicsModal({ open, onClose, apiBaseUrl, showToast, onCreat
           plan: planDirty ? plan : undefined
         })
       });
+
+      const ct = response.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        showToast(`Server returned unexpected response (${response.status}). Please try again.`, 'danger');
+        return;
+      }
 
       const data = await response.json();
 

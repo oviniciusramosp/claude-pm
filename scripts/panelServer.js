@@ -7503,6 +7503,17 @@ app.post('/api/git/init', async (req, res) => {
   }
 });
 
+// ── Global error handler — always return JSON, never HTML ───────────
+// Must be registered AFTER all routes (4-arg signature = Express error handler).
+// eslint-disable-next-line no-unused-vars
+app.use((err, _req, res, _next) => {
+  const status = err.status || err.statusCode || 500;
+  const message = err.message || 'Internal server error';
+  if (!res.headersSent) {
+    res.status(status).json({ ok: false, message });
+  }
+});
+
 async function ensurePanelBuild() {
   const indexPath = path.join(panelDistPath, 'index.html');
   try {
