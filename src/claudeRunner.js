@@ -285,11 +285,20 @@ function parseJsonFromOutput(stdout) {
   }
 }
 
+const VALID_MODEL_PATTERN = /^claude-[a-z0-9.-]+$/;
+
+function validateModelName(model) {
+  if (!VALID_MODEL_PATTERN.test(model)) {
+    throw new Error(`Invalid model name: "${model}". Model must match pattern: claude-<alphanumeric/dots/hyphens>`);
+  }
+}
+
 function buildCommand(config, task, overrideModel, { sessionId, resume } = {}) {
   let cmd = config.claude.command || DEFAULT_CLAUDE_COMMAND;
 
   const model = overrideModel || config.claude.modelOverride || task.model;
   if (model) {
+    validateModelName(model);
     cmd += ` --model ${model}`;
   }
 

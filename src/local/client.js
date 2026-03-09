@@ -96,7 +96,9 @@ export class LocalBoardClient {
   async updateEpicOrder(epicId, orderValue) {
     const epicPath = path.join(this.boardDir, epicId, 'epic.md');
 
-    if (!fs.existsSync(epicPath)) {
+    try {
+      await fs.access(epicPath);
+    } catch {
       throw new Error(`Epic not found: ${epicId}`);
     }
 

@@ -1388,7 +1388,11 @@ function runClaudePromptViaApi(prompt, model, customTimeoutMs) {
     }
 
     if (model && model.trim()) {
-      command = `${command} --model ${model.trim()}`;
+      const cleanModel = model.trim();
+      if (!/^claude-[a-z0-9.-]+$/.test(cleanModel)) {
+        return reject(new Error(`Invalid model name: "${cleanModel}". Model must match pattern: claude-<alphanumeric/dots/hyphens>`));
+      }
+      command = `${command} --model ${cleanModel}`;
     }
 
     const workdir = path.resolve(cwd, process.env.CLAUDE_WORKDIR || '.');
@@ -3285,6 +3289,9 @@ app.post('/api/board/fix-task', async (req, res) => {
     let command = env.CLAUDE_COMMAND || DEFAULT_CLAUDE_COMMAND;
 
     if (claudeModel) {
+      if (!/^claude-[a-z0-9.-]+$/.test(claudeModel)) {
+        throw new Error(`Invalid model name: "${claudeModel}". Model must match pattern: claude-<alphanumeric/dots/hyphens>`);
+      }
       command += ` --model ${claudeModel}`;
     }
 

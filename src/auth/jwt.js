@@ -1,6 +1,15 @@
 import jwt from 'jsonwebtoken';
+import crypto from 'node:crypto';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-dev-secret-change-in-production';
+function getJwtSecret() {
+  if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
+  const generated = crypto.randomInt(100000, 999999).toString();
+  process.env.JWT_SECRET = generated;
+  console.log(`\n🔑 JWT Secret (this session): ${generated}\n`);
+  return generated;
+}
+
+const JWT_SECRET = getJwtSecret();
 const JWT_EXPIRATION = process.env.JWT_EXPIRATION || '7d';
 
 /**

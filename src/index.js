@@ -2,6 +2,7 @@ import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import express from 'express';
 import { config } from './config.js';
+import { setRuntime, resolveRuntime, getEffectiveConfig } from './runtimeConfig.js';
 import { logger } from './logger.js';
 import { LocalBoardClient } from './local/client.js';
 import { Orchestrator } from './orchestrator.js';
@@ -16,13 +17,17 @@ app.use(express.json({ limit: '2mb' }));
 // Collect startup info for consolidated log (array of {level, text})
 const startupInfo = [];
 
-const boardClient = new LocalBoardClient(config);
+// Create an effective config that transparently resolves runtime overrides
+// for streamOutput, logPrompt, fullAccess, and modelOverride via Proxy.
+const effectiveConfig = getEffectiveConfig(config);
+
+const boardClient = new LocalBoardClient(effectiveConfig);
 await boardClient.initialize();
-startupInfo.push({ level: 'info', text: `Claude working directory: ${config.claude.workdir}` });
-startupInfo.push({ level: 'info', text: `Board directory: ${config.board.dir}` });
+startupInfo.push({ level: 'info', text: `Claude working directory: ${effectiveConfig.claude.workdir}` });
+startupInfo.push({ level: 'info', text: `Board directory: ${effectiveConfig.board.dir}` });
 
 // Validate Board structure on startup
-const boardValidator = new BoardValidator(config);
+const boardValidator = new BoardValidator(effectiveConfig);
 try {
   const validationResult = await boardValidator.validate();
   if (!validationResult.valid) {
@@ -34,21 +39,21 @@ try {
   logger.warn(`Board validation failed: ${error.message}`);
 }
 
-const runStore = new RunStore(config.state.runStorePath);
+const runStore = new RunStore(effectiveConfig.state.runStorePath);
 const usageStore = new UsageStore(
   path.resolve(process.cwd(), process.env.USAGE_STORE_PATH || '.data/usage.json')
 );
 const orchestrator = new Orchestrator({
-  config,
+  config: effectiveConfig,
   logger,
   boardClient,
   runStore,
   usageStore
 });
 
-if (config.claude.injectClaudeMd) {
+if (effectiveConfig.claude.injectClaudeMd) {
   try {
-    const result = await syncClaudeMd(config, logger);
+    const result = await syncClaudeMd(effectiveConfig, logger);
     if (result?.action === 'unchanged') {
       startupInfo.push({ level: 'info', text: 'CLAUDE.md managed section is already up to date' });
     } else if (result?.action === 'updated') {
@@ -74,12 +79,12 @@ function extractHeaderValue(req, headerName) {
 }
 
 function checkManualToken(req, res) {
-  if (!config.manualRun.token) {
+  if (!effectiveConfig.manualRun.token) {
     return true;
   }
 
   const auth = extractHeaderValue(req, 'authorization');
-  const expected = `Bearer ${config.manualRun.token}`;
+  const expected = `Bearer ${effectiveConfig.manualRun.token}`;
   if (auth !== expected) {
     res.status(401).json({ error: 'Unauthorized' });
     return false;
@@ -198,9 +203,9 @@ app.get('/settings/runtime', (req, res) => {
 
   res.json({
     claude: {
-      streamOutput: Boolean(config.claude.streamOutput),
-      logPrompt: Boolean(config.claude.logPrompt),
-      modelOverride: config.claude.modelOverride || ''
+      streamOutput: Boolean(effectiveConfig.claude.streamOutput),
+      logPrompt: Boolean(effectiveConfig.claude.logPrompt),
+      modelOverride: effectiveConfig.claude.modelOverride || ''
     }
   });
 });
@@ -212,23 +217,23 @@ app.post('/settings/runtime', (req, res) => {
 
   const claude = req.body?.claude || {};
 
-  config.claude.streamOutput = parseBooleanValue(claude.streamOutput, config.claude.streamOutput);
-  config.claude.logPrompt = parseBooleanValue(claude.logPrompt, config.claude.logPrompt);
+  setRuntime('streamOutput', parseBooleanValue(claude.streamOutput, effectiveConfig.claude.streamOutput));
+  setRuntime('logPrompt', parseBooleanValue(claude.logPrompt, effectiveConfig.claude.logPrompt));
 
   if (typeof claude.modelOverride === 'string') {
-    config.claude.modelOverride = claude.modelOverride;
+    setRuntime('modelOverride', claude.modelOverride);
   }
 
   logger.info(
-    `Runtime settings updated (streamOutput=${config.claude.streamOutput}, logPrompt=${config.claude.logPrompt}, modelOverride=${config.claude.modelOverride || 'auto'})`
+    `Runtime settings updated (streamOutput=${effectiveConfig.claude.streamOutput}, logPrompt=${effectiveConfig.claude.logPrompt}, modelOverride=${effectiveConfig.claude.modelOverride || 'auto'})`
   );
 
   res.json({
     ok: true,
     claude: {
-      streamOutput: Boolean(config.claude.streamOutput),
-      logPrompt: Boolean(config.claude.logPrompt),
-      modelOverride: config.claude.modelOverride || ''
+      streamOutput: Boolean(effectiveConfig.claude.streamOutput),
+      logPrompt: Boolean(effectiveConfig.claude.logPrompt),
+      modelOverride: effectiveConfig.claude.modelOverride || ''
     }
   });
 });
@@ -260,7 +265,7 @@ app.get('/usage/weekly', async (req, res) => {
 
 app.get('/validate-board', async (req, res) => {
   try {
-    const validator = new BoardValidator(config);
+    const validator = new BoardValidator(effectiveConfig);
     const result = await validator.validate();
 
     res.json({
@@ -281,7 +286,7 @@ app.post('/sync-claude-md', (req, res) => {
     return;
   }
 
-  syncClaudeMd(config, logger)
+  syncClaudeMd(effectiveConfig, logger)
     .then((result) => {
       res.json({ ok: true, ...result });
     })
@@ -296,11 +301,19 @@ app.use((error, _req, res, _next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-app.listen(config.server.port, () => {
+orchestrator.on('shutdown-requested', ({ reason, epic }) => {
+  logger.info(`Graceful shutdown requested: ${reason}${epic ? ` (${epic})` : ''}`);
+  server.close(() => {
+    logger.info('Server closed. Exiting.');
+    process.exit(0);
+  });
+});
+
+const server = app.listen(effectiveConfig.server.port, () => {
   // Add reconciliation info to startup
-  if (config.queue.pollIntervalMs > 0) {
-    const minutes = Math.floor(config.queue.pollIntervalMs / 60000);
-    const seconds = Math.floor((config.queue.pollIntervalMs % 60000) / 1000);
+  if (effectiveConfig.queue.pollIntervalMs > 0) {
+    const minutes = Math.floor(effectiveConfig.queue.pollIntervalMs / 60000);
+    const seconds = Math.floor((effectiveConfig.queue.pollIntervalMs % 60000) / 1000);
     const timeStr = minutes > 0 ? `${minutes} minute${minutes > 1 ? 's' : ''}` : `${seconds} second${seconds > 1 ? 's' : ''}`;
     startupInfo.push({ level: 'info', text: `Automatic reconciliation enabled every ${timeStr}` });
   }
@@ -325,15 +338,15 @@ app.listen(config.server.port, () => {
   );
 
   // Trigger startup reconciliation if enabled
-  if (config.queue.runOnStartup) {
+  if (effectiveConfig.queue.runOnStartup) {
     orchestrator.schedule('startup');
   }
 
   // Setup periodic reconciliation if enabled
-  if (config.queue.pollIntervalMs > 0) {
+  if (effectiveConfig.queue.pollIntervalMs > 0) {
     const pollTimer = setInterval(() => {
       orchestrator.schedule('poll_interval');
-    }, config.queue.pollIntervalMs);
+    }, effectiveConfig.queue.pollIntervalMs);
 
     if (typeof pollTimer.unref === 'function') {
       pollTimer.unref();

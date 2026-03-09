@@ -1,6 +1,10 @@
-import { execSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { promisify } from 'node:util';
+import { EventEmitter } from 'node:events';
+
+const execFileAsync = promisify(execFile);
 import { runClaudeTask } from './claudeRunner.js';
 import { buildEpicReviewPrompt, buildEpicSummary, buildRetryPrompt, buildReviewPrompt, buildTaskCompletionNotes, buildTaskPrompt, formatDuration } from './promptBuilder.js';
 import { allEpicChildrenAreDone, hasIncompleteEpic, isEpicTask, pickNextEpic, pickNextEpicChild, pickNextTask, sortCandidates } from './selectTask.js';
@@ -125,24 +129,25 @@ function parseLimitResetMs(message) {
   return null;
 }
 
-function getGitHead(workdir) {
+async function getGitHead(workdir) {
   try {
-    return execSync('git rev-parse HEAD', { cwd: workdir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+    const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: workdir });
+    return stdout.trim();
   } catch {
     return null;
   }
 }
 
-function hasGitChanges(workdir, headBefore) {
+async function hasGitChanges(workdir, headBefore) {
   try {
-    const status = execSync('git status --porcelain', { cwd: workdir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
-    if (status) {
+    const { stdout: status } = await execFileAsync('git', ['status', '--porcelain'], { cwd: workdir });
+    if (status.trim()) {
       return true;
     }
 
     if (headBefore) {
-      const headAfter = execSync('git rev-parse HEAD', { cwd: workdir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
-      if (headAfter !== headBefore) {
+      const { stdout: headAfterOut } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: workdir });
+      if (headAfterOut.trim() !== headBefore) {
         return true;
       }
     }
@@ -161,8 +166,8 @@ function declaredFilesExist(workdir, files) {
   return files.some((f) => existsSync(path.resolve(workdir, String(f))));
 }
 
-function validateExecution(workdir, headBefore, execution) {
-  const gitChanged = hasGitChanges(workdir, headBefore);
+async function validateExecution(workdir, headBefore, execution) {
+  const gitChanged = await hasGitChanges(workdir, headBefore);
   if (gitChanged) {
     return { valid: true };
   }
@@ -218,8 +223,9 @@ async function checkActiveFixes(port = 4100) {
   }
 }
 
-export class Orchestrator {
+export class Orchestrator extends EventEmitter {
   constructor({ config, logger, boardClient, runStore, usageStore }) {
+    super();
     this.config = config;
     this.logger = logger;
     this.boardClient = boardClient;
@@ -370,12 +376,8 @@ export class Orchestrator {
     this.paused = false;
     this.logger.info('Orchestrator activated. Checking for tasks to execute...');
 
-    // Trigger immediate reconciliation instead of waiting for next poll
-    setImmediate(() => {
-      this.reconcile('unpause').catch((err) => {
-        this.logger.error(`Failed to reconcile after unpause: ${err.message}`);
-      });
-    });
+    // Trigger reconciliation via schedule() which handles debounce/guard properly
+    this.schedule('unpause');
 
     return true;
   }
@@ -573,28 +575,47 @@ export class Orchestrator {
 
       const { signal } = this.watchdog.start(task);
       const executionStartTime = Date.now();
-      const headBefore = getGitHead(this.config.claude.workdir);
+      const headBefore = await getGitHead(this.config.claude.workdir);
 
+      const failedAcUpdates = [];
       const onAcComplete = (acRef) => {
         if (acRef.type === 'numbered') {
           this.boardClient.updateCheckboxesByIndex(task.id, [acRef.index]).then(() => {
             this.logger.success(`AC completed: AC-${acRef.index}`);
           }).catch((err) => {
-            // Log to console only (not to Live Feed)
-            console.debug(`[orchestrator] Failed to update AC checkbox: ${err.message}`);
+            this.logger.warn(`Failed to update AC checkbox AC-${acRef.index}: ${err.message}`);
+            failedAcUpdates.push(acRef);
           });
         } else {
           this.boardClient.updateCheckboxes(task.id, [acRef.text]).then(() => {
             this.logger.success(`AC completed: "${acRef.text}"`);
           }).catch((err) => {
-            // Log to console only (not to Live Feed)
-            console.debug(`[orchestrator] Failed to update AC checkbox: ${err.message}`);
+            this.logger.warn(`Failed to update AC checkbox "${acRef.text}": ${err.message}`);
+            failedAcUpdates.push(acRef);
           });
         }
       };
 
       try {
         let execution = await runClaudeTask(task, prompt, this.config, { signal, onAcComplete });
+
+        // Retry any AC checkbox updates that failed during streaming
+        if (failedAcUpdates.length > 0) {
+          this.logger.info(`Retrying ${failedAcUpdates.length} failed AC update(s)...`);
+          for (const acRef of failedAcUpdates) {
+            try {
+              if (acRef.type === 'numbered') {
+                await this.boardClient.updateCheckboxesByIndex(task.id, [acRef.index]);
+              } else {
+                await this.boardClient.updateCheckboxes(task.id, [acRef.text]);
+              }
+              this.logger.success(`AC retry succeeded: AC-${acRef.index || acRef.text}`);
+            } catch (retryErr) {
+              this.logger.error(`AC retry failed: AC-${acRef.index || acRef.text}: ${retryErr.message}`);
+            }
+          }
+        }
+
         await this._recordTaskUsage(task, execution);
 
         this.watchdog.stop();
@@ -660,7 +681,7 @@ export class Orchestrator {
 
         this.logger.info(`Claude finished: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`);
 
-        const validation = validateExecution(this.config.claude.workdir, headBefore, execution);
+        const validation = await validateExecution(this.config.claude.workdir, headBefore, execution);
         if (!validation.valid) {
           this.logger.warn(`Hallucination detected for "${taskLabel(task)}": ${validation.reason}`);
           this.logger.warn(`Retrying task "${taskLabel(task)}" with corrective prompt...`);
@@ -670,7 +691,7 @@ export class Orchestrator {
             this.logger.block(`Retry prompt for "${taskLabel(task)}"`, retryPrompt);
           }
 
-          const retryHeadBefore = getGitHead(this.config.claude.workdir);
+          const retryHeadBefore = await getGitHead(this.config.claude.workdir);
           const { signal: retrySignal } = this.watchdog.start(task);
           const retryStartTime = Date.now();
 
@@ -695,7 +716,7 @@ export class Orchestrator {
             break;
           }
 
-          const retryValidation = validateExecution(this.config.claude.workdir, retryHeadBefore, execution);
+          const retryValidation = await validateExecution(this.config.claude.workdir, retryHeadBefore, execution);
           if (!retryValidation.valid) {
             // Log contract to console only (details available in task markdown)
             console.debug('[orchestrator] Hallucination retry contract:', buildContractJson(execution));
@@ -1011,28 +1032,47 @@ export class Orchestrator {
 
       const { signal } = this.watchdog.start(task);
       const executionStartTime = Date.now();
-      const headBefore = getGitHead(this.config.claude.workdir);
+      const headBefore = await getGitHead(this.config.claude.workdir);
 
+      const failedAcUpdates = [];
       const onAcComplete = (acRef) => {
         if (acRef.type === 'numbered') {
           this.boardClient.updateCheckboxesByIndex(task.id, [acRef.index]).then(() => {
             this.logger.success(`AC completed: AC-${acRef.index}`);
           }).catch((err) => {
-            // Log to console only (not to Live Feed)
-            console.debug(`[orchestrator] Failed to update AC checkbox: ${err.message}`);
+            this.logger.warn(`Failed to update AC checkbox AC-${acRef.index}: ${err.message}`);
+            failedAcUpdates.push(acRef);
           });
         } else {
           this.boardClient.updateCheckboxes(task.id, [acRef.text]).then(() => {
             this.logger.success(`AC completed: "${acRef.text}"`);
           }).catch((err) => {
-            // Log to console only (not to Live Feed)
-            console.debug(`[orchestrator] Failed to update AC checkbox: ${err.message}`);
+            this.logger.warn(`Failed to update AC checkbox "${acRef.text}": ${err.message}`);
+            failedAcUpdates.push(acRef);
           });
         }
       };
 
       try {
         let execution = await runClaudeTask(task, prompt, this.config, { signal, onAcComplete });
+
+        // Retry any AC checkbox updates that failed during streaming
+        if (failedAcUpdates.length > 0) {
+          this.logger.info(`Retrying ${failedAcUpdates.length} failed AC update(s)...`);
+          for (const acRef of failedAcUpdates) {
+            try {
+              if (acRef.type === 'numbered') {
+                await this.boardClient.updateCheckboxesByIndex(task.id, [acRef.index]);
+              } else {
+                await this.boardClient.updateCheckboxes(task.id, [acRef.text]);
+              }
+              this.logger.success(`AC retry succeeded: AC-${acRef.index || acRef.text}`);
+            } catch (retryErr) {
+              this.logger.error(`AC retry failed: AC-${acRef.index || acRef.text}: ${retryErr.message}`);
+            }
+          }
+        }
+
         await this._recordTaskUsage(task, execution);
 
         this.watchdog.stop();
@@ -1070,7 +1110,7 @@ export class Orchestrator {
 
         this.logger.info(`Claude finished: "${taskLabel(task)}" (${formatDuration(executionElapsed)})`);
 
-        const validation = validateExecution(this.config.claude.workdir, headBefore, execution);
+        const validation = await validateExecution(this.config.claude.workdir, headBefore, execution);
         if (!validation.valid) {
           this.logger.warn(`Hallucination detected for "${taskLabel(task)}": ${validation.reason}`);
           this.logger.warn(`Retrying task "${taskLabel(task)}" with corrective prompt...`);
@@ -1080,7 +1120,7 @@ export class Orchestrator {
             this.logger.block(`Retry prompt for "${taskLabel(task)}"`, retryPrompt);
           }
 
-          const retryHeadBefore = getGitHead(this.config.claude.workdir);
+          const retryHeadBefore = await getGitHead(this.config.claude.workdir);
           const { signal: retrySignal } = this.watchdog.start(task);
           const retryStartTime = Date.now();
 
@@ -1105,7 +1145,7 @@ export class Orchestrator {
             break;
           }
 
-          const retryValidation = validateExecution(this.config.claude.workdir, retryHeadBefore, execution);
+          const retryValidation = await validateExecution(this.config.claude.workdir, retryHeadBefore, execution);
           if (!retryValidation.valid) {
             // Log contract to console only (details available in task markdown)
             console.debug('[orchestrator] Hallucination retry contract:', buildContractJson(execution));
@@ -1327,7 +1367,7 @@ export class Orchestrator {
           }
 
           this.logger.info(`Auto-shutdown triggered by: epic-completion (epic: "${taskLabel(epic)}")`);
-          process.exit(0);
+          this.emit('shutdown-requested', { reason: 'epic-completion', epic: taskLabel(epic) });
         }, 3000); // 3 seconds grace period (increased from 1.5s for better safety)
       } else {
         this.logger.success(`Epic "${taskLabel(epic)}" completed successfully.`);

@@ -105,3 +105,20 @@ export const config = {
     maxAutoRetries: number('USAGE_LIMIT_MAX_AUTO_RETRIES', 4)
   }
 };
+
+/**
+ * Deep-freeze the config object to prevent accidental mutation.
+ * Runtime-mutable settings (streamOutput, logPrompt, fullAccess, modelOverride)
+ * are managed via runtimeConfig.js instead.
+ */
+function deepFreeze(obj) {
+  Object.freeze(obj);
+  for (const value of Object.values(obj)) {
+    if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+      deepFreeze(value);
+    }
+  }
+  return obj;
+}
+
+deepFreeze(config);

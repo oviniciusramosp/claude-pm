@@ -1,5 +1,9 @@
 import { config } from './config.js';
+import { getEffectiveConfig } from './runtimeConfig.js';
 import { logger } from './logger.js';
+
+// Use effective config to pick up runtime overrides (e.g. fullAccess)
+const effectiveConfig = getEffectiveConfig(config);
 import { buildRecoveryPrompt } from './recoveryPromptBuilder.js';
 import { runClaudeTask } from './claudeRunner.js';
 
@@ -17,12 +21,12 @@ export class AutoRecovery {
    * Check if recovery should be attempted for a failed task
    */
   canRecover(taskId) {
-    if (!config.autoRecovery.enabled) {
+    if (!effectiveConfig.autoRecovery.enabled) {
       return false;
     }
 
     const attempts = this.attemptMap.get(taskId) || 0;
-    return attempts < config.autoRecovery.maxRetries;
+    return attempts < effectiveConfig.autoRecovery.maxRetries;
   }
 
   /**
@@ -30,12 +34,12 @@ export class AutoRecovery {
    * Epics have a separate counter with max 2 attempts per epic
    */
   canRecoverEpic(epicId) {
-    if (!config.autoRecovery.enabled) {
+    if (!effectiveConfig.autoRecovery.enabled) {
       return false;
     }
 
     const attempts = this.epicAttemptMap.get(epicId) || 0;
-    return attempts < config.autoRecovery.maxRetries;
+    return attempts < effectiveConfig.autoRecovery.maxRetries;
   }
 
   /**
@@ -56,7 +60,7 @@ export class AutoRecovery {
     const attempts = (this.attemptMap.get(taskId) || 0) + 1;
     this.attemptMap.set(taskId, attempts);
 
-    logger.warn(`RECOVERY - Attempting auto-recovery for task "${taskId}" (attempt ${attempts}/${config.autoRecovery.maxRetries})`);
+    logger.warn(`RECOVERY - Attempting auto-recovery for task "${taskId}" (attempt ${attempts}/${effectiveConfig.autoRecovery.maxRetries})`);
 
     try {
       const result = await this.analyzeAndFix(taskId, error, taskContext);
@@ -91,7 +95,7 @@ export class AutoRecovery {
     const attempts = (this.epicAttemptMap.get(epicId) || 0) + 1;
     this.epicAttemptMap.set(epicId, attempts);
 
-    logger.warn(`RECOVERY - Attempting auto-recovery for epic "${epicId}" (attempt ${attempts}/${config.autoRecovery.maxRetries})`);
+    logger.warn(`RECOVERY - Attempting auto-recovery for epic "${epicId}" (attempt ${attempts}/${effectiveConfig.autoRecovery.maxRetries})`);
 
     try {
       const result = await this.analyzeAndFix(epicId, error, taskContext);
@@ -116,7 +120,7 @@ export class AutoRecovery {
     const prompt = await buildRecoveryPrompt(error, taskContext);
 
     // Determine recovery model
-    let recoveryModel = config.autoRecovery.model;
+    let recoveryModel = effectiveConfig.autoRecovery.model;
     if (recoveryModel === 'auto') {
       recoveryModel = 'claude-opus-4-6'; // Use Opus for maximum intelligence
     }
@@ -134,11 +138,11 @@ export class AutoRecovery {
     // Create config object for runClaudeTask
     const recoveryConfig = {
       claude: {
-        oauthToken: config.claude.oauthToken,
-        workdir: taskContext.workdir || config.claude.workdir,
-        fullAccess: config.claude.fullAccess,
+        oauthToken: effectiveConfig.claude.oauthToken,
+        workdir: taskContext.workdir || effectiveConfig.claude.workdir,
+        fullAccess: effectiveConfig.claude.fullAccess,
         streamOutput: false, // No streaming for recovery (cleaner logs)
-        timeoutMs: config.autoRecovery.timeoutMs,
+        timeoutMs: effectiveConfig.autoRecovery.timeoutMs,
       }
     };
 
@@ -225,9 +229,9 @@ export class AutoRecovery {
    */
   getStats() {
     return {
-      enabled: config.autoRecovery.enabled,
-      maxRetries: config.autoRecovery.maxRetries,
-      model: config.autoRecovery.model,
+      enabled: effectiveConfig.autoRecovery.enabled,
+      maxRetries: effectiveConfig.autoRecovery.maxRetries,
+      model: effectiveConfig.autoRecovery.model,
       activeTasks: this.attemptMap.size,
       activeEpics: this.epicAttemptMap.size,
     };

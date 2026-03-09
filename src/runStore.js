@@ -13,6 +13,12 @@ export class RunStore {
     this.state = {
       tasks: {}
     };
+    this._writeQueue = Promise.resolve();
+  }
+
+  _serialized(fn) {
+    this._writeQueue = this._writeQueue.then(fn, fn);
+    return this._writeQueue;
   }
 
   async load() {
@@ -47,68 +53,74 @@ export class RunStore {
   }
 
   async markStarted(task) {
-    await this.load();
+    return this._serialized(async () => {
+      await this.load();
 
-    const previous = this.state.tasks[task.id] || {};
-    this.state.tasks[task.id] = {
-      ...previous,
-      taskId: task.id,
-      taskName: task.name,
-      parentId: task.parentId || null,
-      startedAt: previous.startedAt || new Date().toISOString(),
-      status: 'running'
-    };
+      const previous = this.state.tasks[task.id] || {};
+      this.state.tasks[task.id] = {
+        ...previous,
+        taskId: task.id,
+        taskName: task.name,
+        parentId: task.parentId || null,
+        startedAt: previous.startedAt || new Date().toISOString(),
+        status: 'running'
+      };
 
-    await this.save();
+      await this.save();
+    });
   }
 
   async markDone(task, execution) {
-    await this.load();
+    return this._serialized(async () => {
+      await this.load();
 
-    const now = new Date().toISOString();
-    const previous = this.state.tasks[task.id] || {};
-    const startedAt = previous.startedAt || now;
-    const durationMs = new Date(now).getTime() - new Date(startedAt).getTime();
+      const now = new Date().toISOString();
+      const previous = this.state.tasks[task.id] || {};
+      const startedAt = previous.startedAt || now;
+      const durationMs = new Date(now).getTime() - new Date(startedAt).getTime();
 
-    this.state.tasks[task.id] = {
-      ...previous,
-      taskId: task.id,
-      taskName: task.name,
-      parentId: task.parentId || null,
-      startedAt,
-      completedAt: now,
-      durationMs,
-      status: 'done',
-      result: {
-        summary: execution.summary || '',
-        notes: execution.notes || '',
-        files: execution.files || [],
-        tests: execution.tests || '',
-        stdout: execution.stdout || '',
-        stderr: execution.stderr || ''
-      }
-    };
+      this.state.tasks[task.id] = {
+        ...previous,
+        taskId: task.id,
+        taskName: task.name,
+        parentId: task.parentId || null,
+        startedAt,
+        completedAt: now,
+        durationMs,
+        status: 'done',
+        result: {
+          summary: execution.summary || '',
+          notes: execution.notes || '',
+          files: execution.files || [],
+          tests: execution.tests || '',
+          stdout: execution.stdout || '',
+          stderr: execution.stderr || ''
+        }
+      };
 
-    await this.save();
+      await this.save();
+    });
   }
 
   async markFailed(task, errorMessage) {
-    await this.load();
+    return this._serialized(async () => {
+      await this.load();
 
-    const now = new Date().toISOString();
-    const previous = this.state.tasks[task.id] || {};
+      const now = new Date().toISOString();
+      const previous = this.state.tasks[task.id] || {};
 
-    this.state.tasks[task.id] = {
-      ...previous,
-      taskId: task.id,
-      taskName: task.name,
-      parentId: task.parentId || null,
-      failedAt: now,
-      status: 'failed',
-      error: errorMessage
-    };
+      this.state.tasks[task.id] = {
+        ...previous,
+        taskId: task.id,
+        taskName: task.name,
+        parentId: task.parentId || null,
+        failedAt: now,
+        status: 'failed',
+        error: errorMessage
+      };
 
-    await this.save();
+      await this.save();
+    });
   }
 
   async getEpicSummary(children) {
