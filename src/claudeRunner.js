@@ -357,25 +357,46 @@ const COMPACT_KILL_SIGNAL = 'PM_COMPACT';
  * When compactThreshold > 0 and the tool call count reaches it, the process is
  * killed and the result includes `_compactNeeded: true` so the caller can resume.
  */
+function killWithEscalation(child) {
+  try { child.kill('SIGTERM'); } catch { /* already dead */ }
+  // If process ignores SIGTERM, escalate to SIGKILL after 10s
+  const escalation = setTimeout(() => {
+    try {
+      if (!child.killed) {
+        child.kill('SIGKILL');
+      }
+    } catch { /* already dead */ }
+  }, 10_000);
+  escalation.unref();
+  return escalation;
+}
+
 function runSingleSession(task, prompt, config, { signal, onAcComplete, overrideModel, sessionId, resume, compactThreshold = 0 } = {}) {
   return new Promise((resolve, reject) => {
-    const env = buildClaudeEnv(config, task);
-    const command = buildCommand(config, task, overrideModel, { sessionId, resume });
+    let child;
+    try {
+      const env = buildClaudeEnv(config, task);
+      const command = buildCommand(config, task, overrideModel, { sessionId, resume });
+      child = spawn(command, {
+        shell: true,
+        cwd: config.claude.workdir,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env
+      });
+    } catch (spawnErr) {
+      reject(new Error(`Failed to spawn Claude process: ${spawnErr.message}`));
+      return;
+    }
 
-    const child = spawn(command, {
-      shell: true,
-      cwd: config.claude.workdir,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env
-    });
+    let escalationTimer = null;
 
     function onAbort() {
-      child.kill('SIGTERM');
+      escalationTimer = killWithEscalation(child);
     }
 
     if (signal) {
       if (signal.aborted) {
-        child.kill('SIGTERM');
+        escalationTimer = killWithEscalation(child);
       } else {
         signal.addEventListener('abort', onAbort, { once: true });
       }
@@ -387,10 +408,14 @@ function runSingleSession(task, prompt, config, { signal, onAcComplete, override
     let streamJsonDetected = false;
     let toolCallCount = 0;
     let compactKilled = false;
-    const isStreamJsonMode = command.includes('--output-format stream-json');
+    const isStreamJsonMode = child.spawnargs?.join(' ').includes('--output-format stream-json')
+      || (config.claude.streamOutput);
 
+    // Safety timeout: only kills truly zombie processes (no progress for the full duration).
+    // With Claude Code Max there are no rate limits, so this is intentionally generous.
+    // The watchdog heartbeat (reset on AC completions) is the primary protection against stalls.
     const timer = setTimeout(() => {
-      child.kill('SIGTERM');
+      escalationTimer = killWithEscalation(child);
     }, config.claude.timeoutMs);
 
     child.stdout.on('data', (chunk) => {
@@ -465,12 +490,14 @@ function runSingleSession(task, prompt, config, { signal, onAcComplete, override
 
     child.on('error', (error) => {
       clearTimeout(timer);
+      if (escalationTimer) clearTimeout(escalationTimer);
       if (signal) signal.removeEventListener('abort', onAbort);
       reject(error);
     });
 
     child.on('close', (code, exitSignal) => {
       clearTimeout(timer);
+      if (escalationTimer) clearTimeout(escalationTimer);
       if (signal) signal.removeEventListener('abort', onAbort);
 
       if (config.claude.streamOutput && streamLineBuffer.trim()) {
@@ -527,6 +554,13 @@ function runSingleSession(task, prompt, config, { signal, onAcComplete, override
       });
     });
 
+    child.stdin.on('error', (err) => {
+      // Only suppress EPIPE (process exited before reading stdin).
+      // Other errors (e.g. ENOMEM) should propagate.
+      if (err.code !== 'EPIPE') {
+        reject(err);
+      }
+    });
     child.stdin.write(prompt);
     child.stdin.end();
   });

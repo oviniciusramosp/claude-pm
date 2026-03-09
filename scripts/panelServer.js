@@ -1408,21 +1408,28 @@ function runClaudePromptViaApi(prompt, model, customTimeoutMs) {
     delete commandEnv.CLAUDE_AGENT_SDK_VERSION;
     delete commandEnv.CLAUDE_CODE_OAUTH_TOKEN;
 
-    const child = spawn(command, {
-      shell: true,
-      cwd: workdir,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: commandEnv
-    });
+    let child;
+    try {
+      child = spawn(command, {
+        shell: true,
+        cwd: workdir,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: commandEnv
+      });
+    } catch (spawnErr) {
+      return reject(new Error(`Failed to spawn Claude process: ${spawnErr.message}`));
+    }
 
     let stdout = '';
     let stderr = '';
     let settled = false;
+    let escalationTimer = null;
 
     function finish(error, payload) {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
+      if (escalationTimer) clearTimeout(escalationTimer);
       if (error) { reject(error); return; }
       resolve(payload);
     }
@@ -1430,6 +1437,11 @@ function runClaudePromptViaApi(prompt, model, customTimeoutMs) {
     const timer = timeoutMs
       ? setTimeout(() => {
           try { child.kill('SIGTERM'); } catch { /* ignore */ }
+          // Escalate to SIGKILL if process ignores SIGTERM
+          escalationTimer = setTimeout(() => {
+            try { if (!child.killed) child.kill('SIGKILL'); } catch { /* ignore */ }
+          }, 10_000);
+          escalationTimer.unref?.();
           const err = new Error(`Claude prompt timed out after ${timeoutMs}ms`);
           err.stderr = stderr.trim() || null;
           err.stdout = stdout.trim() || null;
@@ -1454,7 +1466,10 @@ function runClaudePromptViaApi(prompt, model, customTimeoutMs) {
       finish(null, { reply: String(stdout || stderr || '').trim(), workdir });
     });
 
-    child.stdin.on('error', () => { /* ignore EPIPE */ });
+    child.stdin.on('error', (err) => {
+      // Only suppress EPIPE (process exited before reading stdin).
+      if (err.code !== 'EPIPE') finish(err);
+    });
     child.stdin.write(String(prompt || ''));
     child.stdin.end();
   });

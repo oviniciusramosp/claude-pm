@@ -173,10 +173,11 @@ export class AutoRecovery {
         }
       }
 
-      // Fallback: assume success if Claude finished
+      // No parseable JSON from Claude — cannot confirm recovery was successful.
+      // Treating as failure so the task is retried with proper validation.
       return {
-        success: true,
-        summary: 'Recovery completed (no JSON found, assuming success)',
+        success: false,
+        summary: 'Recovery completed but returned no parseable status JSON',
         filesChanged: [],
       };
     }

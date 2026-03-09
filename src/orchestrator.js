@@ -666,10 +666,17 @@ export class Orchestrator extends EventEmitter {
               continue;
             }
 
-            this.logger.error(`Auto-recovery exhausted for "${taskLabel(task)}" after ${recovery.attempt} attempt(s)`);
+            this.logger.error(`Auto-recovery exhausted for "${taskLabel(task)}" after ${recovery.attempt} attempt(s): ${recovery.reason || 'unknown'}`, {
+              expandableContent: {
+                stderr: execution.stderr || null,
+                stdout: execution.stdout ? execution.stdout.slice(-3000) : null,
+                exitCode: execution.exitCode ?? null,
+                signal: execution.signal || null,
+              }
+            });
           }
 
-          await this.runStore.markFailed(task, `Claude retornou status=${execution.status || 'desconhecido'}`);
+          await this.runStore.markFailed(task, `Claude returned status=${execution.status || 'unknown'}`);
           this.logger.warn(`Task blocked by Claude: "${taskLabel(task)}" (status: ${execution.status || 'unknown'})`);
 
           const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
@@ -1105,7 +1112,41 @@ export class Orchestrator extends EventEmitter {
             true // feedEnabled
           );
 
-          await this.runStore.markFailed(task, `Claude retornou status=${execution.status || 'desconhecido'}`);
+          // Try auto-recovery before marking as failed
+          if (autoRecovery.canRecover(task.id)) {
+            this.logger.warn(`Epic child task failed: "${taskLabel(task)}" (status: ${execution.status || 'unknown'})`);
+
+            const recovery = await autoRecovery.tryRecover(task.id, {
+              message: `Task returned status: ${execution.status || 'unknown'}`,
+              timedOut: false,
+            }, {
+              task: {
+                id: task.id,
+                name: task.name,
+                content: markdown,
+                acceptanceCriteria: task.acceptanceCriteria || [],
+              },
+              logs: execution.stdout || '',
+              workdir: this.config.claude.workdir,
+              exitCode: execution.exitCode,
+            });
+
+            if (recovery.recovered) {
+              this.logger.success(`Auto-recovery succeeded, retrying epic child: "${taskLabel(task)}"`);
+              continue;
+            }
+
+            this.logger.error(`Auto-recovery exhausted for epic child "${taskLabel(task)}" after ${recovery.attempt} attempt(s): ${recovery.reason || 'unknown'}`, {
+              expandableContent: {
+                stderr: execution.stderr || null,
+                stdout: execution.stdout ? execution.stdout.slice(-3000) : null,
+                exitCode: execution.exitCode ?? null,
+                signal: execution.signal || null,
+              }
+            });
+          }
+
+          await this.runStore.markFailed(task, `Claude returned status=${execution.status || 'unknown'}`);
           this.logger.warn(`Task blocked by Claude: "${taskLabel(task)}" (status: ${execution.status || 'unknown'})`);
 
           const shouldHalt = this.watchdog.recordFailure(task.id, task.name);
