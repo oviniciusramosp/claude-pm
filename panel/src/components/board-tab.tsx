@@ -1458,18 +1458,14 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
                   <Plus className="size-4 shrink-0 text-tertiary" />
                   Write a Task
                 </button>
-                <div className="relative group">
-                  <button
-                    onClick={handleGenerateAllEpics}
-                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-primary hover:bg-primary_hover transition-colors"
-                  >
-                    <Stars01 className="size-4 shrink-0 text-tertiary" />
-                    Generate All Tasks
-                  </button>
-                  <div className="pointer-events-none absolute left-1/2 bottom-full mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md bg-primary_solid px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity shadow-sm">
-                    Generate tasks for all Epics in Not Started
-                  </div>
-                </div>
+                <button
+                  onClick={handleGenerateAllEpics}
+                  title="Generate tasks for all Epics in Not Started"
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-primary hover:bg-primary_hover transition-colors"
+                >
+                  <Stars01 className="size-4 shrink-0 text-tertiary" />
+                  Generate All Tasks
+                </button>
               </div>
             )}
           </div>
