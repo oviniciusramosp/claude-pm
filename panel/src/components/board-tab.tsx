@@ -1373,10 +1373,10 @@ export function BoardTab({ apiBaseUrl, showToast, refreshTrigger, onShowErrorDet
   }, [isBoardEmpty]);
 
   useEffect(() => {
-    if (hasOnlyEmptyEpics && !localStorage.getItem('epicsOnboardingDismissed')) {
+    if (hasOnlyEmptyEpics && !ideaModalOpen && !localStorage.getItem('epicsOnboardingDismissed')) {
       setEpicsOnboardingModalOpen(true);
     }
-  }, [hasOnlyEmptyEpics]);
+  }, [hasOnlyEmptyEpics, ideaModalOpen]);
 
   const handleEpicsOnboardingClose = useCallback(() => {
     setEpicsOnboardingModalOpen(false);
