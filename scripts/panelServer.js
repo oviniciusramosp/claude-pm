@@ -7425,7 +7425,18 @@ app.get('/api/git/log', async (req, res) => {
     res.json({ ok: true, commits, branch });
   } catch (error) {
     const msg = error.message || String(error);
-    const isNotGit = msg.includes('not a git repository') || msg.includes('fatal:');
+    const isEmptyRepo = msg.includes('does not have any commits yet') || msg.includes('bad default revision');
+    const isNotGit = \!isEmptyRepo && (msg.includes('not a git repository') || msg.includes('fatal:'));
+
+    if (isEmptyRepo) {
+      let branch = 'main';
+      try {
+        const b = await runGitCommand(['symbolic-ref', '--short', 'HEAD'], workdir);
+        branch = b.trim();
+      } catch { /* keep default */ }
+      res.json({ ok: true, commits: [], branch, empty: true });
+      return;
+    }
 
     res.status(isNotGit ? 400 : 500).json({
       ok: false,
@@ -7586,65 +7597,34 @@ app.get('/api/knowledge-base/tree', async (_req, res) => {
   }
 
   try {
-    // 1. Project CLAUDE.md (claude-pm itself)
-    const pmClaudeMd = await fileMeta(path.join(cwd, 'CLAUDE.md'), 'CLAUDE.md');
-    if (pmClaudeMd) {
+    // 1. Workdir CLAUDE.md (target project)
+    const workdirClaudeMd = await fileMeta(path.join(claudeWorkdir, 'CLAUDE.md'), 'CLAUDE.md');
+    if (workdirClaudeMd) {
       groups.push({
-        id: 'pm-claude-md',
-        label: 'PM CLAUDE.md',
-        description: 'Product Manager project instructions',
+        id: 'workdir-claude-md',
+        label: 'Project CLAUDE.md',
+        description: `Project instructions (${path.basename(claudeWorkdir)})`,
         icon: 'file',
-        basePath: cwd,
-        files: [pmClaudeMd]
+        basePath: claudeWorkdir,
+        files: [workdirClaudeMd]
       });
     }
 
-    // 2. Workdir CLAUDE.md (target project)
-    if (claudeWorkdir !== cwd) {
-      const workdirClaudeMd = await fileMeta(path.join(claudeWorkdir, 'CLAUDE.md'), 'CLAUDE.md');
-      if (workdirClaudeMd) {
-        groups.push({
-          id: 'workdir-claude-md',
-          label: 'Project CLAUDE.md',
-          description: `Target project instructions (${path.basename(claudeWorkdir)})`,
-          icon: 'file',
-          basePath: claudeWorkdir,
-          files: [workdirClaudeMd]
-        });
-      }
-    }
-
-    // 3. .claude/commands/ (project slash commands)
-    const commandsDir = path.join(cwd, '.claude', 'commands');
-    const commandFiles = await listMdFiles(commandsDir, '.claude/commands');
-    if (commandFiles.length > 0) {
+    // 2. Workdir .claude/commands/ (target project slash commands)
+    const workdirCommandsDir = path.join(claudeWorkdir, '.claude', 'commands');
+    const workdirCommandFiles = await listMdFiles(workdirCommandsDir, '.claude/commands');
+    if (workdirCommandFiles.length > 0) {
       groups.push({
-        id: 'commands',
+        id: 'workdir-commands',
         label: 'Slash Commands',
-        description: '.claude/commands/',
+        description: `${path.basename(claudeWorkdir)}/.claude/commands/`,
         icon: 'terminal',
-        basePath: cwd,
-        files: commandFiles
+        basePath: claudeWorkdir,
+        files: workdirCommandFiles
       });
     }
 
-    // 4. Workdir .claude/commands/ (target project slash commands)
-    if (claudeWorkdir !== cwd) {
-      const workdirCommandsDir = path.join(claudeWorkdir, '.claude', 'commands');
-      const workdirCommandFiles = await listMdFiles(workdirCommandsDir, '.claude/commands');
-      if (workdirCommandFiles.length > 0) {
-        groups.push({
-          id: 'workdir-commands',
-          label: 'Project Slash Commands',
-          description: `${path.basename(claudeWorkdir)}/.claude/commands/`,
-          icon: 'terminal',
-          basePath: claudeWorkdir,
-          files: workdirCommandFiles
-        });
-      }
-    }
-
-    // 5. Auto-memory files
+    // 3. Auto-memory files
     const homeDir = os.homedir();
     const memoryBaseDir = path.join(homeDir, '.claude', 'projects');
     try {
@@ -7670,7 +7650,7 @@ app.get('/api/knowledge-base/tree', async (_req, res) => {
       // No memory directory
     }
 
-    // 6. Global CLAUDE.md (~/.claude/CLAUDE.md)
+    // 4. Global CLAUDE.md (~/.claude/CLAUDE.md)
     const globalClaudeMd = await fileMeta(path.join(homeDir, '.claude', 'CLAUDE.md'), 'CLAUDE.md');
     if (globalClaudeMd) {
       groups.push({
@@ -7683,7 +7663,7 @@ app.get('/api/knowledge-base/tree', async (_req, res) => {
       });
     }
 
-    // 7. User-level CLAUDE.md (~/CLAUDE.md)
+    // 5. User-level CLAUDE.md (~/CLAUDE.md)
     const userClaudeMd = await fileMeta(path.join(homeDir, 'CLAUDE.md'), 'CLAUDE.md');
     if (userClaudeMd) {
       groups.push({
