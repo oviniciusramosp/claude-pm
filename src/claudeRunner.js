@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { resolveAcRef } from './acParser.js';
 
 const DEFAULT_CLAUDE_COMMAND = 'claude --print';
@@ -284,7 +285,7 @@ function parseJsonFromOutput(stdout) {
   }
 }
 
-function buildCommand(config, task, overrideModel) {
+function buildCommand(config, task, overrideModel, { sessionId, resume } = {}) {
   let cmd = config.claude.command || DEFAULT_CLAUDE_COMMAND;
 
   const model = overrideModel || config.claude.modelOverride || task.model;
@@ -300,37 +301,63 @@ function buildCommand(config, task, overrideModel) {
     cmd += ' --verbose --output-format stream-json';
   }
 
+  // Session management for auto-compact support
+  if (resume) {
+    cmd += ` --resume ${resume}`;
+  } else if (sessionId) {
+    cmd += ` --session-id ${sessionId}`;
+  }
+
   return cmd;
 }
 
-export function runClaudeTask(task, prompt, config, { signal, onAcComplete, overrideModel } = {}) {
-  return new Promise((resolve, reject) => {
-    const commandEnv = { ...process.env };
-    // Remove Claude Code session env vars so each task runs as a fresh, independent invocation.
-    // Without this, Claude Code detects a nested session and exits with code 1.
-    for (const key of Object.keys(commandEnv)) {
-      if (key === 'CLAUDECODE' || key.startsWith('CLAUDE_CODE_')) {
-        delete commandEnv[key];
-      }
+/**
+ * Build the environment for Claude subprocess, cleaning nested session vars.
+ */
+function buildClaudeEnv(config, task) {
+  const commandEnv = { ...process.env };
+  // Remove Claude Code session env vars so each task runs as a fresh, independent invocation.
+  // Without this, Claude Code detects a nested session and exits with code 1.
+  for (const key of Object.keys(commandEnv)) {
+    if (key === 'CLAUDECODE' || key.startsWith('CLAUDE_CODE_')) {
+      delete commandEnv[key];
     }
-    // Re-apply the OAuth token AFTER the cleanup loop, so it is not deleted above.
-    if (config.claude.oauthToken) {
-      commandEnv.CLAUDE_CODE_OAUTH_TOKEN = config.claude.oauthToken;
-    }
+  }
+  // Re-apply the OAuth token AFTER the cleanup loop, so it is not deleted above.
+  if (config.claude.oauthToken) {
+    commandEnv.CLAUDE_CODE_OAUTH_TOKEN = config.claude.oauthToken;
+  }
 
-    const command = buildCommand(config, task, overrideModel);
+  return {
+    ...commandEnv,
+    PM_TASK_ID: task.id,
+    PM_TASK_NAME: task.name,
+    PM_TASK_TYPE: task.type || '',
+    PM_TASK_PRIORITY: task.priority || ''
+  };
+}
+
+/**
+ * Internal constant: sentinel exit code used to signal that the process was killed
+ * by the auto-compact logic (not a real failure).
+ */
+const COMPACT_KILL_SIGNAL = 'PM_COMPACT';
+
+/**
+ * Run a single Claude session. Returns a result object.
+ * When compactThreshold > 0 and the tool call count reaches it, the process is
+ * killed and the result includes `_compactNeeded: true` so the caller can resume.
+ */
+function runSingleSession(task, prompt, config, { signal, onAcComplete, overrideModel, sessionId, resume, compactThreshold = 0 } = {}) {
+  return new Promise((resolve, reject) => {
+    const env = buildClaudeEnv(config, task);
+    const command = buildCommand(config, task, overrideModel, { sessionId, resume });
 
     const child = spawn(command, {
       shell: true,
       cwd: config.claude.workdir,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
-        ...commandEnv,
-        PM_TASK_ID: task.id,
-        PM_TASK_NAME: task.name,
-        PM_TASK_TYPE: task.type || '',
-        PM_TASK_PRIORITY: task.priority || ''
-      }
+      env
     });
 
     function onAbort() {
@@ -349,6 +376,8 @@ export function runClaudeTask(task, prompt, config, { signal, onAcComplete, over
     let stderr = '';
     let streamLineBuffer = '';
     let streamJsonDetected = false;
+    let toolCallCount = 0;
+    let compactKilled = false;
     const isStreamJsonMode = command.includes('--output-format stream-json');
 
     const timer = setTimeout(() => {
@@ -369,10 +398,20 @@ export function runClaudeTask(task, prompt, config, { signal, onAcComplete, over
             const event = parseJsonLine(line);
             if (event) {
               streamJsonDetected = true;
+
+              // Count tool calls for auto-compact threshold
               const toolMessages = extractToolUseProgress(event);
               if (toolMessages) {
+                toolCallCount += toolMessages.length;
                 for (const msg of toolMessages) {
                   process.stdout.write(`[PM_PROGRESS] ${msg}\n`);
+                }
+
+                // Check if we should trigger compact (kill-and-resume)
+                if (compactThreshold > 0 && toolCallCount >= compactThreshold && !compactKilled) {
+                  compactKilled = true;
+                  process.stdout.write(`[PM_COMPACT] Tool call threshold reached (${toolCallCount}/${compactThreshold}). Killing session for resume with compaction.\n`);
+                  child.kill('SIGTERM');
                 }
               }
 
@@ -432,6 +471,20 @@ export function runClaudeTask(task, prompt, config, { signal, onAcComplete, over
         streamLineBuffer = '';
       }
 
+      // If we killed the process for compaction, resolve with a special marker
+      if (compactKilled) {
+        const collectedAcs = collectAcCompletionsFromStdout(stdout, streamJsonDetected);
+        resolve({
+          _compactNeeded: true,
+          toolCallCount,
+          collectedAcIndices: collectedAcs,
+          usage: streamJsonDetected ? extractUsageFromStreamJson(stdout) : null,
+          stdout,
+          stderr
+        });
+        return;
+      }
+
       if (code !== 0) {
         const error = new Error('Claude command failed');
         error.exitCode = code;
@@ -468,4 +521,109 @@ export function runClaudeTask(task, prompt, config, { signal, onAcComplete, over
     child.stdin.write(prompt);
     child.stdin.end();
   });
+}
+
+const RESUME_PROMPT = 'Continue the task from where you left off. Complete any remaining acceptance criteria. Remember to emit {"ac_complete": <number>} for each AC you complete and the final JSON when done.';
+
+/**
+ * Run a Claude task with automatic compaction support.
+ *
+ * When auto-compact is enabled and CLAUDE_STREAM_OUTPUT=true, the runner monitors
+ * tool call count during execution. When the threshold is reached, it kills the
+ * current session and resumes it via `--resume <session-id>`. Claude Code
+ * auto-compacts the conversation history when loading a resumed session that
+ * approaches context limits.
+ *
+ * This is transparent to the orchestrator — the function returns the same result
+ * shape regardless of whether compaction cycles occurred.
+ */
+export function runClaudeTask(task, prompt, config, { signal, onAcComplete, overrideModel } = {}) {
+  const autoCompactEnabled = config.claude.autoCompact && config.claude.streamOutput;
+  const threshold = config.claude.compactThreshold;
+  const maxCycles = config.claude.maxCompactCycles || 3;
+
+  // If auto-compact is disabled or stream output is off, run a single session (original behavior)
+  if (!autoCompactEnabled || threshold <= 0) {
+    return runSingleSession(task, prompt, config, { signal, onAcComplete, overrideModel });
+  }
+
+  // Auto-compact enabled: run with kill-and-resume cycles
+  return (async () => {
+    const sessionId = randomUUID();
+    let totalToolCalls = 0;
+    let allCollectedAcs = [];
+    let allUsage = null;
+
+    // First session: use the original prompt and a fresh session-id
+    let result = await runSingleSession(task, prompt, config, {
+      signal,
+      onAcComplete,
+      overrideModel,
+      sessionId,
+      compactThreshold: threshold
+    });
+
+    totalToolCalls += result.toolCallCount || 0;
+    allCollectedAcs = [...(result.collectedAcIndices || [])];
+    allUsage = mergeUsage(allUsage, result.usage);
+
+    let cycle = 0;
+    while (result._compactNeeded && cycle < maxCycles) {
+      cycle += 1;
+      process.stdout.write(`[PM_COMPACT] Resuming session ${sessionId} (cycle ${cycle}/${maxCycles}, total tool calls: ${totalToolCalls})\n`);
+
+      // Resume the same session — Claude Code loads the conversation history
+      // and auto-compacts it to fit within the context window
+      result = await runSingleSession(task, RESUME_PROMPT, config, {
+        signal,
+        onAcComplete,
+        overrideModel,
+        resume: sessionId,
+        compactThreshold: threshold
+      });
+
+      totalToolCalls += result.toolCallCount || 0;
+      allCollectedAcs = [...new Set([...allCollectedAcs, ...(result.collectedAcIndices || [])])];
+      allUsage = mergeUsage(allUsage, result.usage);
+    }
+
+    if (result._compactNeeded) {
+      // Exhausted all compact cycles but task is still running — treat as timeout
+      process.stdout.write(`[PM_COMPACT] Max compact cycles (${maxCycles}) exhausted after ${totalToolCalls} tool calls. Task may be incomplete.\n`);
+      return {
+        status: 'blocked',
+        summary: `Auto-compact exhausted ${maxCycles} cycles (${totalToolCalls} tool calls). Task incomplete.`,
+        notes: '',
+        files: [],
+        tests: '',
+        collectedAcIndices: allCollectedAcs,
+        usage: allUsage,
+        stdout: result.stdout,
+        stderr: result.stderr
+      };
+    }
+
+    // Final result from the last session — merge accumulated ACs and usage
+    return {
+      ...result,
+      collectedAcIndices: [...new Set([...allCollectedAcs, ...(result.collectedAcIndices || [])])],
+      usage: mergeUsage(allUsage, result.usage)
+    };
+  })();
+}
+
+/**
+ * Merge two usage objects, summing their token counts.
+ */
+function mergeUsage(a, b) {
+  if (!a && !b) return null;
+  if (!a) return b;
+  if (!b) return a;
+  return {
+    inputTokens: (a.inputTokens || 0) + (b.inputTokens || 0),
+    outputTokens: (a.outputTokens || 0) + (b.outputTokens || 0),
+    cacheCreationInputTokens: (a.cacheCreationInputTokens || 0) + (b.cacheCreationInputTokens || 0),
+    cacheReadInputTokens: (a.cacheReadInputTokens || 0) + (b.cacheReadInputTokens || 0),
+    totalCostUsd: (a.totalCostUsd || 0) + (b.totalCostUsd || 0)
+  };
 }

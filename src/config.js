@@ -75,7 +75,10 @@ export const config = {
     injectClaudeMd: boolean('INJECT_CLAUDE_MD', true),
     enableMultiAgents: boolean('ENABLE_MULTI_AGENTS', false),
     autoVersionEnabled: boolean('AUTO_VERSION_ENABLED', false),
-    platformPreset: process.env.PLATFORM_PRESET || ''
+    platformPreset: process.env.PLATFORM_PRESET || '',
+    autoCompact: boolean('CLAUDE_AUTO_COMPACT', true),
+    compactThreshold: number('CLAUDE_COMPACT_THRESHOLD', 80),
+    maxCompactCycles: number('CLAUDE_MAX_COMPACT_CYCLES', 3)
   },
   state: {
     runStorePath: path.resolve(process.cwd(), process.env.RUN_STORE_PATH || '.data/runs.json'),

@@ -539,6 +539,37 @@ export const TEXT_FIELD_CONFIG: TextFieldConfig[] = [
       ]
     },
     selectOptions: PLATFORM_PRESETS
+  },
+  {
+    key: 'CLAUDE_COMPACT_THRESHOLD',
+    label: 'Compact Threshold (tool calls)',
+    icon: RefreshCw01,
+    placeholder: '80',
+    description: 'Number of tool calls before triggering a kill-and-resume cycle for context compaction.',
+    help: {
+      summary: 'Auto-compact threshold',
+      details: [
+        'When Auto-Compact is enabled, the runner counts tool calls during execution.',
+        'When this threshold is reached, the session is killed and resumed.',
+        'Claude Code auto-compacts the conversation history on resume.',
+        'Lower values compact more aggressively but add overhead. Default: 80.'
+      ]
+    }
+  },
+  {
+    key: 'CLAUDE_MAX_COMPACT_CYCLES',
+    label: 'Max Compact Cycles',
+    icon: RefreshCw01,
+    placeholder: '3',
+    description: 'Maximum number of compact cycles per task before marking it as blocked.',
+    help: {
+      summary: 'Max compact cycles per task',
+      details: [
+        'Each cycle resets the tool call counter and resumes the session.',
+        'After this limit is exhausted, the task is marked as blocked.',
+        'Total tool calls per task = threshold × cycles. Default: 3 (240 total tool calls).'
+      ]
+    }
   }
 ];
 
@@ -604,6 +635,12 @@ export const TOGGLE_CONFIG: ToggleConfig[] = [
     label: 'Enable Multi-Agent Execution',
     icon: Users01,
     description: 'When enabled, Claude will use multiple agents in parallel for complex tasks to improve speed and quality.'
+  },
+  {
+    key: 'CLAUDE_AUTO_COMPACT',
+    label: 'Auto-Compact Sessions',
+    icon: RefreshCw01,
+    description: 'Automatically kill and resume sessions when tool call count reaches the threshold, triggering context compaction. Requires Stream Output.'
   }
 ];
 
@@ -640,6 +677,13 @@ export const SETUP_SECTIONS: SetupSection[] = [
     description: 'Enforce test creation, test runs, commits, and versioning before tasks are marked as done.',
     textKeys: [],
     toggleKeys: ['FORCE_TEST_CREATION', 'FORCE_TEST_RUN', 'FORCE_COMMIT', 'AUTO_VERSION_ENABLED']
+  },
+  {
+    key: 'context',
+    title: 'Context Management',
+    description: 'Prevent context window overflow by auto-compacting long sessions.',
+    textKeys: ['CLAUDE_COMPACT_THRESHOLD', 'CLAUDE_MAX_COMPACT_CYCLES'],
+    toggleKeys: ['CLAUDE_AUTO_COMPACT']
   }
 ];
 

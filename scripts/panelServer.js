@@ -202,7 +202,9 @@ function startCloudflaredTunnel() {
       return;
     }
 
-    const tunnelChild = spawn('cloudflared', ['tunnel', '--url', `http://localhost:${panelPort}`], {
+    const tunnelArgs = ['tunnel', '--url', `${httpsEnabled ? 'https' : 'http'}://localhost:${panelPort}`];
+    if (httpsEnabled) tunnelArgs.push('--no-tls-verify');
+    const tunnelChild = spawn('cloudflared', tunnelArgs, {
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
@@ -502,6 +504,7 @@ const WATCH_RESTART_REGEX = /^Restarting ['"].+['"]$/i;
 const NPM_SCRIPT_LINE_REGEX = /^>\s/;
 const PROGRESS_MARKER_REGEX = /^\[PM_PROGRESS]\s+(.+)$/;
 const AC_COMPLETE_MARKER_REGEX = /^\[PM_AC_COMPLETE]\s+(.+)$/;
+const COMPACT_MARKER_REGEX = /^\[PM_COMPACT]\s+(.+)$/;
 const API_STATUS_NOISE_PATTERNS = [
   /^Server started on port \d+$/i
 ];
@@ -659,6 +662,15 @@ function parseProcessLogLine(rawLine, fallbackLevel = 'info') {
       message: `AC completed: "${acCompleteMatch[1].trim()}"`,
       fromLogger: false,
       isAcComplete: true
+    };
+  }
+
+  const compactMatch = clean.match(COMPACT_MARKER_REGEX);
+  if (compactMatch) {
+    return {
+      level: 'warn',
+      message: compactMatch[1].trim(),
+      fromLogger: false
     };
   }
 
@@ -2333,7 +2345,12 @@ app.get('/api/config', async (_req, res) => {
       FORCE_TEST_CREATION: env.FORCE_TEST_CREATION || 'false',
       FORCE_TEST_RUN: env.FORCE_TEST_RUN || 'false',
       FORCE_COMMIT: env.FORCE_COMMIT || 'false',
-      MANUAL_RUN_TOKEN: env.MANUAL_RUN_TOKEN || ''
+      AUTO_VERSION_ENABLED: env.AUTO_VERSION_ENABLED || 'false',
+      ENABLE_MULTI_AGENTS: env.ENABLE_MULTI_AGENTS || 'false',
+      MANUAL_RUN_TOKEN: env.MANUAL_RUN_TOKEN || '',
+      CLAUDE_AUTO_COMPACT: env.CLAUDE_AUTO_COMPACT || 'true',
+      CLAUDE_COMPACT_THRESHOLD: env.CLAUDE_COMPACT_THRESHOLD || '80',
+      CLAUDE_MAX_COMPACT_CYCLES: env.CLAUDE_MAX_COMPACT_CYCLES || '3'
     }
   });
 });
