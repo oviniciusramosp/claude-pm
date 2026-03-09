@@ -477,6 +477,7 @@ export class LocalBoardClient {
       priority: frontmatter.priority || '',
       type: frontmatter.type || '',
       model: frontmatter.model || '',
+      order: frontmatter.order != null ? Number(frontmatter.order) : undefined,
       parentId: parentId,
       url: path.relative(process.cwd(), filePath),
       createdTime: frontmatter.created || stat.birthtime.toISOString(),

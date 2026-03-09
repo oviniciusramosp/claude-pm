@@ -48,6 +48,19 @@ export function sortCandidates(tasks, order) {
   const copied = [...tasks];
 
   copied.sort((a, b) => {
+    // Explicit `order` field (set via drag-and-drop or frontmatter) always wins.
+    const aHasOrder = a.order != null;
+    const bHasOrder = b.order != null;
+
+    if (aHasOrder && bHasOrder) {
+      if (a.order !== b.order) return a.order - b.order;
+      // Tiebreaker: fall through to normal sorting below
+    } else if (aHasOrder) {
+      return -1; // a has explicit order, comes first
+    } else if (bHasOrder) {
+      return 1;  // b has explicit order, comes first
+    }
+
     if (order === 'priority_then_alphabetical') {
       const priorityDiff = parsePriority(a.priority) - parsePriority(b.priority);
       if (priorityDiff !== 0) {
