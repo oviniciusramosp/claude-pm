@@ -695,7 +695,7 @@ export function SetupTab({
           return (
             <div
               key={section.key}
-              className="bg-secondary_hover dark:bg-primary space-y-4 p-3"
+              className="bg-secondary_hover dark:bg-primary p-3"
               style={{ borderRadius: 'var(--board-col-radius)' }}
             >
               <button
@@ -710,7 +710,7 @@ export function SetupTab({
                 <ChevronDown className={cx('mt-1 size-4 shrink-0 text-quaternary transition-transform', isCollapsed && '-rotate-90')} />
               </button>
 
-              {!isCollapsed && <>
+              {!isCollapsed && <div className="space-y-4 mt-2">
               {/* CLI Prerequisites as Steps 1 & 2 inside the first section */}
               {section.key === 'claude' && (
                 <ClaudeCliPrerequisites cliStatus={cliStatus} loading={cliLoading} onRefresh={fetchCliStatus} />
@@ -965,7 +965,7 @@ export function SetupTab({
                   })}
                 </div>
               ) : null}
-              </>}
+              </div>}
             </div>
           );
         })}
