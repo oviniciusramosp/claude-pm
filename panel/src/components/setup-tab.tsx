@@ -701,7 +701,7 @@ export function SetupTab({
               <button
                 type="button"
                 onClick={() => toggleSection(section.key)}
-                className="flex w-full items-start justify-between gap-2 pt-2 px-3 sm:px-4 text-left"
+                className={cx('flex w-full items-start justify-between gap-2 pt-2 px-3 sm:px-4 text-left', isCollapsed && 'pb-2')}
               >
                 <div className="space-y-1">
                   <h3 className="m-0 text-md font-semibold text-primary">{section.title}</h3>
